@@ -71,4 +71,7 @@ export const cordonCunetaApi = {
 
   createPedido: (municipioId: string, data: PedidoCCCreate) =>
     apiClient.post<PedidoCC>(`${BASE}/cordon-cuneta/${municipioId}/pedidos`, data).then((r) => r.data),
+
+  deletePedido: (municipioId: string, pedidoId: string) =>
+    apiClient.delete(`${BASE}/cordon-cuneta/${municipioId}/pedidos/${pedidoId}`).then((r) => r.data),
 }

@@ -237,6 +237,7 @@ function DetailPanel({
   const [desc, setDesc] = useState('')
   const [fecha, setFecha] = useState(today)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const { data: pedidos = [], isLoading } = useQuery({
     queryKey: ['cc-pedidos', municipio.id],
@@ -259,6 +260,15 @@ function DetailPanel({
         ?? (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         ?? 'Error al guardar. Verificá la consola.'
       setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (pedidoId: string) =>
+      cordonCunetaApi.deletePedido(municipio.id, pedidoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cc-pedidos', municipio.id] })
+      setConfirmDelete(null)
     },
   })
 
@@ -369,7 +379,7 @@ function DetailPanel({
           )}
           <ol className="space-y-3" aria-label="Historial de comunicaciones">
             {pedidos.map((p: PedidoCC, i: number) => (
-              <li key={p.id} className="flex gap-3">
+              <li key={p.id} className="flex gap-3 group">
                 <div className="flex flex-col items-center" aria-hidden="true">
                   <div
                     className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0"
@@ -379,7 +389,7 @@ function DetailPanel({
                     <div className="w-px flex-1 mt-1 bg-slate-200" />
                   )}
                 </div>
-                <div className="pb-3 flex-1">
+                <div className="pb-3 flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <time
                       className="text-xs font-semibold text-gov-navy"
@@ -390,8 +400,36 @@ function DetailPanel({
                     {p.created_by && (
                       <span className="text-xs text-gray-400">· {p.created_by.split('@')[0]}</span>
                     )}
+                    <button
+                      onClick={() => setConfirmDelete(p.id)}
+                      className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400"
+                      aria-label="Eliminar esta actualización"
+                      title="Eliminar"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                   <p className="text-sm text-gray-700 leading-snug">{p.descripcion}</p>
+                  {confirmDelete === p.id && (
+                    <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2">
+                      <span className="text-xs text-red-700 flex-1">¿Eliminar esta actualización?</span>
+                      <button
+                        onClick={() => deleteMutation.mutate(p.id)}
+                        disabled={deleteMutation.isPending}
+                        className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors"
+                      >
+                        {deleteMutation.isPending ? '...' : 'Sí, eliminar'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete(null)}
+                        className="px-2.5 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
