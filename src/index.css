@@ -1,0 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-gov-navy: #172c3f;
+  --color-gov-blue: #398ebd;
+  --color-gov-cyan: #01aae3;
+  --color-gov-orange: #d17612;
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+}
