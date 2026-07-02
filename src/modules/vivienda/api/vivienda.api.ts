@@ -9,6 +9,11 @@ import type {
   MunicipioCCUpdate,
   PedidoCC,
   PedidoCCCreate,
+  CordobaHogarPanel,
+  LocalidadCH,
+  LocalidadCHUpdate,
+  PedidoCH,
+  PedidoCHCreate,
 } from '../types/vivienda.types'
 
 const BASE = '/api/v1/vivienda'
@@ -74,4 +79,24 @@ export const cordonCunetaApi = {
 
   deletePedido: (municipioId: string, pedidoId: string) =>
     apiClient.delete(`${BASE}/cordon-cuneta/${municipioId}/pedidos/${pedidoId}`).then((r) => r.data),
+}
+
+export const cordobaHogarApi = {
+  getPanel: () =>
+    apiClient.get<CordobaHogarPanel>(`${BASE}/cordoba-hogar`).then((r) => r.data),
+
+  updateLocalidad: (id: string, data: LocalidadCHUpdate) =>
+    apiClient.patch<LocalidadCH>(`${BASE}/cordoba-hogar/${id}`, data).then((r) => r.data),
+
+  updatePresupuesto: (presupuesto: number) =>
+    apiClient.patch(`${BASE}/cordoba-hogar-config/presupuesto`, { presupuesto }).then((r) => r.data),
+
+  getPedidos: (localidadId: string) =>
+    apiClient.get<PedidoCH[]>(`${BASE}/cordoba-hogar/${localidadId}/pedidos`).then((r) => r.data),
+
+  createPedido: (localidadId: string, data: PedidoCHCreate) =>
+    apiClient.post<PedidoCH>(`${BASE}/cordoba-hogar/${localidadId}/pedidos`, data).then((r) => r.data),
+
+  deletePedido: (localidadId: string, pedidoId: string) =>
+    apiClient.delete(`${BASE}/cordoba-hogar/${localidadId}/pedidos/${pedidoId}`).then((r) => r.data),
 }

@@ -132,6 +132,68 @@ export interface MunicipioCCUpdate {
   obs?: string
 }
 
+export interface EstadoCH {
+  id: number
+  label: string
+  bg: string
+  text_color: string
+  orden: number
+}
+
+export interface LocalidadCH {
+  id: string
+  orden: number
+  localidad: string
+  departamento: string | null
+  fecha_anuncio: string | null
+  expediente: string | null
+  monto: number | null
+  cantidad_casas: number | null
+  ok_gob: string
+  doc_exp: string | null
+  ejuridico: number | null
+  etecnico: number | null
+  efinanciero: number | null
+  obs: string | null
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface CordobaHogarPanel {
+  localidades: LocalidadCH[]
+  estados: EstadoCH[]
+  presupuesto: number
+}
+
+export interface PedidoCH {
+  id: string
+  localidad_id: string
+  descripcion: string
+  fecha_pedido: string
+  created_at: string
+  created_by: string | null
+}
+
+export interface PedidoCHCreate {
+  descripcion: string
+  fecha_pedido: string
+}
+
+export interface LocalidadCHUpdate {
+  localidad?: string
+  departamento?: string
+  fecha_anuncio?: string | null
+  expediente?: string
+  monto?: number | null
+  cantidad_casas?: number | null
+  ok_gob?: string
+  doc_exp?: string
+  ejuridico?: number | null
+  etecnico?: number | null
+  efinanciero?: number | null
+  obs?: string
+}
+
 export interface PaginatedResponse<T> {
   items: T[]
   total: number
