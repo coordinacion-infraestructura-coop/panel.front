@@ -24,6 +24,7 @@ const SECRETARIAS: Secretaria[] = [
     nombre: 'Secretaría de Vivienda',
     activa: true,
     modulos: [
+      { label: 'Tablero de Programas', desc: 'KPIs y estado de todos los programas activos', to: '/vivienda/programas' },
       { label: 'Córdoba Hogar', desc: 'Panel provisorio — seguimiento de localidades', to: '/vivienda/cordoba-hogar' },
       { label: 'Cordón Cuneta y Adoquinado', desc: 'Seguimiento de convenios con municipios', to: '/vivienda/cordon-cuneta' },
       { label: 'Registro de Beneficiarios', desc: 'Alta, búsqueda y consulta por DNI', to: '/vivienda/beneficiarios', hidden: true },
