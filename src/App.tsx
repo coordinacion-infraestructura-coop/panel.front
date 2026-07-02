@@ -10,6 +10,9 @@ import { BeneficiariosListPage } from './modules/vivienda/pages/BeneficiariosLis
 import { BeneficiarioFormPage } from './modules/vivienda/pages/BeneficiarioFormPage'
 import { ExpedientesListPage } from './modules/vivienda/pages/ExpedientesListPage'
 import { CordonCunetaPage } from './modules/vivienda/pages/CordonCunetaPage'
+import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
+import { TableroPage } from './modules/privada/pages/TableroPage'
+import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +41,9 @@ export default function App() {
               <Route path="vivienda/beneficiarios/nuevo" element={<BeneficiarioFormPage />} />
               <Route path="vivienda/expedientes" element={<ExpedientesListPage />} />
               <Route path="vivienda/cordon-cuneta" element={<CordonCunetaPage />} />
+              <Route path="privada/gestiones" element={<GestionesListPage />} />
+              <Route path="privada/tablero" element={<TableroPage />} />
+              <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
