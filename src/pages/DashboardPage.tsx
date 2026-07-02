@@ -6,6 +6,7 @@ interface Modulo {
   label: string
   desc: string
   to: string
+  hidden?: boolean
 }
 
 interface Secretaria {
@@ -23,10 +24,10 @@ const SECRETARIAS: Secretaria[] = [
     nombre: 'Secretaría de Vivienda',
     activa: true,
     modulos: [
-      { label: 'Programas Habitacionales', desc: 'Córdoba Hogar · Mi Lugar · Loteos', to: '/vivienda/programas' },
+      { label: 'Córdoba Hogar', desc: 'Panel provisorio — seguimiento de localidades', to: '/vivienda/cordoba-hogar' },
       { label: 'Cordón Cuneta y Adoquinado', desc: 'Seguimiento de convenios con municipios', to: '/vivienda/cordon-cuneta' },
-      { label: 'Registro de Beneficiarios', desc: 'Alta, búsqueda y consulta por DNI', to: '/vivienda/beneficiarios' },
-      { label: 'Expedientes', desc: 'Tramitación y seguimiento de expedientes', to: '/vivienda/expedientes' },
+      { label: 'Registro de Beneficiarios', desc: 'Alta, búsqueda y consulta por DNI', to: '/vivienda/beneficiarios', hidden: true },
+      { label: 'Expedientes', desc: 'Tramitación y seguimiento de expedientes', to: '/vivienda/expedientes', hidden: true },
     ],
   },
   {
@@ -86,6 +87,7 @@ function ChevronRight() {
 }
 
 function SecretariaCard({ sec, fullWidth }: { sec: Secretaria; fullWidth?: boolean }) {
+  const visibleModulos = sec.modulos.filter((m) => !m.hidden)
   return (
     <section
       aria-label={sec.nombre}
@@ -99,7 +101,7 @@ function SecretariaCard({ sec, fullWidth }: { sec: Secretaria; fullWidth?: boole
           <h3 className="text-white font-semibold">{sec.nombre}</h3>
         </div>
         <span className="text-xs bg-gov-cyan/90 text-white px-2.5 py-1 rounded-full font-medium whitespace-nowrap ml-2 flex-shrink-0">
-          {sec.modulos.length} módulo{sec.modulos.length !== 1 ? 's' : ''}
+          {visibleModulos.length} módulo{visibleModulos.length !== 1 ? 's' : ''}
         </span>
       </div>
       <div
@@ -109,7 +111,7 @@ function SecretariaCard({ sec, fullWidth }: { sec: Secretaria; fullWidth?: boole
             : 'divide-y'
         } divide-slate-100`}
       >
-        {sec.modulos.map((mod) => (
+        {visibleModulos.map((mod) => (
           <Link
             key={mod.to}
             to={mod.to}
