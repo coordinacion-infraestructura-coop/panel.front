@@ -9,9 +9,9 @@ interface NavItem {
 
 const SECRETARIA_NAV: Record<string, NavItem[]> = {
   vivienda: [
+    { to: '/vivienda/programas', label: 'Tablero' },
     { to: '/vivienda/cordoba-hogar', label: 'Córdoba Hogar' },
     { to: '/vivienda/cordon-cuneta', label: 'Cordón Cuneta' },
-    // { to: '/vivienda/programas', label: 'Programas' },     // oculto hasta rediseño
     // { to: '/vivienda/beneficiarios', label: 'Beneficiarios' }, // oculto — módulo en desarrollo
     // { to: '/vivienda/expedientes', label: 'Expedientes' },     // oculto — módulo en desarrollo
   ],
