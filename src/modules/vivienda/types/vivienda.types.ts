@@ -70,12 +70,37 @@ export interface Expediente {
   updated_at: string
 }
 
+// ── Cordón Cuneta ───────────────────────────────────────────────────────────────
+
 export interface EstadoCC {
   id: number
   label: string
   bg: string
   text_color: string
   orden: number
+  aplica_juridico: boolean
+  aplica_tecnico: boolean
+  aplica_financiero: boolean
+}
+
+export interface EstadoCCCreate {
+  label: string
+  bg: string
+  text_color: string
+  orden: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
+}
+
+export interface EstadoCCUpdate {
+  label?: string
+  bg?: string
+  text_color?: string
+  orden?: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
 }
 
 export interface MunicipioCC {
@@ -90,11 +115,23 @@ export interface MunicipioCC {
   ejuridico: number | null
   etecnico: number | null
   efinanciero: number | null
+  estado_general: number | null
   cordon_cuneta_ml: number | null
   adoquinado_m2: number | null
   obs: string | null
   updated_at: string
   updated_by: string | null
+}
+
+export interface MunicipioCCCreate {
+  municipio: string
+  departamento?: string
+  expediente?: string
+  monto?: number
+  ok_gob?: string
+  ejuridico?: number
+  etecnico?: number
+  efinanciero?: number
 }
 
 export interface CordonCunetaPanel {
@@ -132,12 +169,47 @@ export interface MunicipioCCUpdate {
   obs?: string
 }
 
+export interface EstadoHistorialCC {
+  id: string
+  municipio_id: string
+  campo: string
+  estado_anterior_id: number | null
+  estado_nuevo_id: number
+  created_at: string
+  created_by: string | null
+}
+
+// ── Córdoba Hogar ────────────────────────────────────────────────────────────────
+
 export interface EstadoCH {
   id: number
   label: string
   bg: string
   text_color: string
   orden: number
+  aplica_juridico: boolean
+  aplica_tecnico: boolean
+  aplica_financiero: boolean
+}
+
+export interface EstadoCHCreate {
+  label: string
+  bg: string
+  text_color: string
+  orden: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
+}
+
+export interface EstadoCHUpdate {
+  label?: string
+  bg?: string
+  text_color?: string
+  orden?: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
 }
 
 export interface LocalidadCH {
@@ -154,9 +226,23 @@ export interface LocalidadCH {
   ejuridico: number | null
   etecnico: number | null
   efinanciero: number | null
+  estado_general: number | null
   obs: string | null
   updated_at: string
   updated_by: string | null
+}
+
+export interface LocalidadCHCreate {
+  localidad: string
+  departamento?: string
+  fecha_anuncio?: string
+  expediente?: string
+  monto?: number
+  cantidad_casas?: number
+  ok_gob?: string
+  ejuridico?: number
+  etecnico?: number
+  efinanciero?: number
 }
 
 export interface CordobaHogarPanel {
@@ -193,6 +279,29 @@ export interface LocalidadCHUpdate {
   efinanciero?: number | null
   obs?: string
 }
+
+export interface EstadoHistorialCH {
+  id: string
+  localidad_id: string
+  campo: string
+  estado_anterior_id: number | null
+  estado_nuevo_id: number
+  created_at: string
+  created_by: string | null
+}
+
+// ── Geo ─────────────────────────────────────────────────────────────────────────
+
+export interface GeoLocalidad {
+  id_geo: string
+  departamento: string
+  localidad: string
+  lat_centro: number | null
+  lon_centro: number | null
+  activo: boolean
+}
+
+// ── Shared ───────────────────────────────────────────────────────────────────────
 
 export interface PaginatedResponse<T> {
   items: T[]

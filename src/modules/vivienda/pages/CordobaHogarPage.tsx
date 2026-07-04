@@ -1,9 +1,13 @@
 import { useState, useMemo, useId } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordobaHogarApi } from '../api/vivienda.api'
-import type { EstadoCH, LocalidadCH, LocalidadCHUpdate, PedidoCH } from '../types/vivienda.types'
+import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import type {
+  EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
+  EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, GeoLocalidad, PedidoCH,
+} from '../types/vivienda.types'
 
-// ── helpers ─────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────
 
 function fmtMonto(n: number | null) {
   if (!n) return '—'
@@ -17,6 +21,11 @@ function fmtFecha(iso: string | null) {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
+}
+function fmtTs(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
 }
 function avancePct(p: LocalidadCH, estados: EstadoCH[]) {
   const maxPos = Math.max(estados.length - 1, 1)
@@ -34,48 +43,48 @@ function avanceColor(pct: number) {
   return '#22c55e'
 }
 
-// ── Badge de estado ──────────────────────────────────────────────────────────────
+const CAMPO_LABELS: Record<string, string> = {
+  ejuridico: 'Jurídico',
+  etecnico: 'Técnico',
+  efinanciero: 'Presupuestario',
+}
+
+// ── Sticky column styles ─────────────────────────────────────────────────────────
+
+const S1_HEAD = { position: 'sticky' as const, left: 0, zIndex: 3, background: '#172c3f', minWidth: 36, width: 36 }
+const S2_HEAD = { position: 'sticky' as const, left: 36, zIndex: 3, background: '#172c3f', minWidth: 160 }
+const S1_BODY = { position: 'sticky' as const, left: 0, zIndex: 2, background: '#f8fafc', minWidth: 36, width: 36 }
+const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: '#f8fafc', minWidth: 160, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }
+
+// ── EstadoBadge ──────────────────────────────────────────────────────────────────
+
 function EstadoBadge({ id, estados }: { id: number | null; estados: EstadoCH[] }) {
   const e = estados.find((s) => s.id === id)
   if (!e) return <span className="text-gray-400 text-xs">—</span>
   return (
-    <span
-      className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-      style={{ background: e.bg, color: e.text_color }}
-    >
+    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" style={{ background: e.bg, color: e.text_color }}>
       {e.label}
     </span>
   )
 }
 
 function OkBadge({ v }: { v: string }) {
-  const cls =
-    v === 'SI' ? 'bg-green-100 text-green-800' :
-    v === 'NO' ? 'bg-red-100 text-red-800' :
-    'bg-yellow-100 text-yellow-800'
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{v}</span>
-  )
+  const cls = v === 'SI' ? 'bg-green-100 text-green-800' : v === 'NO' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{v}</span>
 }
 
 // ── Modal de edición ─────────────────────────────────────────────────────────────
-const DEPTOS = [
+
+const DEPTOS_CH = [
   'Calamuchita','Cruz del Eje','Juárez Celman','Marcos Juárez','Minas',
   'Pocho','Río Cuarto','Río Segundo','San Justo','Santa María',
 ]
 
 function EditModal({
-  localidad,
-  estados,
-  onSave,
-  onClose,
-  isSaving,
+  localidad, estados, onSave, onClose, isSaving,
 }: {
-  localidad: LocalidadCH
-  estados: EstadoCH[]
-  onSave: (data: LocalidadCHUpdate) => void
-  onClose: () => void
-  isSaving: boolean
+  localidad: LocalidadCH; estados: EstadoCH[]
+  onSave: (data: LocalidadCHUpdate) => void; onClose: () => void; isSaving: boolean
 }) {
   const uid = useId()
   const [form, setForm] = useState<LocalidadCHUpdate>({
@@ -92,121 +101,84 @@ function EditModal({
     efinanciero: localidad.efinanciero,
     obs: localidad.obs ?? '',
   })
-
   const set = (k: keyof LocalidadCHUpdate, v: string | number | null | undefined) =>
     setForm((p) => ({ ...p, [k]: v }))
-
-  const labelCls = 'block text-xs font-bold text-gray-500 uppercase mb-1'
-  const inputCls = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
-
+  const lbl = 'block text-xs font-bold text-gray-500 uppercase mb-1'
+  const inp = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={`${uid}-title`}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[740px] max-w-[97vw] max-h-[92vh] overflow-y-auto shadow-xl">
-        <div
-          className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10"
-          style={{ background: '#172c3f' }}
-        >
-          <h3 id={`${uid}-title`} className="flex-1 font-semibold text-sm">
-            Editar — {localidad.localidad}
-          </h3>
-          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">
-            ✕
-          </button>
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+          <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Editar — {localidad.localidad}</h3>
+          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
-
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label htmlFor={`${uid}-localidad`} className={labelCls}>Localidad *</label>
-              <input id={`${uid}-localidad`} className={inputCls} value={form.localidad ?? ''} onChange={(e) => set('localidad', e.target.value)} />
+              <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
+              <input id={`${uid}-loc`} className={inp} value={form.localidad ?? ''} onChange={(e) => set('localidad', e.target.value)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-depto`} className={labelCls}>Departamento</label>
-              <select id={`${uid}-depto`} className={inputCls} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value)}>
+              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
+              <select id={`${uid}-dep`} className={inp} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value)}>
                 <option value="">—</option>
-                {DEPTOS.map((d) => <option key={d}>{d}</option>)}
+                {DEPTOS_CH.map((d) => <option key={d}>{d}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor={`${uid}-fecha`} className={labelCls}>Fecha de anuncio</label>
-              <input id={`${uid}-fecha`} type="date" className={inputCls} value={form.fecha_anuncio ?? ''} onChange={(e) => set('fecha_anuncio', e.target.value || null)} />
+              <label htmlFor={`${uid}-fecha`} className={lbl}>Fecha de anuncio</label>
+              <input id={`${uid}-fecha`} type="date" className={inp} value={form.fecha_anuncio ?? ''} onChange={(e) => set('fecha_anuncio', e.target.value || null)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-expediente`} className={labelCls}>Expediente N°</label>
-              <input id={`${uid}-expediente`} className={`${inputCls} font-mono`} value={form.expediente ?? ''} onChange={(e) => set('expediente', e.target.value)} />
+              <label htmlFor={`${uid}-exp`} className={lbl}>Expediente N°</label>
+              <input id={`${uid}-exp`} className={`${inp} font-mono`} value={form.expediente ?? ''} onChange={(e) => set('expediente', e.target.value)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-casas`} className={labelCls}>Cantidad de casas</label>
-              <input id={`${uid}-casas`} type="number" className={inputCls} value={form.cantidad_casas ?? ''} onChange={(e) => set('cantidad_casas', e.target.value ? Number(e.target.value) : null)} />
+              <label htmlFor={`${uid}-casas`} className={lbl}>Cantidad de casas</label>
+              <input id={`${uid}-casas`} type="number" className={inp} value={form.cantidad_casas ?? ''} onChange={(e) => set('cantidad_casas', e.target.value ? Number(e.target.value) : null)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-monto`} className={labelCls}>Monto ($)</label>
-              <input id={`${uid}-monto`} type="number" className={inputCls} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value ? Number(e.target.value) : null)} />
+              <label htmlFor={`${uid}-monto`} className={lbl}>Monto ($)</label>
+              <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value ? Number(e.target.value) : null)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-ok-gob`} className={labelCls}>OK Gobernación</label>
-              <select id={`${uid}-ok-gob`} className={inputCls} value={form.ok_gob ?? 'SI'} onChange={(e) => set('ok_gob', e.target.value)}>
-                <option>SI</option>
-                <option>NO</option>
-                <option>En trámite</option>
+              <label htmlFor={`${uid}-ok`} className={lbl}>OK Gobernación</label>
+              <select id={`${uid}-ok`} className={inp} value={form.ok_gob ?? 'SI'} onChange={(e) => set('ok_gob', e.target.value)}>
+                <option>SI</option><option>NO</option><option>En trámite</option>
               </select>
             </div>
             <div className="col-span-2">
-              <label htmlFor={`${uid}-doc-exp`} className={labelCls}>Exp. Documentación</label>
-              <input id={`${uid}-doc-exp`} className={inputCls} value={form.doc_exp ?? ''} onChange={(e) => set('doc_exp', e.target.value)} />
+              <label htmlFor={`${uid}-doc`} className={lbl}>Exp. Documentación</label>
+              <input id={`${uid}-doc`} className={inp} value={form.doc_exp ?? ''} onChange={(e) => set('doc_exp', e.target.value)} />
             </div>
             <div className="col-span-2">
-              <label htmlFor={`${uid}-obs`} className={labelCls}>Observaciones</label>
-              <textarea id={`${uid}-obs`} rows={2} className={inputCls} value={form.obs ?? ''} onChange={(e) => set('obs', e.target.value)} />
+              <label htmlFor={`${uid}-obs`} className={lbl}>Observaciones</label>
+              <textarea id={`${uid}-obs`} rows={2} className={inp} value={form.obs ?? ''} onChange={(e) => set('obs', e.target.value)} />
             </div>
           </div>
-
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">
-              Estados por Dimensión
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">Estados por Dimensión</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {([
-                ['ejuridico',   'Jurídico / Administrativo'],
-                ['etecnico',    'Técnico'],
-                ['efinanciero', 'Presup. / Financiero'],
-              ] as const).map(([field, label]) => (
+              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
                   <label htmlFor={`${uid}-${field}`} className="block text-xs font-bold uppercase mb-2 text-gov-navy">
-                    {label}
+                    {CAMPO_LABELS[field]}
                   </label>
-                  <select
-                    id={`${uid}-${field}`}
-                    className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-                    value={form[field] ?? ''}
-                    onChange={(e) => set(field, e.target.value ? Number(e.target.value) : null)}
-                  >
+                  <select id={`${uid}-${field}`} className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan" value={form[field] ?? ''}
+                    onChange={(e) => set(field, e.target.value ? Number(e.target.value) : null)}>
                     <option value="">—</option>
-                    {estados.map((e) => (
-                      <option key={e.id} value={e.id}>{e.label}</option>
-                    ))}
+                    {estados
+                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : field === 'etecnico' ? e.aplica_tecnico : e.aplica_financiero)
+                      .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
                   </select>
                 </div>
               ))}
             </div>
           </div>
         </div>
-
         <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">
-            Cancelar
-          </button>
-          <button
-            onClick={() => onSave(form)}
-            disabled={isSaving}
-            className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90"
-            style={{ background: '#172c3f' }}
-          >
+          <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+          <button onClick={() => onSave(form)} disabled={isSaving} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
             {isSaving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
@@ -215,17 +187,64 @@ function EditModal({
   )
 }
 
-// ── Panel de detalle ─────────────────────────────────────────────────────────────
-function DetailPanel({
-  localidad,
-  onClose,
+// ── Historial de estados ─────────────────────────────────────────────────────────
+
+function HistorialEstadosTab({
+  localidadId, estados,
 }: {
-  localidad: LocalidadCH
-  onClose: () => void
+  localidadId: string; estados: EstadoCH[]
+}) {
+  const { data: historial = [], isLoading } = useQuery({
+    queryKey: ['ch-historial', localidadId],
+    queryFn: () => cordobaHogarApi.getHistorial(localidadId),
+  })
+  if (isLoading) return <p className="text-sm text-gray-400 text-center py-8">Cargando...</p>
+  if (historial.length === 0) return (
+    <p className="text-sm text-gray-400 text-center py-8">Sin cambios de estado registrados.</p>
+  )
+  return (
+    <ol className="space-y-3 px-5 py-4">
+      {historial.map((h: EstadoHistorialCH, i: number) => (
+        <li key={h.id} className="flex gap-3">
+          <div className="flex flex-col items-center" aria-hidden="true">
+            <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? '#01aae3' : '#bae6fd' }} />
+            {i < historial.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
+          </div>
+          <div className="pb-3 flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="text-xs font-bold text-gov-navy uppercase tracking-wide">
+                {CAMPO_LABELS[h.campo] ?? h.campo}
+              </span>
+              {h.created_by && <span className="text-xs text-gray-400">· {h.created_by.split('@')[0]}</span>}
+              <time className="text-xs text-gray-400 ml-auto">{fmtTs(h.created_at)}</time>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {h.estado_anterior_id
+                ? <EstadoBadge id={h.estado_anterior_id} estados={estados} />
+                : <span className="text-gray-300 text-xs">Sin estado</span>}
+              <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              <EstadoBadge id={h.estado_nuevo_id} estados={estados} />
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// ── Panel de detalle ─────────────────────────────────────────────────────────────
+
+function DetailPanel({
+  localidad, estados, onClose,
+}: {
+  localidad: LocalidadCH; estados: EstadoCH[]; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
   const today = new Date().toISOString().split('T')[0]
+  const [tab, setTab] = useState<'comunicaciones' | 'historial'>('comunicaciones')
   const [showForm, setShowForm] = useState(false)
   const [desc, setDesc] = useState('')
   const [fecha, setFecha] = useState(today)
@@ -242,16 +261,10 @@ function DetailPanel({
       cordobaHogarApi.createPedido(localidad.id, d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ch-pedidos', localidad.id] })
-      setDesc('')
-      setFecha(today)
-      setShowForm(false)
-      setSaveError(null)
+      setDesc(''); setFecha(today); setShowForm(false); setSaveError(null)
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string; message?: string } } })
-        ?.response?.data?.detail
-        ?? (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        ?? 'Error al guardar.'
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al guardar.'
       setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     },
   })
@@ -264,177 +277,460 @@ function DetailPanel({
     },
   })
 
+  const tabCls = (t: typeof tab) =>
+    `flex-1 py-2 text-xs font-semibold border-b-2 transition-colors ${tab === t
+      ? 'border-gov-cyan text-gov-cyan'
+      : 'border-transparent text-gray-500 hover:text-gray-700'}`
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} aria-hidden="true" />
-      <div
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`${uid}-title`}
-      >
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
         <div className="px-5 py-4 flex items-start justify-between border-b border-slate-200" style={{ background: '#172c3f' }}>
           <div>
-            <div className="text-[10px] font-semibold tracking-widest mb-0.5 text-gov-cyan uppercase">
-              Historial de comunicaciones
-            </div>
-            <h3 id={`${uid}-title`} className="text-white font-semibold text-sm">{localidad.localidad}</h3>
-            {localidad.departamento && (
-              <p className="text-xs mt-0.5 text-white/60">{localidad.departamento}</p>
-            )}
+            <div className="text-[10px] font-semibold tracking-widest mb-0.5 text-gov-cyan uppercase">Córdoba Hogar</div>
+            <h3 id={`${uid}-t`} className="text-white font-semibold text-sm">{localidad.localidad}</h3>
+            {localidad.departamento && <p className="text-xs mt-0.5 text-white/60">{localidad.departamento}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="text-sky-300 hover:text-white text-xl leading-none ml-4 mt-0.5 transition-colors"
-            aria-label="Cerrar historial"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none ml-4 mt-0.5 transition-colors" aria-label="Cerrar">✕</button>
         </div>
-
-        <div className="px-5 py-3 border-b border-slate-200 bg-slate-50">
-          {!showForm ? (
-            <button
-              onClick={() => setShowForm(true)}
-              className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors"
-            >
-              + Nueva actualización
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <label htmlFor={`${uid}-desc`} className="block text-xs font-bold uppercase text-gray-500">
-                ¿Qué se solicitó / comunicó?
-              </label>
-              <textarea
-                id={`${uid}-desc`}
-                rows={3}
-                autoFocus
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                placeholder="Describí el pedido o comunicación realizada..."
-                className="w-full border border-sky-200 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-              />
-              <div className="flex items-center gap-2">
-                <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">
-                  Fecha:
-                </label>
-                <input
-                  id={`${uid}-fecha`}
-                  type="date"
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                  className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-                />
-              </div>
-              {saveError && (
-                <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                  {saveError}
-                </p>
-              )}
-              <div className="flex gap-2 justify-end pt-1">
-                <button
-                  onClick={() => { setShowForm(false); setDesc(''); setFecha(today); setSaveError(null) }}
-                  className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }}
-                  disabled={mutation.isPending || !desc.trim()}
-                  className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90"
-                  style={{ background: '#172c3f' }}
-                >
-                  {mutation.isPending ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 bg-slate-50">
+          <button className={tabCls('comunicaciones')} onClick={() => setTab('comunicaciones')}>Comunicaciones</button>
+          <button className={tabCls('historial')} onClick={() => setTab('historial')}>Cambios de estado</button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4" aria-live="polite">
-          {isLoading && <p role="status" className="text-sm text-gray-400 text-center py-8">Cargando...</p>}
-          {!isLoading && pedidos.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">Sin comunicaciones registradas aún.</p>
-          )}
-          <ol className="space-y-3" aria-label="Historial de comunicaciones">
-            {pedidos.map((p: PedidoCH, i: number) => (
-              <li key={p.id} className="flex gap-3 group">
-                <div className="flex flex-col items-center" aria-hidden="true">
-                  <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? '#01aae3' : '#bae6fd' }} />
-                  {i < pedidos.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
-                </div>
-                <div className="pb-3 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <time className="text-xs font-semibold text-gov-navy" dateTime={p.fecha_pedido}>
-                      {new Date(p.fecha_pedido + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </time>
-                    {p.created_by && (
-                      <span className="text-xs text-gray-400">· {p.created_by.split('@')[0]}</span>
-                    )}
-                    <button
-                      onClick={() => setConfirmDelete(p.id)}
-                      className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400"
-                      aria-label="Eliminar esta actualización"
-                      title="Eliminar"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+        {/* Tab: Comunicaciones */}
+        {tab === 'comunicaciones' && (
+          <>
+            <div className="px-5 py-3 border-b border-slate-200 bg-slate-50">
+              {!showForm ? (
+                <button onClick={() => setShowForm(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
+                  + Nueva actualización
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor={`${uid}-desc`} className="block text-xs font-bold uppercase text-gray-500">¿Qué se solicitó / comunicó?</label>
+                  <textarea id={`${uid}-desc`} rows={3} autoFocus value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Describí el pedido o comunicación realizada..." className="w-full border border-sky-200 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
+                  <div className="flex items-center gap-2">
+                    <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">Fecha:</label>
+                    <input id={`${uid}-fecha`} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
+                  </div>
+                  {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{saveError}</p>}
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button onClick={() => { setShowForm(false); setDesc(''); setFecha(today); setSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                    <button onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
+                      {mutation.isPending ? 'Guardando...' : 'Guardar'}
                     </button>
                   </div>
-                  <p className="text-sm text-gray-700 leading-snug">{p.descripcion}</p>
-                  {confirmDelete === p.id && (
-                    <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2">
-                      <span className="text-xs text-red-700 flex-1">¿Eliminar esta actualización?</span>
-                      <button
-                        onClick={() => deleteMutation.mutate(p.id)}
-                        disabled={deleteMutation.isPending}
-                        className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors"
-                      >
-                        {deleteMutation.isPending ? '...' : 'Sí, eliminar'}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(null)}
-                        className="px-2.5 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </li>
-            ))}
-          </ol>
-        </div>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4" aria-live="polite">
+              {isLoading && <p role="status" className="text-sm text-gray-400 text-center py-8">Cargando...</p>}
+              {!isLoading && pedidos.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Sin comunicaciones registradas aún.</p>}
+              <ol className="space-y-3">
+                {pedidos.map((p: PedidoCH, i: number) => (
+                  <li key={p.id} className="flex gap-3 group">
+                    <div className="flex flex-col items-center" aria-hidden="true">
+                      <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? '#01aae3' : '#bae6fd' }} />
+                      {i < pedidos.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
+                    </div>
+                    <div className="pb-3 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <time className="text-xs font-semibold text-gov-navy" dateTime={p.fecha_pedido}>
+                          {new Date(p.fecha_pedido + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </time>
+                        {p.created_by && <span className="text-xs text-gray-400">· {p.created_by.split('@')[0]}</span>}
+                        <button onClick={() => setConfirmDelete(p.id)} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400" aria-label="Eliminar esta actualización" title="Eliminar">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-snug">{p.descripcion}</p>
+                      {confirmDelete === p.id && (
+                        <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2">
+                          <span className="text-xs text-red-700 flex-1">¿Eliminar esta actualización?</span>
+                          <button onClick={() => deleteMutation.mutate(p.id)} disabled={deleteMutation.isPending} className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMutation.isPending ? '...' : 'Sí, eliminar'}</button>
+                          <button onClick={() => setConfirmDelete(null)} className="px-2.5 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </>
+        )}
+        {/* Tab: Historial de estados */}
+        {tab === 'historial' && (
+          <div className="flex-1 overflow-y-auto">
+            <HistorialEstadosTab localidadId={localidad.id} estados={estados} />
+          </div>
+        )}
       </div>
     </>
   )
 }
 
+// ── Gestionar estados modal ──────────────────────────────────────────────────────
+
+function GestionarEstadosModal({
+  estados, onClose,
+}: {
+  estados: EstadoCH[]; onClose: () => void
+}) {
+  const uid = useId()
+  const queryClient = useQueryClient()
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState<EstadoCHUpdate>({})
+  const [deleteError, setDeleteError] = useState<Record<number, string>>({})
+  const [showNew, setShowNew] = useState(false)
+  const [newForm, setNewForm] = useState<EstadoCHCreate>({
+    label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10,
+    aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true,
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: EstadoCHUpdate }) => cordobaHogarApi.updateEstado(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] }); setEditId(null) },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => cordobaHogarApi.deleteEstado(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] }),
+    onError: (err: unknown, id: number) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      const msg = status === 409 ? 'Este estado está en uso y no puede eliminarse.' : 'Error al eliminar el estado.'
+      setDeleteError((prev) => ({ ...prev, [id]: msg }))
+    },
+  })
+
+  const createMut = useMutation({
+    mutationFn: (data: EstadoCHCreate) => cordobaHogarApi.createEstado(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
+      setShowNew(false)
+      setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
+    },
+  })
+
+  const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
+      <div className="bg-white rounded-lg w-[640px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+          <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Gestionar estados — Córdoba Hogar</h3>
+          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
+        </div>
+        <div className="p-4 space-y-2">
+          {estados.map((e) => (
+            <div key={e.id} className="border border-slate-200 rounded-md overflow-hidden">
+              <div className="flex items-center gap-3 px-3 py-2 bg-slate-50">
+                <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ background: e.bg, border: `1px solid ${e.text_color}` }} />
+                <span className="flex-1 text-sm font-medium">{e.label}</span>
+                <span className="text-xs text-gray-400 w-10 text-right">{e.orden}</span>
+                <div className="flex items-center gap-1 text-xs text-gray-400">
+                  {e.aplica_juridico && <span title="Jurídico" className="px-1 bg-purple-100 text-purple-700 rounded text-[10px]">J</span>}
+                  {e.aplica_tecnico && <span title="Técnico" className="px-1 bg-blue-100 text-blue-700 rounded text-[10px]">T</span>}
+                  {e.aplica_financiero && <span title="Presupuestario" className="px-1 bg-green-100 text-green-700 rounded text-[10px]">P</span>}
+                </div>
+                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </button>
+                <button onClick={() => { setDeleteError((p) => { const n = { ...p }; delete n[e.id]; return n }); deleteMut.mutate(e.id) }} disabled={deleteMut.isPending} className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Eliminar">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+              {deleteError[e.id] && (
+                <p className="px-3 py-1.5 text-xs text-red-600 bg-red-50 border-t border-red-200">{deleteError[e.id]}</p>
+              )}
+              {editId === e.id && (
+                <div className="px-3 py-3 border-t border-slate-200 bg-white space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Etiqueta</label>
+                      <input className={`w-full ${inp}`} value={editForm.label ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, label: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color fondo</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={editForm.bg ?? '#e2e8f0'} onChange={(e) => setEditForm((p) => ({ ...p, bg: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
+                        <input className={`flex-1 ${inp} font-mono text-xs`} value={editForm.bg ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, bg: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color texto</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={editForm.text_color ?? '#1e293b'} onChange={(e) => setEditForm((p) => ({ ...p, text_color: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
+                        <input className={`flex-1 ${inp} font-mono text-xs`} value={editForm.text_color ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, text_color: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orden</label>
+                      <input type="number" className={`w-full ${inp}`} value={editForm.orden ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, orden: Number(e.target.value) }))} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
+                      {(['aplica_juridico', 'aplica_tecnico', 'aplica_financiero'] as const).map((flag) => (
+                        <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                          <input type="checkbox" checked={editForm[flag] ?? false} onChange={(e) => setEditForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
+                          {{aplica_juridico: 'Jurídico', aplica_tecnico: 'Técnico', aplica_financiero: 'Presupuestario'}[flag]}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="col-span-2 flex justify-end gap-2 pt-1">
+                      <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: editForm.bg ?? '#e2e8f0', color: editForm.text_color ?? '#1e293b' }}>Vista previa</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                    <button onClick={() => updateMut.mutate({ id: e.id, data: editForm })} disabled={updateMut.isPending} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: '#172c3f' }}>
+                      {updateMut.isPending ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* Nuevo estado */}
+          <div className="border-2 border-dashed border-slate-300 rounded-md overflow-hidden">
+            {!showNew ? (
+              <button onClick={() => setShowNew(true)} className="w-full py-2.5 text-sm font-medium text-gray-500 hover:text-gov-navy hover:bg-slate-50 transition-colors">+ Nuevo estado</button>
+            ) : (
+              <div className="px-3 py-3 space-y-3">
+                <p className="text-xs font-bold text-gov-navy uppercase tracking-wide">Nuevo estado</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Etiqueta *</label>
+                    <input className={`w-full ${inp}`} value={newForm.label} onChange={(e) => setNewForm((p) => ({ ...p, label: e.target.value }))} placeholder="Ej: Escritura firmada" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color fondo</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={newForm.bg} onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
+                      <input className={`flex-1 ${inp} font-mono text-xs`} value={newForm.bg} onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color texto</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={newForm.text_color} onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
+                      <input className={`flex-1 ${inp} font-mono text-xs`} value={newForm.text_color} onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orden</label>
+                    <input type="number" className={`w-full ${inp}`} value={newForm.orden} onChange={(e) => setNewForm((p) => ({ ...p, orden: Number(e.target.value) }))} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
+                    {(['aplica_juridico', 'aplica_tecnico', 'aplica_financiero'] as const).map((flag) => (
+                      <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                        <input type="checkbox" checked={newForm[flag] ?? true} onChange={(e) => setNewForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
+                        {{aplica_juridico: 'Jurídico', aplica_tecnico: 'Técnico', aplica_financiero: 'Presupuestario'}[flag]}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="col-span-2 flex items-center gap-3">
+                    <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: newForm.bg, color: newForm.text_color }}>{newForm.label || 'Vista previa'}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <button onClick={() => setShowNew(false)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                  <button onClick={() => createMut.mutate(newForm)} disabled={createMut.isPending || !newForm.label.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: '#172c3f' }}>
+                    {createMut.isPending ? 'Guardando...' : 'Crear estado'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end">
+          <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Agregar localidad modal ──────────────────────────────────────────────────────
+
+function AgregarLocalidadModal({
+  estados, onClose,
+}: {
+  estados: EstadoCH[]; onClose: () => void
+}) {
+  const uid = useId()
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<LocalidadCHCreate>({ localidad: '', departamento: '' })
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const { data: geoList = [], isLoading: geoLoading } = useQuery({
+    queryKey: ['ch-geo'],
+    queryFn: cordobaHogarApi.getGeo,
+  })
+
+  const createMut = useMutation({
+    mutationFn: (data: LocalidadCHCreate) => cordobaHogarApi.createLocalidad(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al crear la localidad.'
+      setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    },
+  })
+
+  const geoByDepto = useMemo(() => {
+    const map = new Map<string, GeoLocalidad[]>()
+    for (const g of geoList) {
+      if (!map.has(g.departamento)) map.set(g.departamento, [])
+      map.get(g.departamento)!.push(g)
+    }
+    return map
+  }, [geoList])
+
+  const inp = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
+      <div className="bg-white rounded-lg w-[560px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+          <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Agregar localidad — Córdoba Hogar</h3>
+          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label htmlFor={`${uid}-geo`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Localidad (desde catálogo)</label>
+            {geoLoading
+              ? <p className="text-xs text-gray-400">Cargando localidades...</p>
+              : (
+                <select
+                  id={`${uid}-geo`}
+                  className={inp}
+                  value=""
+                  onChange={(e) => {
+                    const g = geoList.find((x) => x.id_geo === e.target.value)
+                    if (g) setForm((p) => ({ ...p, localidad: g.localidad, departamento: g.departamento }))
+                  }}
+                >
+                  <option value="">— Seleccioná una localidad —</option>
+                  {[...geoByDepto.entries()].map(([depto, items]) => (
+                    <optgroup key={depto} label={depto}>
+                      {items.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              )}
+            <p className="text-xs text-gray-400 mt-1">O completá manualmente los campos debajo.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label htmlFor={`${uid}-loc`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Localidad *</label>
+              <input id={`${uid}-loc`} className={inp} value={form.localidad} onChange={(e) => setForm((p) => ({ ...p, localidad: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor={`${uid}-dep`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Departamento</label>
+              <select id={`${uid}-dep`} className={inp} value={form.departamento ?? ''} onChange={(e) => setForm((p) => ({ ...p, departamento: e.target.value }))}>
+                <option value="">—</option>
+                {DEPTOS_CH.map((d) => <option key={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${uid}-fecha`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha de anuncio</label>
+              <input id={`${uid}-fecha`} type="date" className={inp} value={form.fecha_anuncio ?? ''} onChange={(e) => setForm((p) => ({ ...p, fecha_anuncio: e.target.value || undefined }))} />
+            </div>
+            <div>
+              <label htmlFor={`${uid}-exp`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Expediente N°</label>
+              <input id={`${uid}-exp`} className={`${inp} font-mono`} value={form.expediente ?? ''} onChange={(e) => setForm((p) => ({ ...p, expediente: e.target.value }))} />
+            </div>
+            <div>
+              <label htmlFor={`${uid}-casas`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Cant. casas</label>
+              <input id={`${uid}-casas`} type="number" className={inp} value={form.cantidad_casas ?? ''} onChange={(e) => setForm((p) => ({ ...p, cantidad_casas: e.target.value ? Number(e.target.value) : undefined }))} />
+            </div>
+            <div>
+              <label htmlFor={`${uid}-monto`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto ($)</label>
+              <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => setForm((p) => ({ ...p, monto: e.target.value ? Number(e.target.value) : undefined }))} />
+            </div>
+            <div>
+              <label htmlFor={`${uid}-ok`} className="block text-xs font-bold text-gray-500 uppercase mb-1">OK Gobernación</label>
+              <select id={`${uid}-ok`} className={inp} value={form.ok_gob ?? 'SI'} onChange={(e) => setForm((p) => ({ ...p, ok_gob: e.target.value }))}>
+                <option>SI</option><option>NO</option><option>En trámite</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">Estados por Dimensión (opcional)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
+                <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
+                  <label htmlFor={`${uid}-${field}`} className="block text-xs font-bold uppercase mb-2 text-gov-navy">{CAMPO_LABELS[field]}</label>
+                  <select id={`${uid}-${field}`} className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan" value={form[field] ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value ? Number(e.target.value) : undefined }))}>
+                    <option value="">—</option>
+                    {estados.filter((e) => field === 'ejuridico' ? e.aplica_juridico : field === 'etecnico' ? e.aplica_tecnico : e.aplica_financiero)
+                      .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+          {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+          <button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.localidad.trim()} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
+            {createMut.isPending ? 'Guardando...' : 'Agregar localidad'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────────
+
 export function CordobaHogarPage() {
   const queryClient = useQueryClient()
+  const { data: user } = usePortalUser()
+  const canManage = user?.rol === 'Supervisor' || user?.rol === 'Admin'
+
   const searchId = useId()
   const deptoId = useId()
   const okId = useId()
+  const egId = useId()
 
   const [search, setSearch] = useState('')
   const [deptoFilter, setDeptoFilter] = useState('')
   const [okFilter, setOkFilter] = useState('')
+  const [egFilter, setEgFilter] = useState('')
   const [editTarget, setEditTarget] = useState<LocalidadCH | null>(null)
   const [detailTarget, setDetailTarget] = useState<LocalidadCH | null>(null)
+  const [showGestionarEstados, setShowGestionarEstados] = useState(false)
+  const [showAgregar, setShowAgregar] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cordoba-hogar'],
     queryFn: cordobaHogarApi.getPanel,
   })
 
-  const mutation = useMutation({
+  const updateMut = useMutation({
     mutationFn: ({ id, upd }: { id: string; upd: LocalidadCHUpdate }) =>
       cordobaHogarApi.updateLocalidad(id, upd),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
       setEditTarget(null)
+    },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => cordobaHogarApi.deleteLocalidad(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
+      setConfirmDeleteId(null)
+      setDetailTarget(null)
     },
   })
 
@@ -453,9 +749,10 @@ export function CordobaHogarPage() {
       if (q && !`${l.localidad} ${l.expediente ?? ''} ${l.obs ?? ''} ${l.doc_exp ?? ''}`.toLowerCase().includes(q)) return false
       if (deptoFilter && l.departamento !== deptoFilter) return false
       if (okFilter && l.ok_gob !== okFilter) return false
+      if (egFilter && String(l.estado_general) !== egFilter) return false
       return true
     })
-  }, [localidades, search, deptoFilter, okFilter])
+  }, [localidades, search, deptoFilter, okFilter, egFilter])
 
   const montoTotal = localidades.reduce((s, l) => s + (l.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
@@ -465,20 +762,15 @@ export function CordobaHogarPage() {
     const e = estados.find((s) => s.id === l.ejuridico)
     return e?.label === 'Convenio Firmado'
   }).length
+  const hasFilters = !!(search || deptoFilter || okFilter || egFilter)
 
-  if (isLoading) {
-    return <p role="status" aria-live="polite" className="text-center py-12 text-gray-500">Cargando...</p>
-  }
-  if (error) {
-    return <p role="alert" className="text-red-600 py-4">Error al cargar el panel.</p>
-  }
+  if (isLoading) return <p role="status" aria-live="polite" className="text-center py-12 text-gray-500">Cargando...</p>
+  if (error) return <p role="alert" className="text-red-600 py-4">Error al cargar el panel.</p>
 
   return (
     <div>
       <div className="mb-5">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-cyan mb-1">
-          Programa Provincial — Secretaría de Vivienda
-        </p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-cyan mb-1">Programa Provincial — Secretaría de Vivienda</p>
         <h2 className="text-xl font-bold text-gov-navy">Córdoba Hogar</h2>
         <p className="text-xs text-gray-400 mt-0.5">Versión provisoria — sujeto a modificaciones post reunión con el área</p>
       </div>
@@ -486,26 +778,19 @@ export function CordobaHogarPage() {
       {/* KPI cards */}
       <div className="flex flex-wrap gap-3 mb-5">
         {[
-          { label: 'Localidades',     value: String(localidades.length), color: '#172c3f' },
-          { label: 'Viviendas',       value: String(totalCasas),         color: '#398ebd' },
-          { label: 'Monto Total',     value: fmtMontoResumen(montoTotal), color: '#01aae3' },
-          { label: 'OK Gobernación',  value: String(conOkGob),            color: '#22c55e' },
-          { label: 'Convenio Firmado',value: String(conConvenio),         color: '#172c3f' },
+          { label: 'Localidades', value: String(localidades.length), color: '#172c3f' },
+          { label: 'Viviendas', value: String(totalCasas), color: '#398ebd' },
+          { label: 'Monto Total', value: fmtMontoResumen(montoTotal), color: '#01aae3' },
+          { label: 'OK Gobernación', value: String(conOkGob), color: '#22c55e' },
+          { label: 'Convenio Firmado', value: String(conConvenio), color: '#172c3f' },
         ].map((c) => (
-          <div
-            key={c.label}
-            className="bg-white rounded-md px-4 py-3 min-w-[140px] shadow-sm border border-slate-100"
-            style={{ borderTop: `4px solid ${c.color}` }}
-          >
+          <div key={c.label} className="bg-white rounded-md px-4 py-3 min-w-[140px] shadow-sm border border-slate-100" style={{ borderTop: `4px solid ${c.color}` }}>
             <div className="text-2xl font-bold leading-none" style={{ color: c.color }}>{c.value}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">{c.label}</div>
           </div>
         ))}
         {presupuesto > 0 && (
-          <div
-            className="bg-white rounded-md px-4 py-3 min-w-[160px] shadow-sm border border-slate-100"
-            style={{ borderTop: '4px solid #01aae3' }}
-          >
+          <div className="bg-white rounded-md px-4 py-3 min-w-[160px] shadow-sm border border-slate-100" style={{ borderTop: '4px solid #01aae3' }}>
             <div className="text-lg font-bold leading-none text-gov-cyan">{fmtMontoResumen(presupuesto)}</div>
             <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">Crédito Asignado</div>
             <div className="text-xs font-bold mt-0.5" style={{ color: saldo >= 0 ? '#22c55e' : '#ef4444' }}>
@@ -515,36 +800,54 @@ export function CordobaHogarPage() {
         )}
       </div>
 
+      {/* Barra de acciones */}
+      <div className="flex items-center gap-2 mb-2 justify-end">
+        <button
+          onClick={() => setShowAgregar(true)}
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-cyan text-gov-cyan hover:bg-sky-50 transition-colors"
+        >
+          + Agregar localidad
+        </button>
+        {canManage && (
+          <button
+            onClick={() => setShowGestionarEstados(true)}
+            className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-gray-600 hover:bg-slate-50 transition-colors"
+          >
+            Gestionar estados
+          </button>
+        )}
+      </div>
+
       {/* Filtros */}
       <div className="bg-white border border-slate-200 rounded-t-md px-4 py-3 flex flex-wrap gap-x-4 gap-y-2 items-center">
         <div className="flex items-center gap-2">
           <label htmlFor={searchId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Buscar</label>
-          <input
-            id={searchId}
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Localidad, expediente, observaciones..."
-            className="border border-slate-200 rounded px-2 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-          />
+          <input id={searchId} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Localidad, expediente, observaciones..." className="border border-slate-200 rounded px-2 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor={deptoId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Departamento</label>
+          <label htmlFor={deptoId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Depto.</label>
           <select id={deptoId} value={deptoFilter} onChange={(e) => setDeptoFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
             {deptos.map((d) => <option key={d}>{d}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor={okId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">OK Gobernación</label>
+          <label htmlFor={okId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">OK Gob.</label>
           <select id={okId} value={okFilter} onChange={(e) => setOkFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
             <option value="SI">SI</option>
             <option value="NO">NO</option>
           </select>
         </div>
-        {(search || deptoFilter || okFilter) && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+        <div className="flex items-center gap-2">
+          <label htmlFor={egId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. General</label>
+          <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
+        {hasFilters && (
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}
@@ -556,11 +859,8 @@ export function CordobaHogarPage() {
       {/* Tabla */}
       <div className="bg-white rounded-b-md shadow-sm border border-t-0 border-slate-200 overflow-hidden mb-6">
         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-          <span className="text-xs font-bold text-gov-navy">
-            Convenios con Localidades — Provincia de Córdoba
-          </span>
+          <span className="text-xs font-bold text-gov-navy">Convenios con Localidades — Provincia de Córdoba</span>
         </div>
-
         <div className="flex flex-wrap gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200">
           <span className="text-xs font-bold text-gov-navy mr-1">Estados:</span>
           {estados.map((e) => (
@@ -575,36 +875,32 @@ export function CordobaHogarPage() {
           <table className="w-full border-collapse" style={{ fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#172c3f', color: '#fff' }}>
-                {['#','Localidad','Departamento','Fecha anuncio','Expediente N°','Casas','Monto','OK Gob.','Exp. Documentación','Est. Jurídico-Adm.','Est. Técnico','Est. Presup./Fin.','Avance','Acciones'].map((h) => (
-                  <th key={h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>
-                    {h}
-                  </th>
+                <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold">#</th>
+                <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">Localidad</th>
+                {['Departamento','Fecha anuncio','Expediente N°','Casas','Monto','OK Gob.','Exp. Doc.','Est. Jurídico','Est. Técnico','Est. Presup.','Est. General','Avance','Acciones'].map((h) => (
+                  <th key={h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="text-center py-10 text-gray-400">
-                    Sin resultados para los filtros aplicados.
-                  </td>
+                  <td colSpan={15} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
               {filtered.map((l) => {
                 const pct = avancePct(l, estados)
                 const col = avanceColor(pct)
                 return (
-                  <tr key={l.id} className="border-b border-slate-100 hover:bg-sky-50/40 transition-colors">
-                    <td className="px-2.5 py-1.5 text-gray-400" style={{ fontSize: '11px' }}>{l.orden}</td>
-                    <td className="px-2.5 py-1.5 font-bold" style={{ fontSize: '12px' }}>
+                  <tr key={l.id} className="border-b border-slate-100 hover:bg-sky-50/30 transition-colors">
+                    <td style={S1_BODY} className="px-2.5 py-1.5 text-gray-400 text-center">{l.orden}</td>
+                    <td style={S2_BODY} className="px-2.5 py-1.5 font-bold">
                       {l.localidad}
                       {l.obs ? <div className="text-xs text-gray-400 font-normal whitespace-pre-line">{l.obs}</div> : null}
                     </td>
                     <td className="px-2.5 py-1.5">
                       {l.departamento && (
-                        <span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap" style={{ background: '#E8EAF6', color: '#283593' }}>
-                          {l.departamento}
-                        </span>
+                        <span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap" style={{ background: '#E8EAF6', color: '#283593' }}>{l.departamento}</span>
                       )}
                     </td>
                     <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtFecha(l.fecha_anuncio)}</td>
@@ -614,50 +910,44 @@ export function CordobaHogarPage() {
                     <td className="px-2.5 py-1.5"><OkBadge v={l.ok_gob} /></td>
                     <td className="px-2.5 py-1.5" style={{ fontSize: '10px' }}>
                       {l.doc_exp
-                        ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>
-                            <span aria-hidden="true">📄 </span>{l.doc_exp}
-                          </span>
+                        ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>📄 {l.doc_exp}</span>
                         : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={l.ejuridico} estados={estados} /></td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={l.etecnico} estados={estados} /></td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={l.efinanciero} estados={estados} /></td>
+                    <td className="px-2.5 py-1.5">
+                      <EstadoBadge id={l.estado_general} estados={estados} />
+                    </td>
                     <td className="px-2.5 py-1.5 min-w-[90px]">
                       <div className="flex items-center gap-1.5">
-                        <div
-                          className="flex-1 h-1.5 rounded-full overflow-hidden bg-slate-200"
-                          role="progressbar"
-                          aria-valuenow={pct}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-label={`Avance ${pct}%`}
-                        >
+                        <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-slate-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Avance ${pct}%`}>
                           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: col }} />
                         </div>
                         <span className="text-gray-500 w-7 text-right" style={{ fontSize: '11px' }}>{pct}%</span>
                       </div>
                     </td>
                     <td className="px-2.5 py-1.5 whitespace-nowrap">
-                      <button
-                        onClick={() => setDetailTarget(l)}
-                        className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"
-                        aria-label={`Ver historial de ${l.localidad}`}
-                        title="Ver historial"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
+                      <button onClick={() => setDetailTarget(l)} className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors" aria-label={`Ver historial de ${l.localidad}`} title="Ver historial / comunicaciones">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                       </button>
-                      <button
-                        onClick={() => setEditTarget(l)}
-                        className="p-1 rounded text-gray-500 hover:text-gov-navy hover:bg-sky-50 transition-colors ml-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"
-                        aria-label={`Editar ${l.localidad}`}
-                        title="Editar"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
+                      <button onClick={() => setEditTarget(l)} className="p-1 rounded text-gray-500 hover:text-gov-navy hover:bg-sky-50 transition-colors ml-0.5" aria-label={`Editar ${l.localidad}`} title="Editar">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
+                      {canManage && (
+                        <>
+                          {confirmDeleteId === l.id ? (
+                            <span className="inline-flex items-center gap-1 ml-0.5">
+                              <button onClick={() => deleteMut.mutate(l.id)} disabled={deleteMut.isPending} className="px-1.5 py-0.5 text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMut.isPending ? '...' : 'Sí'}</button>
+                              <button onClick={() => setConfirmDeleteId(null)} className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">No</button>
+                            </span>
+                          ) : (
+                            <button onClick={() => setConfirmDeleteId(l.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors ml-0.5" aria-label={`Eliminar ${l.localidad}`} title="Eliminar">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                          )}
+                        </>
+                      )}
                     </td>
                   </tr>
                 )
@@ -671,17 +961,23 @@ export function CordobaHogarPage() {
         <EditModal
           localidad={editTarget}
           estados={estados}
-          isSaving={mutation.isPending}
+          isSaving={updateMut.isPending}
           onClose={() => setEditTarget(null)}
-          onSave={(upd) => mutation.mutate({ id: editTarget.id, upd })}
+          onSave={(upd) => updateMut.mutate({ id: editTarget.id, upd })}
         />
       )}
-
       {detailTarget && (
         <DetailPanel
           localidad={detailTarget}
+          estados={estados}
           onClose={() => setDetailTarget(null)}
         />
+      )}
+      {showGestionarEstados && canManage && (
+        <GestionarEstadosModal estados={estados} onClose={() => setShowGestionarEstados(false)} />
+      )}
+      {showAgregar && (
+        <AgregarLocalidadModal estados={estados} onClose={() => setShowAgregar(false)} />
       )}
     </div>
   )
