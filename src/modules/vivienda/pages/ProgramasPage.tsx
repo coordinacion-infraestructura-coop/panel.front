@@ -41,7 +41,9 @@ function ProgramaKPICard({ card }: { card: ProgramCard }) {
           Ver panel →
         </Link>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 divide-slate-100 border-t border-slate-100">
+      <div className={`grid divide-slate-100 border-t border-slate-100 ${
+        card.kpis.length === 5 ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'
+      }`}>
         {card.kpis.map((kpi, i) => (
           <div
             key={kpi.label}
@@ -77,12 +79,16 @@ export function ProgramasPage() {
   const ccConExpediente = ccMunicipios.filter((m) => m.expediente).length
   const ccConvenioFirmado = ccMunicipios.filter((m) => m.ok_gob === 'SI').length
   const ccMonto = ccMunicipios.reduce((acc, m) => acc + (m.monto ?? 0), 0)
+  const ccTcId = cc?.estados.find((e) => e.label.toLowerCase() === 'tc')?.id
+  const ccEnTC = ccTcId != null ? ccMunicipios.filter((m) => m.estado_general === ccTcId).length : 0
 
   const chLocalidades = ch?.localidades ?? []
   const chTotalCasas = chLocalidades.reduce((acc, l) => acc + (l.cantidad_casas ?? 0), 0)
   const chConOkGob = chLocalidades.filter((l) => l.ok_gob === 'SI').length
   const chConExpediente = chLocalidades.filter((l) => l.expediente).length
   const chMonto = chLocalidades.reduce((acc, l) => acc + (l.monto ?? 0), 0)
+  const chTcId = ch?.estados.find((e) => e.label.toLowerCase() === 'tc')?.id
+  const chEnTC = chTcId != null ? chLocalidades.filter((l) => l.estado_general === chTcId).length : 0
 
   const cards: ProgramCard[] = [
     {
@@ -105,6 +111,7 @@ export function ProgramasPage() {
           sub: `con expediente: ${chConExpediente}`,
         },
         { label: 'Inversión total', value: fmtMonto(chMonto) },
+        { label: 'Tribunal de Cuentas', value: chEnTC, sub: 'en estado TC' },
       ],
     },
     {
@@ -126,6 +133,7 @@ export function ProgramasPage() {
           sub: 'OK Gobernación',
         },
         { label: 'Monto comprometido', value: fmtMonto(ccMonto) },
+        { label: 'Tribunal de Cuentas', value: ccEnTC, sub: 'en estado TC' },
       ],
     },
   ]
