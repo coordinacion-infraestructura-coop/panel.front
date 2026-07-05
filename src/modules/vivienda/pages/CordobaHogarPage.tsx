@@ -4,7 +4,7 @@ import { cordobaHogarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import type {
   EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
-  EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, GeoLocalidad, PedidoCH,
+  EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, PedidoCH,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -27,6 +27,16 @@ function fmtTs(iso: string) {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 }
+function extractErrorMessage(err: unknown, fallback: string) {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  if (status === 403) return 'No tenés permisos para realizar esta acción.'
+  if (status === 409) return 'Este registro está en uso y no puede eliminarse.'
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail) return JSON.stringify(detail)
+  return fallback
+}
+
 function avancePct(p: LocalidadCH, estados: EstadoCH[]) {
   const maxPos = Math.max(estados.length - 1, 1)
   const pos = (id: number | null) => {
@@ -39,7 +49,7 @@ function avancePct(p: LocalidadCH, estados: EstadoCH[]) {
 function avanceColor(pct: number) {
   if (pct === 0) return '#94a3b8'
   if (pct < 40) return '#f59e0b'
-  if (pct < 80) return '#398ebd'
+  if (pct < 80) return 'var(--color-gov-blue)'
   return '#22c55e'
 }
 
@@ -51,8 +61,8 @@ const CAMPO_LABELS: Record<string, string> = {
 
 // ── Sticky column styles ─────────────────────────────────────────────────────────
 
-const S1_HEAD = { position: 'sticky' as const, left: 0, zIndex: 3, background: '#172c3f', minWidth: 36, width: 36 }
-const S2_HEAD = { position: 'sticky' as const, left: 36, zIndex: 3, background: '#172c3f', minWidth: 160 }
+const S1_HEAD = { position: 'sticky' as const, left: 0, zIndex: 3, background: 'var(--color-gov-navy)', minWidth: 36, width: 36 }
+const S2_HEAD = { position: 'sticky' as const, left: 36, zIndex: 3, background: 'var(--color-gov-navy)', minWidth: 160 }
 const S1_BODY = { position: 'sticky' as const, left: 0, zIndex: 2, background: '#f8fafc', minWidth: 36, width: 36 }
 const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: '#f8fafc', minWidth: 160, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }
 
@@ -81,10 +91,11 @@ const DEPTOS_CH = [
 ]
 
 function EditModal({
-  localidad, estados, onSave, onClose, isSaving,
+  localidad, estados, onSave, onClose, isSaving, saveError,
 }: {
   localidad: LocalidadCH; estados: EstadoCH[]
   onSave: (data: LocalidadCHUpdate) => void; onClose: () => void; isSaving: boolean
+  saveError?: string | null
 }) {
   const uid = useId()
   const [form, setForm] = useState<LocalidadCHUpdate>({
@@ -108,7 +119,7 @@ function EditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[740px] max-w-[97vw] max-h-[92vh] overflow-y-auto shadow-xl">
-        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: 'var(--color-gov-navy)' }}>
           <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Editar — {localidad.localidad}</h3>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
@@ -176,11 +187,16 @@ function EditModal({
             </div>
           </div>
         </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-          <button onClick={() => onSave(form)} disabled={isSaving} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
-            {isSaving ? 'Guardando...' : 'Guardar'}
-          </button>
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
+          {saveError
+            ? <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 flex-1">{saveError}</p>
+            : <span />}
+          <div className="flex gap-3 flex-shrink-0">
+            <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+            <button onClick={() => onSave(form)} disabled={isSaving} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
+              {isSaving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -207,7 +223,7 @@ function HistorialEstadosTab({
       {historial.map((h: EstadoHistorialCH, i: number) => (
         <li key={h.id} className="flex gap-3">
           <div className="flex flex-col items-center" aria-hidden="true">
-            <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? '#01aae3' : '#bae6fd' }} />
+            <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? 'var(--color-gov-cyan)' : '#bae6fd' }} />
             {i < historial.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
           </div>
           <div className="pb-3 flex-1 min-w-0">
@@ -286,7 +302,7 @@ function DetailPanel({
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} aria-hidden="true" />
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
-        <div className="px-5 py-4 flex items-start justify-between border-b border-slate-200" style={{ background: '#172c3f' }}>
+        <div className="px-5 py-4 flex items-start justify-between border-b border-slate-200" style={{ background: 'var(--color-gov-navy)' }}>
           <div>
             <div className="text-[10px] font-semibold tracking-widest mb-0.5 text-gov-cyan uppercase">Córdoba Hogar</div>
             <h3 id={`${uid}-t`} className="text-white font-semibold text-sm">{localidad.localidad}</h3>
@@ -318,7 +334,7 @@ function DetailPanel({
                   {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{saveError}</p>}
                   <div className="flex gap-2 justify-end pt-1">
                     <button onClick={() => { setShowForm(false); setDesc(''); setFecha(today); setSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
+                    <button onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
                       {mutation.isPending ? 'Guardando...' : 'Guardar'}
                     </button>
                   </div>
@@ -332,7 +348,7 @@ function DetailPanel({
                 {pedidos.map((p: PedidoCH, i: number) => (
                   <li key={p.id} className="flex gap-3 group">
                     <div className="flex flex-col items-center" aria-hidden="true">
-                      <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? '#01aae3' : '#bae6fd' }} />
+                      <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ background: i === 0 ? 'var(--color-gov-cyan)' : '#bae6fd' }} />
                       {i < pedidos.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
                     </div>
                     <div className="pb-3 flex-1 min-w-0">
@@ -418,7 +434,7 @@ function GestionarEstadosModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[640px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: 'var(--color-gov-navy)' }}>
           <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Gestionar estados — Córdoba Hogar</h3>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
@@ -484,7 +500,7 @@ function GestionarEstadosModal({
                   </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setEditId(null)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={() => updateMut.mutate({ id: e.id, data: editForm })} disabled={updateMut.isPending} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: '#172c3f' }}>
+                    <button onClick={() => updateMut.mutate({ id: e.id, data: editForm })} disabled={updateMut.isPending} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
                       {updateMut.isPending ? 'Guardando...' : 'Guardar cambios'}
                     </button>
                   </div>
@@ -537,7 +553,7 @@ function GestionarEstadosModal({
                 </div>
                 <div className="flex gap-2 justify-end pt-1">
                   <button onClick={() => setShowNew(false)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                  <button onClick={() => createMut.mutate(newForm)} disabled={createMut.isPending || !newForm.label.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: '#172c3f' }}>
+                  <button onClick={() => createMut.mutate(newForm)} disabled={createMut.isPending || !newForm.label.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
                     {createMut.isPending ? 'Guardando...' : 'Crear estado'}
                   </button>
                 </div>
@@ -582,59 +598,53 @@ function AgregarLocalidadModal({
     },
   })
 
-  const geoByDepto = useMemo(() => {
-    const map = new Map<string, GeoLocalidad[]>()
-    for (const g of geoList) {
-      if (!map.has(g.departamento)) map.set(g.departamento, [])
-      map.get(g.departamento)!.push(g)
-    }
-    return map
-  }, [geoList])
-
   const inp = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[560px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: '#172c3f' }}>
+        <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: 'var(--color-gov-navy)' }}>
           <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Agregar localidad — Córdoba Hogar</h3>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
         <div className="p-5 space-y-4">
-          <div>
-            <label htmlFor={`${uid}-geo`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Localidad (desde catálogo)</label>
-            {geoLoading
-              ? <p className="text-xs text-gray-400">Cargando localidades...</p>
-              : (
-                <select
-                  id={`${uid}-geo`}
-                  className={inp}
-                  value=""
-                  onChange={(e) => {
-                    const g = geoList.find((x) => x.id_geo === e.target.value)
-                    if (g) setForm((p) => ({ ...p, localidad: g.localidad, departamento: g.departamento }))
-                  }}
-                >
-                  <option value="">— Seleccioná una localidad —</option>
-                  {[...geoByDepto.entries()].map(([depto, items]) => (
-                    <optgroup key={depto} label={depto}>
-                      {items.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-              )}
-            <p className="text-xs text-gray-400 mt-1">O completá manualmente los campos debajo.</p>
-          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label htmlFor={`${uid}-loc`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Localidad *</label>
-              <input id={`${uid}-loc`} className={inp} value={form.localidad} onChange={(e) => setForm((p) => ({ ...p, localidad: e.target.value }))} />
+            <div>
+              <label htmlFor={`${uid}-dep`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Departamento *</label>
+              {geoLoading
+                ? <p className="text-xs text-gray-400">Cargando...</p>
+                : (
+                  <select
+                    id={`${uid}-dep`}
+                    className={inp}
+                    value={form.departamento ?? ''}
+                    onChange={(e) => {
+                      setForm((p) => ({ ...p, departamento: e.target.value, localidad: '' }))
+                    }}
+                  >
+                    <option value="">— Seleccioná un departamento —</option>
+                    {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </select>
+                )}
             </div>
             <div>
-              <label htmlFor={`${uid}-dep`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Departamento</label>
-              <select id={`${uid}-dep`} className={inp} value={form.departamento ?? ''} onChange={(e) => setForm((p) => ({ ...p, departamento: e.target.value }))}>
-                <option value="">—</option>
-                {DEPTOS_CH.map((d) => <option key={d}>{d}</option>)}
+              <label htmlFor={`${uid}-loc`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Localidad *</label>
+              <select
+                id={`${uid}-loc`}
+                className={inp}
+                disabled={!form.departamento || geoLoading}
+                value={geoList.find((g) => g.localidad === form.localidad && g.departamento === form.departamento)?.id_geo ?? ''}
+                onChange={(e) => {
+                  const g = geoList.find((x) => x.id_geo === e.target.value)
+                  if (g) setForm((p) => ({ ...p, localidad: g.localidad, departamento: g.departamento }))
+                }}
+              >
+                <option value="">— Seleccioná una localidad —</option>
+                {geoList.filter((g) => g.departamento === form.departamento).map((g) => (
+                  <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -654,7 +664,7 @@ function AgregarLocalidadModal({
               <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => setForm((p) => ({ ...p, monto: e.target.value ? Number(e.target.value) : undefined }))} />
             </div>
             <div>
-              <label htmlFor={`${uid}-ok`} className="block text-xs font-bold text-gray-500 uppercase mb-1">OK Gobernación</label>
+              <label htmlFor={`${uid}-ok`} className="block text-xs font-bold text-gray-500 uppercase mb-1">OK Ministerio</label>
               <select id={`${uid}-ok`} className={inp} value={form.ok_gob ?? 'SI'} onChange={(e) => setForm((p) => ({ ...p, ok_gob: e.target.value }))}>
                 <option>SI</option><option>NO</option><option>En trámite</option>
               </select>
@@ -680,7 +690,7 @@ function AgregarLocalidadModal({
         </div>
         <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-          <button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.localidad.trim()} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: '#172c3f' }}>
+          <button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.localidad.trim()} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
             {createMut.isPending ? 'Guardando...' : 'Agregar localidad'}
           </button>
         </div>
@@ -695,6 +705,7 @@ export function CordobaHogarPage() {
   const queryClient = useQueryClient()
   const { data: user } = usePortalUser()
   const canManage = user?.rol === 'Supervisor' || user?.rol === 'Admin'
+  const canEdit = canManage || user?.rol === 'Operador'
 
   const searchId = useId()
   const deptoId = useId()
@@ -706,10 +717,12 @@ export function CordobaHogarPage() {
   const [okFilter, setOkFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
   const [editTarget, setEditTarget] = useState<LocalidadCH | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<LocalidadCH | null>(null)
   const [showGestionarEstados, setShowGestionarEstados] = useState(false)
   const [showAgregar, setShowAgregar] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cordoba-hogar'],
@@ -722,7 +735,9 @@ export function CordobaHogarPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
       setEditTarget(null)
+      setEditError(null)
     },
+    onError: (err: unknown) => setEditError(extractErrorMessage(err, 'Error al guardar los cambios.')),
   })
 
   const deleteMut = useMutation({
@@ -731,7 +746,9 @@ export function CordobaHogarPage() {
       queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
       setConfirmDeleteId(null)
       setDetailTarget(null)
+      setDeleteError(null)
     },
+    onError: (err: unknown) => setDeleteError(extractErrorMessage(err, 'Error al eliminar el registro.')),
   })
 
   const localidades = data?.localidades ?? []
@@ -746,7 +763,7 @@ export function CordobaHogarPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return localidades.filter((l) => {
-      if (q && !`${l.localidad} ${l.expediente ?? ''} ${l.obs ?? ''} ${l.doc_exp ?? ''}`.toLowerCase().includes(q)) return false
+      if (q && !`${l.localidad} ${l.expediente ?? ''} ${l.doc_exp ?? ''}`.toLowerCase().includes(q)) return false
       if (deptoFilter && l.departamento !== deptoFilter) return false
       if (okFilter && l.ok_gob !== okFilter) return false
       if (egFilter && String(l.estado_general) !== egFilter) return false
@@ -778,11 +795,11 @@ export function CordobaHogarPage() {
       {/* KPI cards */}
       <div className="flex flex-wrap gap-3 mb-5">
         {[
-          { label: 'Localidades', value: String(localidades.length), color: '#172c3f' },
-          { label: 'Viviendas', value: String(totalCasas), color: '#398ebd' },
-          { label: 'Monto Total', value: fmtMontoResumen(montoTotal), color: '#01aae3' },
-          { label: 'OK Gobernación', value: String(conOkGob), color: '#22c55e' },
-          { label: 'Convenio Firmado', value: String(conConvenio), color: '#172c3f' },
+          { label: 'Localidades', value: String(localidades.length), color: 'var(--color-gov-navy)' },
+          { label: 'Viviendas', value: String(totalCasas), color: 'var(--color-gov-blue)' },
+          { label: 'Monto Total', value: fmtMontoResumen(montoTotal), color: 'var(--color-gov-cyan)' },
+          { label: 'OK Ministerio', value: String(conOkGob), color: '#22c55e' },
+          { label: 'Convenio Firmado', value: String(conConvenio), color: 'var(--color-gov-navy)' },
         ].map((c) => (
           <div key={c.label} className="bg-white rounded-md px-4 py-3 min-w-[140px] shadow-sm border border-slate-100" style={{ borderTop: `4px solid ${c.color}` }}>
             <div className="text-2xl font-bold leading-none" style={{ color: c.color }}>{c.value}</div>
@@ -802,12 +819,14 @@ export function CordobaHogarPage() {
 
       {/* Barra de acciones */}
       <div className="flex items-center gap-2 mb-2 justify-end">
-        <button
-          onClick={() => setShowAgregar(true)}
-          className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-cyan text-gov-cyan hover:bg-sky-50 transition-colors"
-        >
-          + Agregar localidad
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowAgregar(true)}
+            className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-cyan text-gov-cyan hover:bg-sky-50 transition-colors"
+          >
+            + Agregar localidad
+          </button>
+        )}
         {canManage && (
           <button
             onClick={() => setShowGestionarEstados(true)}
@@ -832,7 +851,7 @@ export function CordobaHogarPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label htmlFor={okId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">OK Gob.</label>
+          <label htmlFor={okId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">OK Ministro</label>
           <select id={okId} value={okFilter} onChange={(e) => setOkFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
             <option value="SI">SI</option>
@@ -871,14 +890,24 @@ export function CordobaHogarPage() {
           ))}
         </div>
 
+        <p className="sm:hidden text-[11px] text-gray-400 px-4 pt-2" aria-hidden="true">← Desliza para ver todas las columnas →</p>
         <div className="overflow-x-auto" role="region" aria-label="Tabla de localidades">
           <table className="w-full border-collapse" style={{ fontSize: '12px' }}>
             <thead>
-              <tr style={{ background: '#172c3f', color: '#fff' }}>
+              <tr style={{ background: 'var(--color-gov-navy)', color: '#fff' }}>
                 <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold">#</th>
                 <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">Localidad</th>
-                {['Departamento','Fecha anuncio','Expediente N°','Casas','Monto','OK Gob.','Exp. Doc.','Est. Jurídico','Est. Técnico','Est. Presup.','Est. General','Avance','Acciones'].map((h) => (
-                  <th key={h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{h}</th>
+                {([
+                  'Departamento', ['Fecha', 'anuncio'], 'Expediente N°', 'Casas', 'Monto',
+                  ['OK', 'Ministro'], ['Exp.', 'Doc.'],
+                  ['Estado', 'General'],
+                  ['Estado', 'Jurídico'], ['Estado', 'Técnico'],
+                  ['Estado', 'Presup.'],
+                  'Avance', 'Acciones',
+                ] as Array<string | [string, string]>).map((h) => (
+                  <th key={Array.isArray(h) ? h.join('-') : h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>
+                    {Array.isArray(h) ? <>{h[0]}<br />{h[1]}</> : h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -896,7 +925,6 @@ export function CordobaHogarPage() {
                     <td style={S1_BODY} className="px-2.5 py-1.5 text-gray-400 text-center">{l.orden}</td>
                     <td style={S2_BODY} className="px-2.5 py-1.5 font-bold">
                       {l.localidad}
-                      {l.obs ? <div className="text-xs text-gray-400 font-normal whitespace-pre-line">{l.obs}</div> : null}
                     </td>
                     <td className="px-2.5 py-1.5">
                       {l.departamento && (
@@ -913,12 +941,12 @@ export function CordobaHogarPage() {
                         ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>📄 {l.doc_exp}</span>
                         : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.ejuridico} estados={estados} /></td>
-                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.etecnico} estados={estados} /></td>
-                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.efinanciero} estados={estados} /></td>
                     <td className="px-2.5 py-1.5">
                       <EstadoBadge id={l.estado_general} estados={estados} />
                     </td>
+                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.ejuridico} estados={estados} /></td>
+                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.etecnico} estados={estados} /></td>
+                    <td className="px-2.5 py-1.5"><EstadoBadge id={l.efinanciero} estados={estados} /></td>
                     <td className="px-2.5 py-1.5 min-w-[90px]">
                       <div className="flex items-center gap-1.5">
                         <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-slate-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Avance ${pct}%`}>
@@ -931,18 +959,25 @@ export function CordobaHogarPage() {
                       <button onClick={() => setDetailTarget(l)} className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors" aria-label={`Ver historial de ${l.localidad}`} title="Ver historial / comunicaciones">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                       </button>
-                      <button onClick={() => setEditTarget(l)} className="p-1 rounded text-gray-500 hover:text-gov-navy hover:bg-sky-50 transition-colors ml-0.5" aria-label={`Editar ${l.localidad}`} title="Editar">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                      </button>
+                      {canEdit && (
+                        <button onClick={() => { setEditTarget(l); setEditError(null) }} className="p-1 rounded text-gray-500 hover:text-gov-navy hover:bg-sky-50 transition-colors ml-0.5" aria-label={`Editar ${l.localidad}`} title="Editar">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                      )}
                       {canManage && (
                         <>
                           {confirmDeleteId === l.id ? (
-                            <span className="inline-flex items-center gap-1 ml-0.5">
-                              <button onClick={() => deleteMut.mutate(l.id)} disabled={deleteMut.isPending} className="px-1.5 py-0.5 text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMut.isPending ? '...' : 'Sí'}</button>
-                              <button onClick={() => setConfirmDeleteId(null)} className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">No</button>
+                            <span className="inline-flex flex-col items-end gap-1 ml-0.5">
+                              <span className="inline-flex items-center gap-1">
+                                <button onClick={() => deleteMut.mutate(l.id)} disabled={deleteMut.isPending} className="px-1.5 py-0.5 text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMut.isPending ? '...' : 'Sí'}</button>
+                                <button onClick={() => { setConfirmDeleteId(null); setDeleteError(null) }} className="px-1.5 py-0.5 text-[10px] border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">No</button>
+                              </span>
+                              {deleteError && confirmDeleteId === l.id && (
+                                <span role="alert" className="text-[10px] text-red-600 whitespace-nowrap">{deleteError}</span>
+                              )}
                             </span>
                           ) : (
-                            <button onClick={() => setConfirmDeleteId(l.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors ml-0.5" aria-label={`Eliminar ${l.localidad}`} title="Eliminar">
+                            <button onClick={() => { setConfirmDeleteId(l.id); setDeleteError(null) }} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors ml-0.5" aria-label={`Eliminar ${l.localidad}`} title="Eliminar">
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                           )}
@@ -962,7 +997,8 @@ export function CordobaHogarPage() {
           localidad={editTarget}
           estados={estados}
           isSaving={updateMut.isPending}
-          onClose={() => setEditTarget(null)}
+          saveError={editError}
+          onClose={() => { setEditTarget(null); setEditError(null) }}
           onSave={(upd) => updateMut.mutate({ id: editTarget.id, upd })}
         />
       )}

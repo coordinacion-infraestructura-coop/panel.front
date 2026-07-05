@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { expedientesApi } from '../api/vivienda.api'
 import type { EstadoExpediente } from '../types/vivienda.types'
 
@@ -31,20 +30,14 @@ export function ExpedientesListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-800">Expedientes</h2>
-        <Link
-          to="/vivienda/expedientes/nuevo"
-          className="bg-blue-700 text-white px-4 py-2 rounded text-sm hover:bg-blue-600"
-        >
-          + Nuevo expediente
-        </Link>
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gov-navy">Expedientes</h2>
       </div>
 
       <div className="mb-4 flex gap-2 flex-wrap">
         <button
           onClick={() => setEstado('')}
-          className={`px-3 py-1 rounded-full text-xs border ${!estado ? 'bg-blue-700 text-white border-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+          className={`px-3 py-1 rounded-full text-xs border transition-colors ${!estado ? 'bg-gov-navy text-white border-gov-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
         >
           Todos
         </button>
@@ -52,7 +45,7 @@ export function ExpedientesListPage() {
           <button
             key={e}
             onClick={() => setEstado(e)}
-            className={`px-3 py-1 rounded-full text-xs border ${estado === e ? 'bg-blue-700 text-white border-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+            className={`px-3 py-1 rounded-full text-xs border transition-colors ${estado === e ? 'bg-gov-navy text-white border-gov-navy' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
           >
             {e.replace('_', ' ')}
           </button>
@@ -62,27 +55,27 @@ export function ExpedientesListPage() {
       {isLoading ? (
         <div className="text-center py-12 text-gray-500">Cargando...</div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+          <table className="min-w-full divide-y divide-slate-100 text-sm">
+            <thead className="bg-gov-navy text-white">
               <tr>
-                {['Número', 'Beneficiario', 'Programa', 'Estado', 'Fecha ingreso', ''].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                {['Número', 'Beneficiario', 'Programa', 'Estado', 'Fecha ingreso'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {data?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
                     No hay expedientes{estado ? ` en estado ${estado}` : ''}
                   </td>
                 </tr>
               )}
               {data?.map((exp) => (
-                <tr key={exp.id} className="hover:bg-gray-50">
+                <tr key={exp.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-mono text-gray-700">{exp.numero}</td>
                   <td className="px-4 py-3 text-gray-900">
                     {exp.beneficiario
@@ -99,14 +92,6 @@ export function ExpedientesListPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(exp.fecha_ingreso).toLocaleDateString('es-AR')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      to={`/vivienda/expedientes/${exp.id}`}
-                      className="text-blue-600 hover:text-blue-800 text-xs"
-                    >
-                      Ver →
-                    </Link>
                   </td>
                 </tr>
               ))}

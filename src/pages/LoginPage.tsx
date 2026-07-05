@@ -7,7 +7,7 @@ export function LoginPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!loading && user) navigate('/vivienda/programas', { replace: true })
+    if (!loading && user) navigate('/', { replace: true })
   }, [user, loading, navigate])
 
   return (
@@ -15,6 +15,7 @@ export function LoginPage() {
       <div className="fixed top-0 left-0 right-0 h-1 bg-gov-cyan" />
 
       <div className="mb-8 text-center">
+        <img src="/heraldico.png" alt="Escudo de la Provincia de Córdoba" className="h-16 w-auto mx-auto mb-4" />
         <p className="text-gov-cyan text-xs font-medium uppercase tracking-widest mb-3">
           Provincia de Córdoba
         </p>

@@ -36,7 +36,7 @@ const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputEl
     <input
       ref={ref}
       {...props}
-      className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
     />
   )
 )
@@ -63,9 +63,9 @@ export function BeneficiarioFormPage() {
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-xl font-semibold text-gray-800 mb-6">Nuevo Beneficiario</h2>
+      <h2 className="text-xl font-semibold text-gov-navy mb-6">Nuevo Beneficiario</h2>
 
-      <form onSubmit={handleSubmit((data) => mutation.mutate(data))} noValidate className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+      <form onSubmit={handleSubmit((data) => mutation.mutate(data))} noValidate className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="DNI *" error={errors.dni?.message}>
             <Input {...register('dni')} placeholder="12345678" />
@@ -119,14 +119,14 @@ export function BeneficiarioFormPage() {
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="bg-blue-700 text-white px-5 py-2 rounded text-sm hover:bg-blue-600 disabled:opacity-50"
+            className="bg-gov-navy text-white px-5 py-2 rounded text-sm hover:bg-gov-navy/90 transition-colors disabled:opacity-50"
           >
             {mutation.isPending ? 'Guardando...' : 'Guardar beneficiario'}
           </button>
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="px-5 py-2 rounded text-sm border border-gray-300 hover:bg-gray-50"
+            className="px-5 py-2 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors"
           >
             Cancelar
           </button>

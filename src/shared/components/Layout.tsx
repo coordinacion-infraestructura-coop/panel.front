@@ -51,14 +51,17 @@ export function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link
             to="/"
-            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan focus-visible:outline-offset-2 rounded"
+            className="flex items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan focus-visible:outline-offset-2 rounded"
           >
-            <p className="text-[10px] font-medium text-gov-cyan uppercase tracking-widest mb-0.5">
-              Provincia de Córdoba
-            </p>
-            <h1 className="text-base font-semibold leading-tight">
-              Ministerio de Cooperativas y Mutuales
-            </h1>
+            <img src="/heraldico.png" alt="" aria-hidden="true" className="h-10 w-auto flex-shrink-0" />
+            <div>
+              <p className="text-[10px] font-medium text-gov-cyan uppercase tracking-widest mb-0.5">
+                Provincia de Córdoba
+              </p>
+              <h1 className="text-base font-semibold leading-tight">
+                Ministerio de Cooperativas y Mutuales
+              </h1>
+            </div>
           </Link>
           <div className="flex items-center gap-3">
             {portalUser ? (
@@ -85,7 +88,7 @@ export function Layout() {
         </div>
 
         <nav className="bg-[#1e3a52] border-t border-white/10" aria-label="Navegación principal">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex overflow-x-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex overflow-x-auto [mask-image:linear-gradient(to_right,transparent,black_12px,black_calc(100%-12px),transparent)] sm:[mask-image:none]">
             {/* Inicio siempre visible */}
             <Link
               to="/"
