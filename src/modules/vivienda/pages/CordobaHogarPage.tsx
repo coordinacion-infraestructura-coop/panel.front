@@ -100,7 +100,6 @@ function EditModal({
   const uid = useId()
   const [form, setForm] = useState<LocalidadCHUpdate>({
     localidad: localidad.localidad,
-    departamento: localidad.departamento ?? '',
     fecha_anuncio: localidad.fecha_anuncio ?? '',
     expediente: localidad.expediente ?? '',
     monto: localidad.monto ?? undefined,
@@ -110,6 +109,7 @@ function EditModal({
     ejuridico: localidad.ejuridico,
     etecnico: localidad.etecnico,
     efinanciero: localidad.efinanciero,
+    estado_general: localidad.estado_general,
     obs: localidad.obs ?? '',
   })
   const set = (k: keyof LocalidadCHUpdate, v: string | number | null | undefined) =>
@@ -128,13 +128,6 @@ function EditModal({
             <div className="col-span-2">
               <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
               <input id={`${uid}-loc`} className={inp} value={form.localidad ?? ''} onChange={(e) => set('localidad', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
-              <select id={`${uid}-dep`} className={inp} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value)}>
-                <option value="">—</option>
-                {DEPTOS_CH.map((d) => <option key={d}>{d}</option>)}
-              </select>
             </div>
             <div>
               <label htmlFor={`${uid}-fecha`} className={lbl}>Fecha de anuncio</label>
@@ -159,7 +152,7 @@ function EditModal({
               </select>
             </div>
             <div className="col-span-2">
-              <label htmlFor={`${uid}-doc`} className={lbl}>Exp. Documentación</label>
+              <label htmlFor={`${uid}-doc`} className={lbl}>Última observación</label>
               <input id={`${uid}-doc`} className={inp} value={form.doc_exp ?? ''} onChange={(e) => set('doc_exp', e.target.value)} />
             </div>
             <div className="col-span-2">
@@ -184,6 +177,19 @@ function EditModal({
                   </select>
                 </div>
               ))}
+            </div>
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3">
+              <label htmlFor={`${uid}-eg`} className="block text-xs font-bold uppercase mb-2 text-amber-800">Estado General</label>
+              <select
+                id={`${uid}-eg`}
+                className="w-full border border-amber-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                value={form.estado_general ?? ''}
+                onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">— Sin estado —</option>
+                {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+              </select>
+              <p className="text-[10px] text-amber-600 mt-1">Sobreescribe el cálculo automático por dimensiones.</p>
             </div>
           </div>
         </div>
@@ -328,13 +334,13 @@ function DetailPanel({
                   <label htmlFor={`${uid}-desc`} className="block text-xs font-bold uppercase text-gray-500">¿Qué se solicitó / comunicó?</label>
                   <textarea id={`${uid}-desc`} rows={3} autoFocus value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Describí el pedido o comunicación realizada..." className="w-full border border-sky-200 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
                   <div className="flex items-center gap-2">
-                    <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">Fecha:</label>
-                    <input id={`${uid}-fecha`} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
+                    <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">Fecha *</label>
+                    <input id={`${uid}-fecha`} type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
                   </div>
                   {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{saveError}</p>}
                   <div className="flex gap-2 justify-end pt-1">
                     <button onClick={() => { setShowForm(false); setDesc(''); setFecha(today); setSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
+                    <button onClick={() => { if (desc.trim() && fecha) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim() || !fecha} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
                       {mutation.isPending ? 'Guardando...' : 'Guardar'}
                     </button>
                   </div>
@@ -899,7 +905,7 @@ export function CordobaHogarPage() {
                 <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">Localidad</th>
                 {([
                   'Departamento', ['Fecha', 'anuncio'], 'Expediente N°', 'Casas', 'Monto',
-                  ['OK', 'Ministro'], ['Exp.', 'Doc.'],
+                  ['OK', 'Ministro'], ['Última', 'obs.'],
                   ['Estado', 'General'],
                   ['Estado', 'Jurídico'], ['Estado', 'Técnico'],
                   ['Estado', 'Presup.'],

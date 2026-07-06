@@ -164,6 +164,7 @@ export interface MunicipioCCUpdate {
   ejuridico?: number | null
   etecnico?: number | null
   efinanciero?: number | null
+  estado_general?: number | null
   cordon_cuneta_ml?: number | null
   adoquinado_m2?: number | null
   obs?: string
@@ -277,6 +278,7 @@ export interface LocalidadCHUpdate {
   ejuridico?: number | null
   etecnico?: number | null
   efinanciero?: number | null
+  estado_general?: number | null
   obs?: string
 }
 

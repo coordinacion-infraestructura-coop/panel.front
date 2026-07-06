@@ -105,7 +105,6 @@ function EditModal({
   const uid = useId()
   const [form, setForm] = useState<MunicipioCCUpdate>({
     municipio: municipio.municipio,
-    departamento: municipio.departamento ?? '',
     expediente: municipio.expediente ?? '',
     monto: municipio.monto ?? undefined,
     ok_gob: municipio.ok_gob,
@@ -113,6 +112,7 @@ function EditModal({
     ejuridico: municipio.ejuridico,
     etecnico: municipio.etecnico,
     efinanciero: municipio.efinanciero,
+    estado_general: municipio.estado_general,
     cordon_cuneta_ml: municipio.cordon_cuneta_ml ?? undefined,
     adoquinado_m2: municipio.adoquinado_m2 ?? undefined,
     obs: municipio.obs ?? '',
@@ -133,13 +133,6 @@ function EditModal({
             <div className="col-span-2">
               <label htmlFor={`${uid}-municipio`} className={lbl}>Municipio *</label>
               <input id={`${uid}-municipio`} className={inp} value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
-            </div>
-            <div>
-              <label htmlFor={`${uid}-depto`} className={lbl}>Departamento</label>
-              <select id={`${uid}-depto`} className={inp} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value)}>
-                <option value="">—</option>
-                {DEPTOS_CC.map((d) => <option key={d}>{d}</option>)}
-              </select>
             </div>
             <div>
               <label htmlFor={`${uid}-exp`} className={lbl}>Expediente N°</label>
@@ -164,7 +157,7 @@ function EditModal({
               <input id={`${uid}-m2`} type="number" className={inp} value={form.adoquinado_m2 ?? ''} onChange={(e) => set('adoquinado_m2', e.target.value ? Number(e.target.value) : null)} />
             </div>
             <div className="col-span-2">
-              <label htmlFor={`${uid}-doc`} className={lbl}>Exp. Documentación</label>
+              <label htmlFor={`${uid}-doc`} className={lbl}>Última observación</label>
               <input id={`${uid}-doc`} className={inp} value={form.doc_exp ?? ''} onChange={(e) => set('doc_exp', e.target.value)} />
             </div>
             <div className="col-span-2">
@@ -197,6 +190,19 @@ function EditModal({
                   </select>
                 </div>
               ))}
+            </div>
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-md p-3">
+              <label htmlFor={`${uid}-eg`} className="block text-xs font-bold uppercase mb-2 text-amber-800">Estado General</label>
+              <select
+                id={`${uid}-eg`}
+                className="w-full border border-amber-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                value={form.estado_general ?? ''}
+                onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">— Sin estado —</option>
+                {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+              </select>
+              <p className="text-[10px] text-amber-600 mt-1">Sobreescribe el cálculo automático por dimensiones.</p>
             </div>
           </div>
         </div>
@@ -344,13 +350,13 @@ function DetailPanel({
                   <label htmlFor={`${uid}-desc`} className="block text-xs font-bold uppercase text-gray-500">¿Qué se solicitó / comunicó?</label>
                   <textarea id={`${uid}-desc`} rows={3} autoFocus value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Describí el pedido o comunicación realizada..." className="w-full border border-sky-200 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
                   <div className="flex items-center gap-2">
-                    <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">Fecha:</label>
-                    <input id={`${uid}-fecha`} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
+                    <label htmlFor={`${uid}-fecha`} className="text-xs font-bold uppercase text-gray-500 flex-shrink-0">Fecha *</label>
+                    <input id={`${uid}-fecha`} type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} className="border border-sky-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan" />
                   </div>
                   {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{saveError}</p>}
                   <div className="flex gap-2 justify-end pt-1">
                     <button onClick={() => { setShowForm(false); setDesc(''); setFecha(today); setSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={() => { if (desc.trim()) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
+                    <button onClick={() => { if (desc.trim() && fecha) mutation.mutate({ descripcion: desc.trim(), fecha_pedido: fecha }) }} disabled={mutation.isPending || !desc.trim() || !fecha} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
                       {mutation.isPending ? 'Guardando...' : 'Guardar'}
                     </button>
                   </div>
@@ -913,7 +919,7 @@ export function CordonCunetaPage() {
                 {([
                   'Departamento', 'Expediente N°', 'Monto',
                   ['CC', '(ml)'], ['Adoq.', '(m²)'],
-                  ['OK', 'Gobernador'], ['Exp.', 'Doc.'],
+                  ['OK', 'Gobernador'], ['Última', 'obs.'],
                   ['Estado', 'General'],
                   ['Estado', 'Jurídico'], ['Estado', 'Técnico'],
                   ['Estado', 'Presup.'],
