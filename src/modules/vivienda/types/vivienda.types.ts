@@ -250,6 +250,7 @@ export interface CordobaHogarPanel {
   localidades: LocalidadCH[]
   estados: EstadoCH[]
   presupuesto: number
+  monto_por_casa: number
 }
 
 export interface PedidoCH {
@@ -280,6 +281,7 @@ export interface LocalidadCHUpdate {
   efinanciero?: number | null
   estado_general?: number | null
   obs?: string
+  fecha_cambio?: string | null
 }
 
 export interface EstadoHistorialCH {

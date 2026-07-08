@@ -154,4 +154,7 @@ export const cordobaHogarApi = {
 
   getGeo: () =>
     apiClient.get<GeoLocalidad[]>(`${BASE}/cordoba-hogar/geo`).then((r) => r.data),
+
+  updateMontoPorCasa: (monto_por_casa: number) =>
+    apiClient.patch(`${BASE}/cordoba-hogar-config/monto-por-casa`, { monto_por_casa }).then((r) => r.data),
 }

@@ -2,6 +2,7 @@ import { useState, useMemo, useId } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
   EstadoCC, MunicipioCC, MunicipioCCUpdate, MunicipioCCCreate,
   EstadoCCCreate, EstadoCCUpdate, EstadoHistorialCC, PedidoCC,
@@ -90,11 +91,6 @@ function OkBadge({ v }: { v: string }) {
 
 // ── Modal de edición ─────────────────────────────────────────────────────────────
 
-const DEPTOS_CC = [
-  'Calamuchita','Cruz del Eje','General Roca','Juarez Cleman','Marcos Juárez',
-  'Pdte R. Sáenz Peña','Rio Segundo','San Javier','San Justo','Santa María','Tercero Arriba',
-]
-
 function EditModal({
   municipio, estados, onSave, onClose, isSaving, saveError,
 }: {
@@ -105,6 +101,7 @@ function EditModal({
   const uid = useId()
   const [form, setForm] = useState<MunicipioCCUpdate>({
     municipio: municipio.municipio,
+    departamento: municipio.departamento ?? undefined,
     expediente: municipio.expediente ?? '',
     monto: municipio.monto ?? undefined,
     ok_gob: municipio.ok_gob,
@@ -116,6 +113,11 @@ function EditModal({
     cordon_cuneta_ml: municipio.cordon_cuneta_ml ?? undefined,
     adoquinado_m2: municipio.adoquinado_m2 ?? undefined,
     obs: municipio.obs ?? '',
+  })
+  const [deptoCascade, setDeptoCascade] = useState(municipio.departamento ?? '')
+  const { data: geoList = [], isLoading: geoLoading } = useQuery({
+    queryKey: ['cc-geo'],
+    queryFn: cordonCunetaApi.getGeo,
   })
   const set = (k: keyof MunicipioCCUpdate, v: string | number | null | undefined) =>
     setForm((p) => ({ ...p, [k]: v }))
@@ -130,9 +132,40 @@ function EditModal({
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+            <div>
+              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
+              {geoLoading
+                ? <p className="text-xs text-gray-400">Cargando...</p>
+                : (
+                  <select id={`${uid}-dep`} className={inp} value={deptoCascade}
+                    onChange={(e) => {
+                      setDeptoCascade(e.target.value)
+                      setForm((p) => ({ ...p, departamento: e.target.value || undefined, municipio: '' }))
+                    }}>
+                    <option value="">— Todos los departamentos —</option>
+                    {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </select>
+                )}
+            </div>
+            <div>
               <label htmlFor={`${uid}-municipio`} className={lbl}>Municipio *</label>
-              <input id={`${uid}-municipio`} className={inp} value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
+              <select
+                id={`${uid}-municipio`}
+                className={inp}
+                disabled={!deptoCascade || geoLoading}
+                value={geoList.find((g) => g.localidad === form.municipio && g.departamento === deptoCascade)?.id_geo ?? ''}
+                onChange={(e) => {
+                  const g = geoList.find((x) => x.id_geo === e.target.value)
+                  if (g) setForm((p) => ({ ...p, municipio: g.localidad, departamento: g.departamento }))
+                }}
+              >
+                <option value="">— Seleccioná un municipio —</option>
+                {geoList.filter((g) => g.departamento === deptoCascade).map((g) => (
+                  <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor={`${uid}-exp`} className={lbl}>Expediente N°</label>
@@ -719,6 +752,29 @@ function AgregarMunicipioModal({
   )
 }
 
+// ── Columnas de tabla ────────────────────────────────────────────────────────────
+
+const CC_COLS: Array<{ label: string | [string, string]; sort: string | null }> = [
+  { label: 'Departamento', sort: 'departamento' },
+  { label: 'Expediente N°', sort: 'expediente' },
+  { label: 'Monto', sort: 'monto' },
+  { label: ['CC', '(ml)'], sort: 'cordon_cuneta_ml' },
+  { label: ['Adoq.', '(m²)'], sort: 'adoquinado_m2' },
+  { label: ['OK', 'Gobernador'], sort: 'ok_gob' },
+  { label: ['Última', 'obs.'], sort: 'doc_exp' },
+  { label: ['Últ.', 'modif.'], sort: 'updated_at' },
+  { label: ['Estado', 'General'], sort: 'estado_general' },
+  { label: ['Estado', 'Jurídico'], sort: 'ejuridico' },
+  { label: ['Estado', 'Técnico'], sort: 'etecnico' },
+  { label: ['Estado', 'Presup.'], sort: 'efinanciero' },
+  { label: 'Avance', sort: 'avance' },
+  { label: 'Acciones', sort: null },
+]
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────────
 
 export function CordonCunetaPage() {
@@ -775,9 +831,14 @@ export function CordonCunetaPage() {
   const estados = data?.estados ?? []
   const presupuesto = data?.presupuesto ?? 0
 
+  const { data: geoForFilter = [] } = useQuery({
+    queryKey: ['cc-geo'],
+    queryFn: cordonCunetaApi.getGeo,
+  })
+
   const deptos = useMemo(
-    () => [...new Set(municipios.map((m) => m.departamento).filter(Boolean))].sort() as string[],
-    [municipios]
+    () => [...new Set(geoForFilter.map((g) => g.departamento))].sort(),
+    [geoForFilter]
   )
 
   const filtered = useMemo(() => {
@@ -798,6 +859,40 @@ export function CordonCunetaPage() {
   const ccMlTotal = municipios.reduce((s, m) => s + (m.cordon_cuneta_ml ?? 0), 0)
   const adM2Total = municipios.reduce((s, m) => s + (m.adoquinado_m2 ?? 0), 0)
   const hasFilters = !!(search || deptoFilter || okFilter || egFilter)
+
+  const [sortCol, setSortCol] = useState('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: string) => {
+    setSortDir((prev) => (sortCol === key && prev === 'asc' ? 'desc' : 'asc'))
+    setSortCol(key)
+  }
+
+  const sorted = useMemo(() => {
+    if (!sortCol) return filtered
+    const dir = sortDir === 'asc' ? 1 : -1
+    const ESTADO_KEYS = ['ejuridico', 'etecnico', 'efinanciero', 'estado_general']
+    return [...filtered].sort((a, b) => {
+      let va: string | number | null
+      let vb: string | number | null
+      if (sortCol === 'avance') {
+        va = avancePct(a, estados); vb = avancePct(b, estados)
+      } else if (ESTADO_KEYS.includes(sortCol)) {
+        const keyA = (a as unknown as Record<string, unknown>)[sortCol] as number | null
+        const keyB = (b as unknown as Record<string, unknown>)[sortCol] as number | null
+        va = estados.find((e) => e.id === keyA)?.orden ?? null
+        vb = estados.find((e) => e.id === keyB)?.orden ?? null
+      } else {
+        va = ((a as unknown as Record<string, unknown>)[sortCol] as string | number | null) ?? null
+        vb = ((b as unknown as Record<string, unknown>)[sortCol] as string | number | null) ?? null
+      }
+      if (va === null && vb === null) return 0
+      if (va === null) return dir
+      if (vb === null) return -dir
+      if (typeof va === 'string') return dir * va.localeCompare(vb as string, 'es')
+      return dir * (va - (vb as number))
+    })
+  }, [filtered, sortCol, sortDir, estados])
 
   if (isLoading) return <p role="status" aria-live="polite" className="text-center py-12 text-gray-500">Cargando...</p>
   if (error) return <p role="alert" className="text-red-600 py-4">Error al cargar el panel.</p>
@@ -838,6 +933,33 @@ export function CordonCunetaPage() {
 
       {/* Barra de acciones */}
       <div className="flex items-center gap-2 mb-2 justify-end">
+        <button
+          onClick={() => {
+            const rows = sorted.map((m) => ({
+              '#': m.orden,
+              'Municipio': m.municipio,
+              'Departamento': m.departamento ?? '',
+              'Expediente N°': m.expediente ?? '',
+              'Monto ($)': m.monto ?? '',
+              'CC (ml)': m.cordon_cuneta_ml ?? '',
+              'Adoq. (m²)': m.adoquinado_m2 ?? '',
+              'OK Gobernador': m.ok_gob,
+              'Última obs.': m.doc_exp ?? '',
+              'Últ. modif.': fmtDate(m.updated_at),
+              'Estado General': estados.find((e) => e.id === m.estado_general)?.label ?? '',
+              'Est. Jurídico': estados.find((e) => e.id === m.ejuridico)?.label ?? '',
+              'Est. Técnico': estados.find((e) => e.id === m.etecnico)?.label ?? '',
+              'Est. Presup.': estados.find((e) => e.id === m.efinanciero)?.label ?? '',
+              'Avance (%)': avancePct(m, estados),
+              'Observaciones': m.obs ?? '',
+            }))
+            exportToXlsx(rows, 'Cordón Cuneta', `cordon_cuneta_${new Date().toISOString().split('T')[0]}.xlsx`)
+          }}
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 transition-colors"
+          title={`Exportar ${sorted.length} filas a Excel`}
+        >
+          ↓ Exportar ({sorted.length})
+        </button>
         {canEdit && (
           <button
             onClick={() => setShowAgregar(true)}
@@ -914,19 +1036,24 @@ export function CordonCunetaPage() {
           <table className="w-full border-collapse" style={{ fontSize: '12px' }}>
             <thead>
               <tr style={{ background: 'var(--color-gov-navy)', color: '#fff' }}>
-                <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold">#</th>
-                <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">Localidad</th>
-                {([
-                  'Departamento', 'Expediente N°', 'Monto',
-                  ['CC', '(ml)'], ['Adoq.', '(m²)'],
-                  ['OK', 'Gobernador'], ['Última', 'obs.'],
-                  ['Estado', 'General'],
-                  ['Estado', 'Jurídico'], ['Estado', 'Técnico'],
-                  ['Estado', 'Presup.'],
-                  'Avance', 'Acciones',
-                ] as Array<string | [string, string]>).map((h) => (
-                  <th key={Array.isArray(h) ? h.join('-') : h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>
-                    {Array.isArray(h) ? <>{h[0]}<br />{h[1]}</> : h}
+                <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold cursor-pointer select-none hover:bg-white/10" onClick={() => handleSort('orden')}>
+                  <span className="flex items-center gap-0.5">#<span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === 'orden' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span></span>
+                </th>
+                <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-white/10" onClick={() => handleSort('municipio')}>
+                  <span className="flex items-center gap-0.5">Municipio<span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === 'municipio' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span></span>
+                </th>
+                {CC_COLS.map(({ label, sort }) => (
+                  <th
+                    key={Array.isArray(label) ? label.join('-') : label}
+                    scope="col"
+                    className={`px-2.5 py-2 text-left font-semibold whitespace-nowrap select-none${sort ? ' cursor-pointer hover:bg-white/10' : ''}`}
+                    style={{ fontSize: '11px' }}
+                    onClick={() => sort && handleSort(sort)}
+                  >
+                    <span className="flex items-center gap-0.5">
+                      <span>{Array.isArray(label) ? <>{label[0]}<br />{label[1]}</> : label}</span>
+                      {sort && <span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === sort ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -934,17 +1061,24 @@ export function CordonCunetaPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={15} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
+                  <td colSpan={16} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
-              {filtered.map((m) => {
+              {sorted.map((m) => {
                 const pct = avancePct(m, estados)
                 const col = avanceColor(pct)
                 return (
                   <tr key={m.id} className="border-b border-slate-100 hover:bg-sky-50/30 transition-colors">
                     <td style={S1_BODY} className="px-2.5 py-1.5 text-gray-400 text-center" aria-label={`N° ${m.orden}`}>{m.orden}</td>
-                    <td style={S2_BODY} className="px-2.5 py-1.5 font-bold">
-                      {m.municipio}
+                    <td style={S2_BODY} className="p-0 font-bold">
+                      <button
+                        onClick={() => setDetailTarget(m)}
+                        className="w-full px-2.5 py-1.5 text-left font-bold hover:text-gov-cyan transition-colors group"
+                        title="Ver historial"
+                      >
+                        {m.municipio}
+                        <span className="block text-[9px] font-normal text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity leading-none">Ver historial</span>
+                      </button>
                     </td>
                     <td className="px-2.5 py-1.5">
                       {m.departamento && (
@@ -960,6 +1094,9 @@ export function CordonCunetaPage() {
                       {m.doc_exp
                         ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>📄 {m.doc_exp}</span>
                         : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-gray-400 whitespace-nowrap" style={{ fontSize: '10px' }}>
+                      {fmtDate(m.updated_at)}
                     </td>
                     <td className="px-2.5 py-1.5">
                       <EstadoBadge id={m.estado_general} estados={estados} />

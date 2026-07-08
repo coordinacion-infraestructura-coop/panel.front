@@ -2,6 +2,7 @@ import { useState, useMemo, useId } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordobaHogarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
   EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
   EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, PedidoCH,
@@ -33,9 +34,45 @@ function extractErrorMessage(err: unknown, fallback: string) {
   if (status === 409) return 'Este registro está en uso y no puede eliminarse.'
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
   if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const FIELD_LABELS: Record<string, string> = {
+      fecha_anuncio: 'Fecha de anuncio',
+      fecha_pedido: 'Fecha',
+    }
+    return detail
+      .map((e: { loc?: string[]; msg?: string }) => {
+        const field = e.loc?.slice(-1)[0] ?? ''
+        const label = FIELD_LABELS[field] ?? field
+        return label ? `El campo "${label}" es requerido o contiene un valor inválido.` : (e.msg ?? 'Error de validación.')
+      })
+      .join(' ')
+  }
   if (detail) return JSON.stringify(detail)
   return fallback
 }
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+// ── Columnas de tabla ────────────────────────────────────────────────────────────
+
+const CH_COLS: Array<{ label: string | [string, string]; sort: string | null }> = [
+  { label: 'Departamento', sort: 'departamento' },
+  { label: ['Fecha', 'anuncio'], sort: 'fecha_anuncio' },
+  { label: 'Expediente N°', sort: 'expediente' },
+  { label: 'Casas', sort: 'cantidad_casas' },
+  { label: 'Monto', sort: 'monto' },
+  { label: ['OK', 'Ministro'], sort: 'ok_gob' },
+  { label: ['Última', 'obs.'], sort: 'doc_exp' },
+  { label: ['Últ.', 'modif.'], sort: 'updated_at' },
+  { label: ['Estado', 'General'], sort: 'estado_general' },
+  { label: ['Estado', 'Jurídico'], sort: 'ejuridico' },
+  { label: ['Estado', 'Técnico'], sort: 'etecnico' },
+  { label: ['Estado', 'Presup.'], sort: 'efinanciero' },
+  { label: 'Avance', sort: 'avance' },
+  { label: 'Acciones', sort: null },
+]
 
 function avancePct(p: LocalidadCH, estados: EstadoCH[]) {
   const maxPos = Math.max(estados.length - 1, 1)
@@ -85,11 +122,6 @@ function OkBadge({ v }: { v: string }) {
 
 // ── Modal de edición ─────────────────────────────────────────────────────────────
 
-const DEPTOS_CH = [
-  'Calamuchita','Cruz del Eje','Juárez Celman','Marcos Juárez','Minas',
-  'Pocho','Río Cuarto','Río Segundo','San Justo','Santa María',
-]
-
 function EditModal({
   localidad, estados, onSave, onClose, isSaving, saveError,
 }: {
@@ -98,9 +130,11 @@ function EditModal({
   saveError?: string | null
 }) {
   const uid = useId()
+  const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState<LocalidadCHUpdate>({
     localidad: localidad.localidad,
-    fecha_anuncio: localidad.fecha_anuncio ?? '',
+    departamento: localidad.departamento ?? undefined,
+    fecha_anuncio: localidad.fecha_anuncio ?? null,
     expediente: localidad.expediente ?? '',
     monto: localidad.monto ?? undefined,
     cantidad_casas: localidad.cantidad_casas ?? undefined,
@@ -111,6 +145,12 @@ function EditModal({
     efinanciero: localidad.efinanciero,
     estado_general: localidad.estado_general,
     obs: localidad.obs ?? '',
+    fecha_cambio: today,
+  })
+  const [deptoCascade, setDeptoCascade] = useState(localidad.departamento ?? '')
+  const { data: geoList = [], isLoading: geoLoading } = useQuery({
+    queryKey: ['ch-geo'],
+    queryFn: cordobaHogarApi.getGeo,
   })
   const set = (k: keyof LocalidadCHUpdate, v: string | number | null | undefined) =>
     setForm((p) => ({ ...p, [k]: v }))
@@ -125,9 +165,40 @@ function EditModal({
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+            <div>
+              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
+              {geoLoading
+                ? <p className="text-xs text-gray-400">Cargando...</p>
+                : (
+                  <select id={`${uid}-dep`} className={inp} value={deptoCascade}
+                    onChange={(e) => {
+                      setDeptoCascade(e.target.value)
+                      setForm((p) => ({ ...p, departamento: e.target.value || undefined, localidad: '' }))
+                    }}>
+                    <option value="">— Todos los departamentos —</option>
+                    {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </select>
+                )}
+            </div>
+            <div>
               <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
-              <input id={`${uid}-loc`} className={inp} value={form.localidad ?? ''} onChange={(e) => set('localidad', e.target.value)} />
+              <select
+                id={`${uid}-loc`}
+                className={inp}
+                disabled={!deptoCascade || geoLoading}
+                value={geoList.find((g) => g.localidad === form.localidad && g.departamento === deptoCascade)?.id_geo ?? ''}
+                onChange={(e) => {
+                  const g = geoList.find((x) => x.id_geo === e.target.value)
+                  if (g) setForm((p) => ({ ...p, localidad: g.localidad, departamento: g.departamento }))
+                }}
+              >
+                <option value="">— Seleccioná una localidad —</option>
+                {geoList.filter((g) => g.departamento === deptoCascade).map((g) => (
+                  <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label htmlFor={`${uid}-fecha`} className={lbl}>Fecha de anuncio</label>
@@ -161,7 +232,20 @@ function EditModal({
             </div>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">Estados por Dimensión</p>
+            <div className="flex items-end gap-4 mb-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-gov-navy">Estados por Dimensión</p>
+              <div className="flex items-center gap-2 ml-auto">
+                <label htmlFor={`${uid}-fcambio`} className="text-xs text-gray-500 whitespace-nowrap">Fecha del cambio:</label>
+                <input
+                  id={`${uid}-fcambio`}
+                  type="date"
+                  className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                  value={form.fecha_cambio ?? today}
+                  onChange={(e) => set('fecha_cambio', e.target.value || today)}
+                  max={today}
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
@@ -393,15 +477,28 @@ function DetailPanel({
   )
 }
 
-// ── Gestionar estados modal ──────────────────────────────────────────────────────
+// ── Gestionar parámetros modal ───────────────────────────────────────────────────
 
-function GestionarEstadosModal({
-  estados, onClose,
+function GestionarParametrosModal({
+  estados, montoPorCasa, onClose,
 }: {
-  estados: EstadoCH[]; onClose: () => void
+  estados: EstadoCH[]; montoPorCasa: number; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'estados' | 'parametros'>('estados')
+  const [montoPorCasaInput, setMontoPorCasaInput] = useState(String(montoPorCasa))
+  const [montoPorCasaError, setMontoPorCasaError] = useState<string | null>(null)
+
+  const montoPorCasaMut = useMutation({
+    mutationFn: (valor: number) => cordobaHogarApi.updateMontoPorCasa(valor),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
+      setMontoPorCasaError(null)
+    },
+    onError: () => setMontoPorCasaError('Error al guardar el monto por casa.'),
+  })
+
   const [editId, setEditId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<EstadoCHUpdate>({})
   const [deleteError, setDeleteError] = useState<Record<number, string>>({})
@@ -441,9 +538,71 @@ function GestionarEstadosModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[640px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
         <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: 'var(--color-gov-navy)' }}>
-          <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Gestionar estados — Córdoba Hogar</h3>
+          <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">⚙ Parámetros — Córdoba Hogar</h3>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 px-4 pt-3 gap-1">
+          {(['estados', 'parametros'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-t border-b-2 transition-colors ${
+                activeTab === t
+                  ? 'border-gov-navy text-gov-navy bg-slate-50'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {t === 'estados' ? 'Estados' : 'Parámetros'}
+            </button>
+          ))}
+        </div>
+        {/* Tab: Parámetros */}
+        {activeTab === 'parametros' && (
+          <div className="p-5 space-y-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1">Monto por casa</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Valor base para calcular el monto de cada localidad: <strong>cantidad de casas × monto por casa</strong>.
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500 font-semibold">$</span>
+                <input
+                  type="number"
+                  className={`flex-1 border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan`}
+                  value={montoPorCasaInput}
+                  onChange={(e) => setMontoPorCasaInput(e.target.value)}
+                  min={0}
+                />
+                <button
+                  onClick={() => {
+                    const v = Number(montoPorCasaInput)
+                    if (!v || v <= 0) { setMontoPorCasaError('Ingresá un valor positivo.'); return }
+                    montoPorCasaMut.mutate(v)
+                  }}
+                  disabled={montoPorCasaMut.isPending}
+                  className="px-4 py-1.5 text-sm text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors"
+                  style={{ background: 'var(--color-gov-navy)' }}
+                >
+                  {montoPorCasaMut.isPending ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+              {montoPorCasaInput && Number(montoPorCasaInput) > 0 && (
+                <p className="text-xs text-gov-cyan mt-1 font-medium">
+                  = ${Number(montoPorCasaInput).toLocaleString('es-AR')} por casa
+                </p>
+              )}
+              {montoPorCasaError && (
+                <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 mt-2">{montoPorCasaError}</p>
+              )}
+              {montoPorCasaMut.isSuccess && (
+                <p className="text-xs text-emerald-600 mt-1">✓ Guardado correctamente.</p>
+              )}
+            </div>
+          </div>
+        )}
+        {/* Tab: Estados */}
+        {activeTab === 'estados' && (
         <div className="p-4 space-y-2">
           {estados.map((e) => (
             <div key={e.id} className="border border-slate-200 rounded-md overflow-hidden">
@@ -567,6 +726,7 @@ function GestionarEstadosModal({
             )}
           </div>
         </div>
+        )}
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end">
           <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cerrar</button>
         </div>
@@ -578,13 +738,14 @@ function GestionarEstadosModal({
 // ── Agregar localidad modal ──────────────────────────────────────────────────────
 
 function AgregarLocalidadModal({
-  estados, onClose,
+  estados, montoPorCasa, onClose,
 }: {
-  estados: EstadoCH[]; onClose: () => void
+  estados: EstadoCH[]; montoPorCasa: number; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<LocalidadCHCreate>({ localidad: '', departamento: '' })
+  const today = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState<LocalidadCHCreate>({ localidad: '', departamento: '', fecha_anuncio: today })
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
@@ -599,8 +760,7 @@ function AgregarLocalidadModal({
       onClose()
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al crear la localidad.'
-      setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setSaveError(extractErrorMessage(err, 'Error al crear la localidad.'))
     },
   })
 
@@ -663,11 +823,36 @@ function AgregarLocalidadModal({
             </div>
             <div>
               <label htmlFor={`${uid}-casas`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Cant. casas</label>
-              <input id={`${uid}-casas`} type="number" className={inp} value={form.cantidad_casas ?? ''} onChange={(e) => setForm((p) => ({ ...p, cantidad_casas: e.target.value ? Number(e.target.value) : undefined }))} />
+              <input
+                id={`${uid}-casas`}
+                type="number"
+                className={inp}
+                value={form.cantidad_casas ?? ''}
+                onChange={(e) => {
+                  const casas = e.target.value ? Number(e.target.value) : undefined
+                  setForm((p) => ({
+                    ...p,
+                    cantidad_casas: casas,
+                    monto: casas ? casas * montoPorCasa : undefined,
+                  }))
+                }}
+              />
             </div>
             <div>
               <label htmlFor={`${uid}-monto`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Monto ($)</label>
-              <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => setForm((p) => ({ ...p, monto: e.target.value ? Number(e.target.value) : undefined }))} />
+              <input
+                id={`${uid}-monto`}
+                type="number"
+                className={`${inp} bg-slate-50`}
+                readOnly
+                value={form.monto ?? ''}
+                title="Se calcula automáticamente a partir de la cantidad de casas"
+              />
+              {form.cantidad_casas && form.monto ? (
+                <p className="text-[11px] text-cyan-600 mt-0.5 font-medium">
+                  = {form.cantidad_casas} casas × ${montoPorCasa.toLocaleString('es-AR')}
+                </p>
+              ) : null}
             </div>
             <div>
               <label htmlFor={`${uid}-ok`} className="block text-xs font-bold text-gray-500 uppercase mb-1">OK Ministerio</label>
@@ -760,10 +945,16 @@ export function CordobaHogarPage() {
   const localidades = data?.localidades ?? []
   const estados = data?.estados ?? []
   const presupuesto = data?.presupuesto ?? 0
+  const montoPorCasa = data?.monto_por_casa ?? 34000000
+
+  const { data: geoForFilter = [] } = useQuery({
+    queryKey: ['ch-geo'],
+    queryFn: cordobaHogarApi.getGeo,
+  })
 
   const deptos = useMemo(
-    () => [...new Set(localidades.map((l) => l.departamento).filter(Boolean))].sort() as string[],
-    [localidades]
+    () => [...new Set(geoForFilter.map((g) => g.departamento))].sort(),
+    [geoForFilter]
   )
 
   const filtered = useMemo(() => {
@@ -786,6 +977,40 @@ export function CordobaHogarPage() {
     return e?.label === 'Convenio Firmado'
   }).length
   const hasFilters = !!(search || deptoFilter || okFilter || egFilter)
+
+  const [sortCol, setSortCol] = useState('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: string) => {
+    setSortDir((prev) => (sortCol === key && prev === 'asc' ? 'desc' : 'asc'))
+    setSortCol(key)
+  }
+
+  const sorted = useMemo(() => {
+    if (!sortCol) return filtered
+    const dir = sortDir === 'asc' ? 1 : -1
+    const ESTADO_KEYS = ['ejuridico', 'etecnico', 'efinanciero', 'estado_general']
+    return [...filtered].sort((a, b) => {
+      let va: string | number | null
+      let vb: string | number | null
+      if (sortCol === 'avance') {
+        va = avancePct(a, estados); vb = avancePct(b, estados)
+      } else if (ESTADO_KEYS.includes(sortCol)) {
+        const keyA = (a as unknown as Record<string, unknown>)[sortCol] as number | null
+        const keyB = (b as unknown as Record<string, unknown>)[sortCol] as number | null
+        va = estados.find((e) => e.id === keyA)?.orden ?? null
+        vb = estados.find((e) => e.id === keyB)?.orden ?? null
+      } else {
+        va = ((a as unknown as Record<string, unknown>)[sortCol] as string | number | null) ?? null
+        vb = ((b as unknown as Record<string, unknown>)[sortCol] as string | number | null) ?? null
+      }
+      if (va === null && vb === null) return 0
+      if (va === null) return dir
+      if (vb === null) return -dir
+      if (typeof va === 'string') return dir * va.localeCompare(vb as string, 'es')
+      return dir * (va - (vb as number))
+    })
+  }, [filtered, sortCol, sortDir, estados])
 
   if (isLoading) return <p role="status" aria-live="polite" className="text-center py-12 text-gray-500">Cargando...</p>
   if (error) return <p role="alert" className="text-red-600 py-4">Error al cargar el panel.</p>
@@ -825,6 +1050,33 @@ export function CordobaHogarPage() {
 
       {/* Barra de acciones */}
       <div className="flex items-center gap-2 mb-2 justify-end">
+        <button
+          onClick={() => {
+            const rows = sorted.map((l) => ({
+              '#': l.orden,
+              'Localidad': l.localidad,
+              'Departamento': l.departamento ?? '',
+              'Fecha anuncio': l.fecha_anuncio ?? '',
+              'Expediente N°': l.expediente ?? '',
+              'Casas': l.cantidad_casas ?? '',
+              'Monto ($)': l.monto ?? '',
+              'OK Ministro': l.ok_gob,
+              'Última obs.': l.doc_exp ?? '',
+              'Últ. modif.': fmtDate(l.updated_at),
+              'Estado General': estados.find((e) => e.id === l.estado_general)?.label ?? '',
+              'Est. Jurídico': estados.find((e) => e.id === l.ejuridico)?.label ?? '',
+              'Est. Técnico': estados.find((e) => e.id === l.etecnico)?.label ?? '',
+              'Est. Presup.': estados.find((e) => e.id === l.efinanciero)?.label ?? '',
+              'Avance (%)': avancePct(l, estados),
+              'Observaciones': l.obs ?? '',
+            }))
+            exportToXlsx(rows, 'Córdoba Hogar', `cordoba_hogar_${new Date().toISOString().split('T')[0]}.xlsx`)
+          }}
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 transition-colors"
+          title={`Exportar ${sorted.length} filas a Excel`}
+        >
+          ↓ Exportar ({sorted.length})
+        </button>
         {canEdit && (
           <button
             onClick={() => setShowAgregar(true)}
@@ -837,8 +1089,9 @@ export function CordobaHogarPage() {
           <button
             onClick={() => setShowGestionarEstados(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-gray-600 hover:bg-slate-50 transition-colors"
+            title="Gestionar parámetros y estados"
           >
-            Gestionar estados
+            ⚙ Parámetros
           </button>
         )}
       </div>
@@ -901,18 +1154,24 @@ export function CordobaHogarPage() {
           <table className="w-full border-collapse" style={{ fontSize: '12px' }}>
             <thead>
               <tr style={{ background: 'var(--color-gov-navy)', color: '#fff' }}>
-                <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold">#</th>
-                <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap">Localidad</th>
-                {([
-                  'Departamento', ['Fecha', 'anuncio'], 'Expediente N°', 'Casas', 'Monto',
-                  ['OK', 'Ministro'], ['Última', 'obs.'],
-                  ['Estado', 'General'],
-                  ['Estado', 'Jurídico'], ['Estado', 'Técnico'],
-                  ['Estado', 'Presup.'],
-                  'Avance', 'Acciones',
-                ] as Array<string | [string, string]>).map((h) => (
-                  <th key={Array.isArray(h) ? h.join('-') : h} scope="col" className="px-2.5 py-2 text-left font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>
-                    {Array.isArray(h) ? <>{h[0]}<br />{h[1]}</> : h}
+                <th scope="col" style={S1_HEAD} className="px-2.5 py-2 text-left font-semibold cursor-pointer select-none hover:bg-white/10" onClick={() => handleSort('orden')}>
+                  <span className="flex items-center gap-0.5">#<span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === 'orden' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span></span>
+                </th>
+                <th scope="col" style={S2_HEAD} className="px-2.5 py-2 text-left font-semibold whitespace-nowrap cursor-pointer select-none hover:bg-white/10" onClick={() => handleSort('localidad')}>
+                  <span className="flex items-center gap-0.5">Localidad<span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === 'localidad' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span></span>
+                </th>
+                {CH_COLS.map(({ label, sort }) => (
+                  <th
+                    key={Array.isArray(label) ? label.join('-') : label}
+                    scope="col"
+                    className={`px-2.5 py-2 text-left font-semibold whitespace-nowrap select-none${sort ? ' cursor-pointer hover:bg-white/10' : ''}`}
+                    style={{ fontSize: '11px' }}
+                    onClick={() => sort && handleSort(sort)}
+                  >
+                    <span className="flex items-center gap-0.5">
+                      <span>{Array.isArray(label) ? <>{label[0]}<br />{label[1]}</> : label}</span>
+                      {sort && <span className="text-sky-300/70 text-[9px] ml-0.5">{sortCol === sort ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -920,17 +1179,24 @@ export function CordobaHogarPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={15} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
+                  <td colSpan={16} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
-              {filtered.map((l) => {
+              {sorted.map((l) => {
                 const pct = avancePct(l, estados)
                 const col = avanceColor(pct)
                 return (
                   <tr key={l.id} className="border-b border-slate-100 hover:bg-sky-50/30 transition-colors">
                     <td style={S1_BODY} className="px-2.5 py-1.5 text-gray-400 text-center">{l.orden}</td>
-                    <td style={S2_BODY} className="px-2.5 py-1.5 font-bold">
-                      {l.localidad}
+                    <td style={S2_BODY} className="p-0 font-bold">
+                      <button
+                        onClick={() => setDetailTarget(l)}
+                        className="w-full px-2.5 py-1.5 text-left font-bold hover:text-gov-cyan transition-colors group"
+                        title="Ver historial"
+                      >
+                        {l.localidad}
+                        <span className="block text-[9px] font-normal text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity leading-none">Ver historial</span>
+                      </button>
                     </td>
                     <td className="px-2.5 py-1.5">
                       {l.departamento && (
@@ -946,6 +1212,9 @@ export function CordobaHogarPage() {
                       {l.doc_exp
                         ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>📄 {l.doc_exp}</span>
                         : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-gray-400 whitespace-nowrap" style={{ fontSize: '10px' }}>
+                      {fmtDate(l.updated_at)}
                     </td>
                     <td className="px-2.5 py-1.5">
                       <EstadoBadge id={l.estado_general} estados={estados} />
@@ -1016,10 +1285,10 @@ export function CordobaHogarPage() {
         />
       )}
       {showGestionarEstados && canManage && (
-        <GestionarEstadosModal estados={estados} onClose={() => setShowGestionarEstados(false)} />
+        <GestionarParametrosModal estados={estados} montoPorCasa={montoPorCasa} onClose={() => setShowGestionarEstados(false)} />
       )}
       {showAgregar && (
-        <AgregarLocalidadModal estados={estados} onClose={() => setShowAgregar(false)} />
+        <AgregarLocalidadModal estados={estados} montoPorCasa={montoPorCasa} onClose={() => setShowAgregar(false)} />
       )}
     </div>
   )
