@@ -39,9 +39,9 @@ function avancePct(p: MunicipioCC, estados: EstadoCC[]) {
 function extractErrorMessage(err: unknown, fallback: string) {
   const status = (err as { response?: { status?: number } })?.response?.status
   if (status === 403) return 'No tenés permisos para realizar esta acción.'
-  if (status === 409) return 'Este registro está en uso y no puede eliminarse.'
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
   if (typeof detail === 'string') return detail
+  if (status === 409) return 'Este registro está en uso y no puede eliminarse.'
   if (detail) return JSON.stringify(detail)
   return fallback
 }
