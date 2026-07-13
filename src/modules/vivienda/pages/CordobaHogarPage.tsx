@@ -738,15 +738,17 @@ function GestionarParametrosModal({
 // ── Agregar localidad modal ──────────────────────────────────────────────────────
 
 function AgregarLocalidadModal({
-  estados, montoPorCasa, onClose,
+  estados, montoPorCasa, onClose, onEditExisting,
 }: {
   estados: EstadoCH[]; montoPorCasa: number; onClose: () => void
+  onEditExisting: (id: string) => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
   const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState<LocalidadCHCreate>({ localidad: '', departamento: '', fecha_anuncio: today })
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [duplicateId, setDuplicateId] = useState<string | null>(null)
 
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['ch-geo'],
@@ -760,6 +762,12 @@ function AgregarLocalidadModal({
       onClose()
     },
     onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: { code?: string; existing_id?: string } } } })
+        ?.response?.data?.detail
+      if (detail?.code === 'LOCALIDAD_DUPLICADA' && detail.existing_id) {
+        setDuplicateId(detail.existing_id)
+        return
+      }
       setSaveError(extractErrorMessage(err, 'Error al crear la localidad.'))
     },
   })
@@ -878,6 +886,28 @@ function AgregarLocalidadModal({
             </div>
           </div>
           {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>}
+          {duplicateId && (
+            <div role="alert" className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded px-3 py-2.5">
+              <p className="text-xs text-amber-800 font-medium">
+                Esta localidad ya existe en el panel.
+              </p>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setDuplicateId(null)}
+                  className="px-3 py-1 text-xs rounded border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => onEditExisting(duplicateId)}
+                  className="px-3 py-1 text-xs rounded text-white hover:opacity-90 transition-colors"
+                  style={{ background: 'var(--color-gov-navy)' }}
+                >
+                  Ir a editar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
@@ -1288,7 +1318,16 @@ export function CordobaHogarPage() {
         <GestionarParametrosModal estados={estados} montoPorCasa={montoPorCasa} onClose={() => setShowGestionarEstados(false)} />
       )}
       {showAgregar && (
-        <AgregarLocalidadModal estados={estados} montoPorCasa={montoPorCasa} onClose={() => setShowAgregar(false)} />
+        <AgregarLocalidadModal
+          estados={estados}
+          montoPorCasa={montoPorCasa}
+          onClose={() => setShowAgregar(false)}
+          onEditExisting={(id) => {
+            setShowAgregar(false)
+            const localidad = localidades.find((l) => l.id === id)
+            if (localidad) setEditTarget(localidad)
+          }}
+        />
       )}
     </div>
   )
