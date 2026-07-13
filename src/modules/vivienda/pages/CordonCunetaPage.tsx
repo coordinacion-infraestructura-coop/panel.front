@@ -455,6 +455,9 @@ function DetailPanel({
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
+  const { data: panelUser } = usePortalUser()
+  const canWritePedidos = ['Admin', 'Supervisor', 'Operador'].includes(panelUser?.rol ?? '')
+    || (panelUser?.secretarias ?? []).includes('infraestructura')
   const today = new Date().toISOString().split('T')[0]
   const [tab, setTab] = useState<'comunicaciones' | 'historial' | 'checklist'>('comunicaciones')
   const [showForm, setShowForm] = useState(false)
@@ -518,9 +521,11 @@ function DetailPanel({
           <>
             <div className="px-5 py-3 border-b border-slate-200 bg-slate-50">
               {!showForm ? (
-                <button onClick={() => setShowForm(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
-                  + Nueva actualización
-                </button>
+                canWritePedidos ? (
+                  <button onClick={() => setShowForm(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
+                    + Nueva actualización
+                  </button>
+                ) : null
               ) : (
                 <div className="space-y-2">
                   <label htmlFor={`${uid}-desc`} className="block text-xs font-bold uppercase text-gray-500">¿Qué se solicitó / comunicó?</label>
@@ -550,11 +555,16 @@ function DetailPanel({
                       {i < pedidos.length - 1 && <div className="w-px flex-1 mt-1 bg-slate-200" />}
                     </div>
                     <div className="pb-3 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <time className="text-xs font-semibold text-gov-navy" dateTime={p.fecha_pedido}>
                           {new Date(p.fecha_pedido + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </time>
-                        {p.created_by && <span className="text-xs text-gray-400">· {p.created_by.split('@')[0]}</span>}
+                        <span className="text-xs text-gray-600">
+                          {p.created_by_nombre ?? p.created_by?.split('@')[0] ?? ''}
+                        </span>
+                        {p.secretaria === 'infraestructura' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700">Infraestructura</span>
+                        )}
                         <button onClick={() => setConfirmDelete(p.id)} className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400" aria-label="Eliminar esta actualización" title="Eliminar">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>

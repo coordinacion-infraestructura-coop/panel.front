@@ -147,6 +147,8 @@ export interface PedidoCC {
   fecha_pedido: string
   created_at: string
   created_by: string | null
+  created_by_nombre: string | null
+  secretaria: string | null
 }
 
 export interface PedidoCCCreate {
@@ -308,6 +310,8 @@ export interface PedidoCH {
   fecha_pedido: string
   created_at: string
   created_by: string | null
+  created_by_nombre: string | null
+  secretaria: string | null
 }
 
 export interface PedidoCHCreate {
