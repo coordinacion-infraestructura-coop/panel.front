@@ -99,6 +99,7 @@ function EditModal({
   saveError?: string | null
 }) {
   const uid = useId()
+  const today = new Date().toISOString().slice(0, 10)
   const [form, setForm] = useState<MunicipioCCUpdate>({
     municipio: municipio.municipio,
     departamento: municipio.departamento ?? undefined,
@@ -113,6 +114,7 @@ function EditModal({
     cordon_cuneta_ml: municipio.cordon_cuneta_ml ?? undefined,
     adoquinado_m2: municipio.adoquinado_m2 ?? undefined,
     obs: municipio.obs ?? '',
+    fecha_cambio: today,
   })
   const [deptoCascade, setDeptoCascade] = useState(municipio.departamento ?? '')
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
@@ -199,7 +201,20 @@ function EditModal({
             </div>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">Estados por Dimensión</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-gov-navy">Estados por Dimensión</p>
+              <div className="flex items-center gap-2">
+                <label htmlFor={`${uid}-fc`} className="text-xs text-gray-500 whitespace-nowrap">Fecha del cambio</label>
+                <input
+                  id={`${uid}-fc`}
+                  type="date"
+                  max={today}
+                  className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                  value={form.fecha_cambio ?? today}
+                  onChange={(e) => set('fecha_cambio', e.target.value || null)}
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
@@ -633,14 +648,15 @@ function GestionarEstadosModal({
 // ── Agregar municipio modal ──────────────────────────────────────────────────────
 
 function AgregarMunicipioModal({
-  estados, onClose,
+  estados, onClose, onEditExisting,
 }: {
-  estados: EstadoCC[]; onClose: () => void
+  estados: EstadoCC[]; onClose: () => void; onEditExisting: (id: string) => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
   const [form, setForm] = useState<MunicipioCCCreate>({ municipio: '', departamento: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [duplicateId, setDuplicateId] = useState<string | null>(null)
 
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['cc-geo'],
@@ -654,8 +670,13 @@ function AgregarMunicipioModal({
       onClose()
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al crear el municipio.'
-      setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      const detail = (err as { response?: { data?: { detail?: { code?: string; existing_id?: string } } } })
+        ?.response?.data?.detail
+      if (detail?.code === 'MUNICIPIO_DUPLICADO' && detail.existing_id) {
+        setDuplicateId(detail.existing_id)
+        return
+      }
+      setSaveError(extractErrorMessage(err, 'Error al crear el municipio.'))
     },
   })
 
@@ -739,6 +760,15 @@ function AgregarMunicipioModal({
               ))}
             </div>
           </div>
+          {duplicateId && (
+            <div role="alert" className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded px-3 py-2.5">
+              <p className="text-xs text-amber-800 font-medium">Este municipio ya existe en el panel.</p>
+              <div className="flex gap-2 flex-shrink-0">
+                <button onClick={() => setDuplicateId(null)} className="px-3 py-1 text-xs rounded border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors">Cancelar</button>
+                <button onClick={() => onEditExisting(duplicateId)} className="px-3 py-1 text-xs rounded text-white hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>Ir a editar</button>
+              </div>
+            </div>
+          )}
           {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</p>}
         </div>
         <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-3">
@@ -1170,7 +1200,15 @@ export function CordonCunetaPage() {
         <GestionarEstadosModal estados={estados} onClose={() => setShowGestionarEstados(false)} />
       )}
       {showAgregar && (
-        <AgregarMunicipioModal estados={estados} onClose={() => setShowAgregar(false)} />
+        <AgregarMunicipioModal
+          estados={estados}
+          onClose={() => setShowAgregar(false)}
+          onEditExisting={(id) => {
+            setShowAgregar(false)
+            const municipio = municipios.find((m) => m.id === id)
+            if (municipio) { setEditTarget(municipio); setEditError(null) }
+          }}
+        />
       )}
     </div>
   )

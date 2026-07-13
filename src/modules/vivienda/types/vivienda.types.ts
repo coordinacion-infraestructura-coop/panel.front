@@ -168,6 +168,7 @@ export interface MunicipioCCUpdate {
   cordon_cuneta_ml?: number | null
   adoquinado_m2?: number | null
   obs?: string
+  fecha_cambio?: string | null
 }
 
 export interface EstadoHistorialCC {
