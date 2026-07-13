@@ -987,6 +987,22 @@ export function CordonCunetaPage() {
     onError: (err: unknown) => setDeleteError(extractErrorMessage(err, 'Error al eliminar el registro.')),
   })
 
+  const { data: syncEstado } = useQuery({
+    queryKey: ['cc-checklist-sync-estado'],
+    queryFn: cordonCunetaApi.getEstadoSyncChecklist,
+    refetchInterval: 60_000,
+  })
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const forzarSyncMut = useMutation({
+    mutationFn: cordonCunetaApi.forzarSyncChecklist,
+    onSuccess: () => {
+      setSyncError(null)
+      queryClient.invalidateQueries({ queryKey: ['cc-checklist-sync-estado'] })
+      queryClient.invalidateQueries({ queryKey: ['cc-checklist-tecnico'] })
+    },
+    onError: (err: unknown) => setSyncError(extractErrorMessage(err, 'No se pudo actualizar el checklist técnico.')),
+  })
+
   const municipios = data?.municipios ?? []
   const estados = data?.estados ?? []
   const presupuesto = data?.presupuesto ?? 0
@@ -1093,6 +1109,26 @@ export function CordonCunetaPage() {
 
       {/* Barra de acciones */}
       <div className="flex items-center gap-2 mb-2 justify-end">
+        <div className="mr-auto flex items-center gap-2 text-xs text-gray-500">
+          <span>
+            {syncEstado
+              ? <>Checklist técnico: sincronizado {fmtSincronizado(syncEstado.finished_at ?? syncEstado.started_at)}
+                  {syncEstado.filas_error > 0 && <span className="text-amber-600"> · {syncEstado.filas_error} con error</span>}
+                </>
+              : 'Checklist técnico: sin sincronizar todavía'}
+          </span>
+          {canEdit && (
+            <button
+              onClick={() => forzarSyncMut.mutate()}
+              disabled={forzarSyncMut.isPending}
+              className="px-2 py-0.5 rounded border border-slate-200 text-gray-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              title="Sincronizar el checklist técnico ahora, sin esperar al próximo ciclo automático (cada 15 min)"
+            >
+              {forzarSyncMut.isPending ? 'Actualizando…' : '🔄 Actualizar ahora'}
+            </button>
+          )}
+          {syncError && <span role="alert" className="text-red-600">{syncError}</span>}
+        </div>
         <button
           onClick={() => {
             const rows = sorted.map((m) => ({

@@ -15,6 +15,8 @@ import type {
   EstadoCCUpdate,
   EstadoHistorialCC,
   ChecklistTecnicoCC,
+  ChecklistSyncEstadoCC,
+  ChecklistSyncResultadoCC,
   CordobaHogarPanel,
   LocalidadCH,
   LocalidadCHUpdate,
@@ -117,6 +119,16 @@ export const cordonCunetaApi = {
   getChecklistTecnico: (municipioId: string) =>
     apiClient
       .get<ChecklistTecnicoCC | null>(`${BASE}/cordon-cuneta/${municipioId}/checklist-tecnico`)
+      .then((r) => r.data),
+
+  getEstadoSyncChecklist: () =>
+    apiClient
+      .get<ChecklistSyncEstadoCC | null>(`${BASE}/cordon-cuneta-checklist-tecnico/estado`)
+      .then((r) => r.data),
+
+  forzarSyncChecklist: () =>
+    apiClient
+      .post<ChecklistSyncResultadoCC>(`${BASE}/cordon-cuneta-checklist-tecnico/sync`)
       .then((r) => r.data),
 }
 

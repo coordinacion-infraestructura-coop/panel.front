@@ -189,6 +189,24 @@ export interface ChecklistItemCC {
   valor: string
 }
 
+export interface ChecklistSyncEstadoCC {
+  started_at: string
+  finished_at: string | null
+  filas_leidas: number
+  filas_insertadas: number
+  filas_actualizadas: number
+  filas_error: number
+  triggered_by: string | null
+}
+
+export interface ChecklistSyncResultadoCC {
+  filas_leidas: number
+  filas_insertadas: number
+  filas_actualizadas: number
+  filas_error: number
+  errores: Array<{ fila: number; motivo: string }>
+}
+
 export interface ChecklistTecnicoCC {
   id: string
   localidad: string
