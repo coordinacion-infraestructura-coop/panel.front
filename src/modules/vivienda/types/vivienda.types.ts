@@ -181,6 +181,35 @@ export interface EstadoHistorialCC {
   created_by: string | null
 }
 
+// ── Checklist Técnico (sync Google Sheet "Base TOTAL") ──────────────────────────
+
+export interface ChecklistItemCC {
+  item_num: number
+  item_label: string
+  valor: string
+}
+
+export interface ChecklistTecnicoCC {
+  id: string
+  localidad: string
+  departamento: string | null
+  expediente: string | null
+  tipo: string | null
+  intendente: string | null
+  telefono: string | null
+  email: string | null
+  contacto_tecnico: string | null
+  monto_convenio: number | null
+  cordon_cuneta_ml: number | null
+  adoquinado_m2: number | null
+  estado_expediente: string | null
+  observaciones: string | null
+  fecha_radicacion: string | null
+  reparticion: string | null
+  last_synced_at: string
+  items: ChecklistItemCC[]
+}
+
 // ── Córdoba Hogar ────────────────────────────────────────────────────────────────
 
 export interface EstadoCH {

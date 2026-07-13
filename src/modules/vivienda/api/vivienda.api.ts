@@ -14,6 +14,7 @@ import type {
   EstadoCCCreate,
   EstadoCCUpdate,
   EstadoHistorialCC,
+  ChecklistTecnicoCC,
   CordobaHogarPanel,
   LocalidadCH,
   LocalidadCHUpdate,
@@ -112,6 +113,11 @@ export const cordonCunetaApi = {
 
   getGeo: () =>
     apiClient.get<GeoLocalidad[]>(`${BASE}/cordon-cuneta/geo`).then((r) => r.data),
+
+  getChecklistTecnico: (municipioId: string) =>
+    apiClient
+      .get<ChecklistTecnicoCC | null>(`${BASE}/cordon-cuneta/${municipioId}/checklist-tecnico`)
+      .then((r) => r.data),
 }
 
 export const cordobaHogarApi = {
