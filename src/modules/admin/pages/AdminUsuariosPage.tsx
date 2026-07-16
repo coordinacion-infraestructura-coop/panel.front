@@ -27,6 +27,7 @@ const SECRETARIAS = [
   { id: 'territorial', label: 'Planificación Territorial' },
   { id: 'gasifera', label: 'Infraestructura Gasífera' },
   { id: 'desarrollo', label: 'Desarrollo' },
+  { id: 'supervision', label: 'Supervisión' },
 ]
 
 const ROL_COLORS: Record<string, string> = {
@@ -196,6 +197,7 @@ function UsuarioModal({
 export function AdminUsuariosPage() {
   const qc = useQueryClient()
   const [modalUsuario, setModalUsuario] = useState<PortalUsuario | 'nuevo' | null>(null)
+  const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const { data: usuarios = [], isLoading } = useQuery<PortalUsuario[]>({
@@ -226,6 +228,20 @@ export function AdminUsuariosPage() {
     },
     onError: (err: any) => {
       setError(err?.response?.data?.detail?.message ?? 'Error al actualizar el usuario')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (email: string) =>
+      apiClient.delete(`/api/v1/portal/admin/usuarios/${encodeURIComponent(email)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-usuarios'] })
+      setConfirmDeleteEmail(null)
+      setError(null)
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.detail?.message ?? 'Error al eliminar el usuario')
+      setConfirmDeleteEmail(null)
     },
   })
 
@@ -323,12 +339,39 @@ export function AdminUsuariosPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => { setModalUsuario(u); setError(null) }}
-                      className="text-xs text-gov-cyan hover:text-gov-navy transition-colors font-medium"
-                    >
-                      Editar
-                    </button>
+                    {confirmDeleteEmail === u.email ? (
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-xs text-red-700">¿Eliminar?</span>
+                        <button
+                          onClick={() => deleteMutation.mutate(u.email)}
+                          disabled={deleteMutation.isPending}
+                          className="px-2 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors"
+                        >
+                          {deleteMutation.isPending ? '...' : 'Sí'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteEmail(null)}
+                          className="px-2 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => { setModalUsuario(u); setError(null) }}
+                          className="text-xs text-gov-cyan hover:text-gov-navy transition-colors font-medium"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => { setConfirmDeleteEmail(u.email); setError(null) }}
+                          className="text-xs text-red-400 hover:text-red-600 transition-colors font-medium"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
