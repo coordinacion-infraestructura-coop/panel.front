@@ -37,8 +37,8 @@ function formatFecha(fecha?: string) {
 
 // ─── Componente de confirmación de eliminación ────────────────────────────────
 
-function DeleteConfirmModal({ id, onCancel, onConfirm, isPending }: {
-  id: string; onCancel: () => void; onConfirm: () => void; isPending: boolean
+function DeleteConfirmModal({ id, onCancel, onConfirm, isPending, error }: {
+  id: string; onCancel: () => void; onConfirm: () => void; isPending: boolean; error?: string | null
 }) {
   return (
     <>
@@ -55,6 +55,9 @@ function DeleteConfirmModal({ id, onCancel, onConfirm, isPending }: {
               Esta acción realizará un borrado lógico de la gestión.
             </p>
             <p className="text-xs text-slate-400 font-mono mb-5">{id}</p>
+            {error && (
+              <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mb-3">{error}</p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={onCancel}
@@ -207,11 +210,21 @@ export function GestionesListPage() {
   })
 
   // ── Delete ─────────────────────────────────────────────────────────────────
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const deleteMutation = useMutation({
     mutationFn: (id: string) => gestionesApi.eliminar(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gestiones'] })
       setDeleteId(null)
+      setDeleteError(null)
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail
+        : (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string')
+          ? (detail as { message: string }).message
+          : 'Error al eliminar la gestión.'
+      setDeleteError(msg)
     },
   })
 
@@ -422,7 +435,7 @@ export function GestionesListPage() {
                       )}
                       {canDelete && (
                         <button
-                          onClick={() => setDeleteId(g.id_gestion)}
+                          onClick={() => { setDeleteId(g.id_gestion); setDeleteError(null) }}
                           className="px-2.5 py-1 text-xs border border-red-200 rounded text-red-600 hover:bg-red-50 transition-colors"
                         >
                           Eliminar
@@ -465,6 +478,7 @@ export function GestionesListPage() {
       {/* ── Drawer de detalle ── */}
       <GestionDetalleDrawer
         gestionId={drawerGestionId}
+        canModify={canModify}
         onClose={() => setDrawerGestionId(null)}
         onCambiarEstado={(id, estadoActual, nroExpediente) => {
           handleCambiarEstado(id, estadoActual, nroExpediente)
@@ -485,9 +499,10 @@ export function GestionesListPage() {
       {deleteId && (
         <DeleteConfirmModal
           id={deleteId}
-          onCancel={() => setDeleteId(null)}
+          onCancel={() => { setDeleteId(null); setDeleteError(null) }}
           onConfirm={() => deleteMutation.mutate(deleteId)}
           isPending={deleteMutation.isPending}
+          error={deleteError}
         />
       )}
     </div>

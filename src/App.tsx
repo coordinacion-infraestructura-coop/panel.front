@@ -45,7 +45,14 @@ export default function App() {
               <Route path="vivienda/cordoba-hogar" element={<CordobaHogarPage />} />
               <Route path="privada/gestiones" element={<GestionesListPage />} />
               <Route path="privada/tablero" element={<TableroPage />} />
-              <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
+              <Route
+                path="admin/usuarios"
+                element={
+                  <ProtectedRoute roles={['Admin']}>
+                    <AdminUsuariosPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

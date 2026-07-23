@@ -117,6 +117,12 @@ function EditModal({
     fecha_cambio: today,
   })
   const [deptoCascade, setDeptoCascade] = useState(municipio.departamento ?? '')
+  // El backend recalcula estado_general automáticamente a partir de las 3 dimensiones
+  // SALVO que el payload lo incluya explícitamente (override manual). Como este form
+  // siempre trae un valor precargado en ese campo, solo lo incluimos en el submit si
+  // el usuario realmente tocó el desplegable — si no, se omite para no pisar el
+  // recálculo automático con el valor viejo cada vez que se edita otra cosa.
+  const [estadoGeneralTouched, setEstadoGeneralTouched] = useState(false)
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['cc-geo'],
     queryFn: cordonCunetaApi.getGeo,
@@ -245,7 +251,10 @@ function EditModal({
                 id={`${uid}-eg`}
                 className="w-full border border-amber-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
                 value={form.estado_general ?? ''}
-                onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => {
+                  set('estado_general', e.target.value ? Number(e.target.value) : null)
+                  setEstadoGeneralTouched(true)
+                }}
               >
                 <option value="">— Sin estado —</option>
                 {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
@@ -260,7 +269,16 @@ function EditModal({
             : <span />}
           <div className="flex gap-3 flex-shrink-0">
             <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button onClick={() => onSave(form)} disabled={isSaving} className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90" style={{ background: 'var(--color-gov-navy)' }}>
+            <button
+              onClick={() => {
+                if (estadoGeneralTouched) { onSave(form); return }
+                const { estado_general: _ignored, ...rest } = form
+                onSave(rest)
+              }}
+              disabled={isSaving}
+              className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90"
+              style={{ background: 'var(--color-gov-navy)' }}
+            >
               {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
           </div>
@@ -485,11 +503,18 @@ function DetailPanel({
     },
   })
 
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const deleteMutation = useMutation({
     mutationFn: (pedidoId: string) => cordonCunetaApi.deletePedido(municipio.id, pedidoId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cc-pedidos', municipio.id] })
       setConfirmDelete(null)
+      setDeleteError(null)
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al eliminar la actualización.'
+      setDeleteError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     },
   })
 
@@ -575,10 +600,13 @@ function DetailPanel({
                       </div>
                       <p className="text-sm text-gray-700 leading-snug">{p.descripcion}</p>
                       {confirmDelete === p.id && (
-                        <div className="mt-2 flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2">
-                          <span className="text-xs text-red-700 flex-1">¿Eliminar esta actualización?</span>
-                          <button onClick={() => deleteMutation.mutate(p.id)} disabled={deleteMutation.isPending} className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMutation.isPending ? '...' : 'Sí, eliminar'}</button>
-                          <button onClick={() => setConfirmDelete(null)} className="px-2.5 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                        <div className="mt-2 bg-red-50 border border-red-200 rounded px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-700 flex-1">¿Eliminar esta actualización?</span>
+                            <button onClick={() => deleteMutation.mutate(p.id)} disabled={deleteMutation.isPending} className="px-2.5 py-1 text-xs font-semibold text-white bg-red-500 hover:bg-red-600 rounded disabled:opacity-50 transition-colors">{deleteMutation.isPending ? '...' : 'Sí, eliminar'}</button>
+                            <button onClick={() => { setConfirmDelete(null); setDeleteError(null) }} className="px-2.5 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                          </div>
+                          {deleteError && <p role="alert" className="text-xs text-red-700 mt-1.5">{deleteError}</p>}
                         </div>
                       )}
                     </div>
@@ -612,8 +640,10 @@ function GestionarEstadosModal({
   const queryClient = useQueryClient()
   const [editId, setEditId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<EstadoCCUpdate>({})
+  const [editSaveError, setEditSaveError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<Record<number, string>>({})
   const [showNew, setShowNew] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [newForm, setNewForm] = useState<EstadoCCCreate>({
     label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10,
     aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true,
@@ -624,7 +654,9 @@ function GestionarEstadosModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cordon-cuneta'] })
       setEditId(null)
+      setEditSaveError(null)
     },
+    onError: (err: unknown) => setEditSaveError(extractErrorMessage(err, 'Error al guardar los cambios del estado.')),
   })
 
   const deleteMut = useMutation({
@@ -644,8 +676,10 @@ function GestionarEstadosModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cordon-cuneta'] })
       setShowNew(false)
+      setCreateError(null)
       setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
     },
+    onError: (err: unknown) => setCreateError(extractErrorMessage(err, 'Error al crear el estado.')),
   })
 
   const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
@@ -669,7 +703,7 @@ function GestionarEstadosModal({
                   {e.aplica_tecnico && <span title="Técnico" className="px-1 bg-blue-100 text-blue-700 rounded text-[10px]">T</span>}
                   {e.aplica_financiero && <span title="Presupuestario" className="px-1 bg-green-100 text-green-700 rounded text-[10px]">P</span>}
                 </div>
-                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
+                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditSaveError(null); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                 </button>
                 <button onClick={() => { setDeleteError((p) => { const n = { ...p }; delete n[e.id]; return n }); deleteMut.mutate(e.id) }} disabled={deleteMut.isPending} className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Eliminar">
@@ -717,8 +751,11 @@ function GestionarEstadosModal({
                       <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: editForm.bg ?? '#e2e8f0', color: editForm.text_color ?? '#1e293b' }}>Vista previa</span>
                     </div>
                   </div>
+                  {editSaveError && (
+                    <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{editSaveError}</p>
+                  )}
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => setEditId(null)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                    <button onClick={() => { setEditId(null); setEditSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
                     <button onClick={() => updateMut.mutate({ id: e.id, data: editForm })} disabled={updateMut.isPending} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
                       {updateMut.isPending ? 'Guardando...' : 'Guardar cambios'}
                     </button>
@@ -731,7 +768,7 @@ function GestionarEstadosModal({
           {/* Nuevo estado */}
           <div className="border-2 border-dashed border-slate-300 rounded-md overflow-hidden">
             {!showNew ? (
-              <button onClick={() => setShowNew(true)} className="w-full py-2.5 text-sm font-medium text-gray-500 hover:text-gov-navy hover:bg-slate-50 transition-colors">+ Nuevo estado</button>
+              <button onClick={() => { setShowNew(true); setCreateError(null) }} className="w-full py-2.5 text-sm font-medium text-gray-500 hover:text-gov-navy hover:bg-slate-50 transition-colors">+ Nuevo estado</button>
             ) : (
               <div className="px-3 py-3 space-y-3">
                 <p className="text-xs font-bold text-gov-navy uppercase tracking-wide">Nuevo estado</p>
@@ -771,8 +808,11 @@ function GestionarEstadosModal({
                     <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: newForm.bg, color: newForm.text_color }}>{newForm.label || 'Vista previa'}</span>
                   </div>
                 </div>
+                {createError && (
+                  <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{createError}</p>
+                )}
                 <div className="flex gap-2 justify-end pt-1">
-                  <button onClick={() => setShowNew(false)} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                  <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
                   <button onClick={() => createMut.mutate(newForm)} disabled={createMut.isPending || !newForm.label.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
                     {createMut.isPending ? 'Guardando...' : 'Crear estado'}
                   </button>

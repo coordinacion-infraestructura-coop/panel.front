@@ -21,6 +21,21 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
+function extractErrorMessage(err: unknown): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && 'message' in (detail as Record<string, unknown>)) {
+    const msg = (detail as { message?: unknown }).message
+    if (typeof msg === 'string') return msg
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string }) => e?.msg ?? 'Error de validación.')
+      .join(' ')
+  }
+  return 'Error al guardar el beneficiario. Verificá los datos ingresados.'
+}
+
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
@@ -54,6 +69,7 @@ export function BeneficiarioFormPage() {
       beneficiariosApi.create({
         ...data,
         email: data.email || undefined,
+        fecha_nacimiento: data.fecha_nacimiento || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['beneficiarios'] })
@@ -112,7 +128,7 @@ export function BeneficiarioFormPage() {
         </div>
 
         {mutation.isError && (
-          <p className="text-sm text-red-600">Error al guardar. Verificá que el DNI no esté registrado.</p>
+          <p className="text-sm text-red-600">{extractErrorMessage(mutation.error)}</p>
         )}
 
         <div className="flex gap-3 pt-2">

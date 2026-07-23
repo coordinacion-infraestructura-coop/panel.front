@@ -5,6 +5,7 @@ import type { GestionDetalle, Evento } from '../types/gestiones.types'
 
 interface Props {
   gestionId: string | null
+  canModify: boolean
   onClose: () => void
   onCambiarEstado: (id: string, estadoActual: string, nroExpediente?: string | null) => void
 }
@@ -94,7 +95,7 @@ function KV({ label, value }: { label: string; value?: string | number | null })
   )
 }
 
-export function GestionDetalleDrawer({ gestionId, onClose, onCambiarEstado }: Props) {
+export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarEstado }: Props) {
   useEffect(() => {
     if (!gestionId) return
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -170,12 +171,14 @@ export function GestionDetalleDrawer({ gestionId, onClose, onCambiarEstado }: Pr
               <div className="p-5 border-b border-slate-100">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Resumen</h3>
-                  <button
-                    onClick={() => onCambiarEstado(gestionId, gestion.estado, gestion.nro_expediente)}
-                    className="text-xs bg-gov-navy text-white px-3 py-1.5 rounded hover:bg-gov-blue transition-colors"
-                  >
-                    Modificar estado
-                  </button>
+                  {canModify && (
+                    <button
+                      onClick={() => onCambiarEstado(gestionId, gestion.estado, gestion.nro_expediente)}
+                      className="text-xs bg-gov-navy text-white px-3 py-1.5 rounded hover:bg-gov-blue transition-colors"
+                    >
+                      Modificar estado
+                    </button>
+                  )}
                 </div>
                 <dl className="grid grid-cols-2 gap-3">
                   <KV label="Fecha ingreso" value={formatFecha(gestion.fecha_ingreso)} />

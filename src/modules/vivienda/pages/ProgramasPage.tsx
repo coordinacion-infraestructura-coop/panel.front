@@ -42,7 +42,9 @@ function ProgramaKPICard({ card }: { card: ProgramCard }) {
         </Link>
       </div>
       <div className={`grid divide-slate-100 border-t border-slate-100 ${
-        card.kpis.length === 5 ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'
+        card.kpis.length === 6 ? 'grid-cols-3 sm:grid-cols-6' :
+        card.kpis.length === 5 ? 'grid-cols-2 sm:grid-cols-5' :
+        'grid-cols-2 sm:grid-cols-4'
       }`}>
         {card.kpis.map((kpi, i) => (
           <div
@@ -81,6 +83,8 @@ export function ProgramasPage() {
   const ccMonto = ccMunicipios.reduce((acc, m) => acc + (m.monto ?? 0), 0)
   const ccTcId = cc?.estados.find((e) => e.label.toLowerCase() === 'tc')?.id
   const ccEnTC = ccTcId != null ? ccMunicipios.filter((m) => m.estado_general === ccTcId).length : 0
+  const ccEnObraId = cc?.estados.find((e) => e.label.toLowerCase() === 'en obra')?.id
+  const ccEnObra = ccEnObraId != null ? ccMunicipios.filter((m) => m.estado_general === ccEnObraId).length : 0
 
   const chLocalidades = ch?.localidades ?? []
   const chTotalCasas = chLocalidades.reduce((acc, l) => acc + (l.cantidad_casas ?? 0), 0)
@@ -133,6 +137,7 @@ export function ProgramasPage() {
           sub: 'OK Gobernación',
         },
         { label: 'Monto comprometido', value: fmtMonto(ccMonto) },
+        { label: 'En Obra', value: ccEnObra, sub: 'estado general' },
         { label: 'Tribunal de Cuentas', value: ccEnTC, sub: 'en estado TC' },
       ],
     },

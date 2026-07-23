@@ -136,7 +136,7 @@ function SecretariaCard({ sec, fullWidth }: { sec: Secretaria; fullWidth?: boole
 
 export function DashboardPage() {
   const { user } = useAuth()
-  const { data: portalUser, isLoading } = usePortalUser()
+  const { data: portalUser, isLoading, isError } = usePortalUser()
 
   const firstName = user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0]
   const isAdmin = portalUser?.rol === 'Admin'
@@ -175,8 +175,18 @@ export function DashboardPage() {
         </div>
       )}
 
+      {/* Error al cargar el perfil del portal */}
+      {!isLoading && isError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-5 py-6 text-center">
+          <p className="text-red-800 font-medium">No pudimos cargar tu perfil de acceso.</p>
+          <p className="text-red-600 text-sm mt-1">
+            Recargá la página. Si el problema persiste, contactá al administrador del sistema.
+          </p>
+        </div>
+      )}
+
       {/* Sin acceso */}
-      {!isLoading && portalUser && visibleActivas.length === 0 && visibleDesarrollo.length === 0 && (
+      {!isLoading && !isError && portalUser && visibleActivas.length === 0 && visibleDesarrollo.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-5 py-6 text-center">
           <p className="text-amber-800 font-medium">Tu cuenta no tiene secretarías asignadas.</p>
           <p className="text-amber-600 text-sm mt-1">
