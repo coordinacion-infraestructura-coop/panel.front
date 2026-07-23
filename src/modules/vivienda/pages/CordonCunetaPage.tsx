@@ -631,9 +631,9 @@ function GestionarEstadosModal({
     mutationFn: (id: number) => cordonCunetaApi.deleteEstado(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cordon-cuneta'] }),
     onError: (err: unknown, id: number) => {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      const msg = status === 409
-        ? 'Este estado está en uso y no puede eliminarse.'
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail?.message === 'string'
+        ? detail.message
         : 'Error al eliminar el estado.'
       setDeleteError((prev) => ({ ...prev, [id]: msg }))
     },

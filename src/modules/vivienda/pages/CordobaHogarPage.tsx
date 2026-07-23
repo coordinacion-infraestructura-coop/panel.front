@@ -532,8 +532,10 @@ function GestionarParametrosModal({
     mutationFn: (id: number) => cordobaHogarApi.deleteEstado(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] }),
     onError: (err: unknown, id: number) => {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      const msg = status === 409 ? 'Este estado está en uso y no puede eliminarse.' : 'Error al eliminar el estado.'
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail?.message === 'string'
+        ? detail.message
+        : 'Error al eliminar el estado.'
       setDeleteError((prev) => ({ ...prev, [id]: msg }))
     },
   })
