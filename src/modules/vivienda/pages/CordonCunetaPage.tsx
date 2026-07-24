@@ -122,7 +122,6 @@ function EditModal({
   // siempre trae un valor precargado en ese campo, solo lo incluimos en el submit si
   // el usuario realmente tocó el desplegable — si no, se omite para no pisar el
   // recálculo automático con el valor viejo cada vez que se edita otra cosa.
-  const [estadoGeneralTouched, setEstadoGeneralTouched] = useState(false)
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['cc-geo'],
     queryFn: cordonCunetaApi.getGeo,
@@ -132,11 +131,11 @@ function EditModal({
   const lbl = 'block text-xs font-bold text-gray-500 uppercase mb-1'
   const inp = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
-      <div className="bg-white rounded-lg w-[740px] max-w-[97vw] max-h-[92vh] overflow-y-auto shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`} onClick={onClose}>
+      <div className="bg-white rounded-lg w-[740px] max-w-[97vw] max-h-[92vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-white px-4 py-3 flex items-center gap-3 rounded-t-lg sticky top-0 z-10" style={{ background: 'var(--color-gov-navy)' }}>
           <h3 id={`${uid}-t`} className="flex-1 font-semibold text-sm">Editar — {municipio.municipio}</h3>
-          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
+          <button type="button" onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -251,15 +250,11 @@ function EditModal({
                 id={`${uid}-eg`}
                 className="w-full border border-amber-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan"
                 value={form.estado_general ?? ''}
-                onChange={(e) => {
-                  set('estado_general', e.target.value ? Number(e.target.value) : null)
-                  setEstadoGeneralTouched(true)
-                }}
+                onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">— Sin estado —</option>
                 {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
               </select>
-              <p className="text-[10px] text-amber-600 mt-1">Sobreescribe el cálculo automático por dimensiones.</p>
             </div>
           </div>
         </div>
@@ -268,13 +263,9 @@ function EditModal({
             ? <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1 flex-1">{saveError}</p>
             : <span />}
           <div className="flex gap-3 flex-shrink-0">
-            <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+            <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
             <button
-              onClick={() => {
-                if (estadoGeneralTouched) { onSave(form); return }
-                const { estado_general: _ignored, ...rest } = form
-                onSave(rest)
-              }}
+              onClick={() => onSave(form)}
               disabled={isSaving}
               className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90"
               style={{ background: 'var(--color-gov-navy)' }}
