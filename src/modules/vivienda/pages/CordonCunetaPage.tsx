@@ -117,11 +117,6 @@ function EditModal({
     fecha_cambio: today,
   })
   const [deptoCascade, setDeptoCascade] = useState(municipio.departamento ?? '')
-  // El backend recalcula estado_general automáticamente a partir de las 3 dimensiones
-  // SALVO que el payload lo incluya explícitamente (override manual). Como este form
-  // siempre trae un valor precargado en ese campo, solo lo incluimos en el submit si
-  // el usuario realmente tocó el desplegable — si no, se omite para no pisar el
-  // recálculo automático con el valor viejo cada vez que se edita otra cosa.
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['cc-geo'],
     queryFn: cordonCunetaApi.getGeo,

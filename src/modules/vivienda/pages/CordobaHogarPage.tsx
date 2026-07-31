@@ -123,9 +123,9 @@ function OkBadge({ v }: { v: string }) {
 // ── Modal de edición ─────────────────────────────────────────────────────────────
 
 function EditModal({
-  localidad, estados, onSave, onClose, isSaving, saveError,
+  localidad, estados, montoPorCasa, onSave, onClose, isSaving, saveError,
 }: {
-  localidad: LocalidadCH; estados: EstadoCH[]
+  localidad: LocalidadCH; estados: EstadoCH[]; montoPorCasa: number
   onSave: (data: LocalidadCHUpdate) => void; onClose: () => void; isSaving: boolean
   saveError?: string | null
 }) {
@@ -148,11 +148,6 @@ function EditModal({
     fecha_cambio: today,
   })
   const [deptoCascade, setDeptoCascade] = useState(localidad.departamento ?? '')
-  // El backend recalcula estado_general automáticamente a partir de las 3 dimensiones
-  // SALVO que el payload lo incluya explícitamente (override manual). Como este form
-  // siempre trae un valor precargado en ese campo, solo lo incluimos en el submit si
-  // el usuario realmente tocó el desplegable — si no, se omite para no pisar el
-  // recálculo automático con el valor viejo cada vez que se edita otra cosa.
   const { data: geoList = [], isLoading: geoLoading } = useQuery({
     queryKey: ['ch-geo'],
     queryFn: cordobaHogarApi.getGeo,
@@ -215,11 +210,29 @@ function EditModal({
             </div>
             <div>
               <label htmlFor={`${uid}-casas`} className={lbl}>Cantidad de casas</label>
-              <input id={`${uid}-casas`} type="number" className={inp} value={form.cantidad_casas ?? ''} onChange={(e) => set('cantidad_casas', e.target.value ? Number(e.target.value) : null)} />
+              <input
+                id={`${uid}-casas`}
+                type="number"
+                className={inp}
+                value={form.cantidad_casas ?? ''}
+                onChange={(e) => {
+                  const casas = e.target.value ? Number(e.target.value) : null
+                  setForm((p) => ({
+                    ...p,
+                    cantidad_casas: casas,
+                    monto: casas ? casas * montoPorCasa : p.monto,
+                  }))
+                }}
+              />
             </div>
             <div>
               <label htmlFor={`${uid}-monto`} className={lbl}>Monto ($)</label>
               <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value ? Number(e.target.value) : null)} />
+              {form.cantidad_casas && form.monto === form.cantidad_casas * montoPorCasa && (
+                <p className="text-[11px] text-cyan-600 mt-0.5 font-medium">
+                  = {form.cantidad_casas} casas × ${montoPorCasa.toLocaleString('es-AR')}
+                </p>
+              )}
             </div>
             <div>
               <label htmlFor={`${uid}-ok`} className={lbl}>OK Gobernación</label>
@@ -1348,6 +1361,7 @@ export function CordobaHogarPage() {
         <EditModal
           localidad={editTarget}
           estados={estados}
+          montoPorCasa={montoPorCasa}
           isSaving={updateMut.isPending}
           saveError={editError}
           onClose={() => { setEditTarget(null); setEditError(null) }}
