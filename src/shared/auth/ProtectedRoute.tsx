@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
-  const portalQuery = usePortalUser()
+  const portalQuery = usePortalUser(!loading && !!user)
 
   const checkingRole = !!roles && !!user && portalQuery.isLoading
 

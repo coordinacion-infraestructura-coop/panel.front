@@ -5,6 +5,7 @@ import {
   CategoryScale,
   Chart,
   DoughnutController,
+  Filler,
   Legend,
   LinearScale,
   LineController,
@@ -17,6 +18,7 @@ import {
 // Chart.js es tree-shakeable — hacen falta tanto los controllers (uno por tipo
 // de gráfico: Doughnut/Bar/Line) como los elements (Arc/Bar/Line/Point) que esos
 // controllers dibujan. Sin los controllers da "X is not a registered controller".
+// Filler habilita el `fill: true` que usa LineChart para el área bajo la curva.
 Chart.register(
   DoughnutController,
   BarController,
@@ -29,6 +31,7 @@ Chart.register(
   LinearScale,
   Tooltip,
   Legend,
+  Filler,
 )
 
 export { Chart }
