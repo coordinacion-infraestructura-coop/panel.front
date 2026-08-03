@@ -28,6 +28,7 @@ import type {
   EstadoCHUpdate,
   EstadoHistorialCH,
   GeoLocalidad,
+  InformeSnapshot,
 } from '../types/vivienda.types'
 
 const BASE = '/api/v1/vivienda'
@@ -116,6 +117,12 @@ export const cordonCunetaApi = {
   getGeo: () =>
     apiClient.get<GeoLocalidad[]>(`${BASE}/cordon-cuneta/geo`).then((r) => r.data),
 
+  getInforme: () =>
+    apiClient.get<InformeSnapshot | null>(`${BASE}/cordon-cuneta/informe`).then((r) => r.data),
+
+  actualizarInforme: () =>
+    apiClient.post<InformeSnapshot>(`${BASE}/cordon-cuneta/informe/actualizar`).then((r) => r.data),
+
   getChecklistTecnico: (municipioId: string) =>
     apiClient
       .get<ChecklistTecnicoCC | null>(`${BASE}/cordon-cuneta/${municipioId}/checklist-tecnico`)
@@ -175,4 +182,10 @@ export const cordobaHogarApi = {
 
   updateMontoPorCasa: (monto_por_casa: number) =>
     apiClient.patch(`${BASE}/cordoba-hogar-config/monto-por-casa`, { monto_por_casa }).then((r) => r.data),
+
+  getInforme: () =>
+    apiClient.get<InformeSnapshot | null>(`${BASE}/cordoba-hogar/informe`).then((r) => r.data),
+
+  actualizarInforme: () =>
+    apiClient.post<InformeSnapshot>(`${BASE}/cordoba-hogar/informe/actualizar`).then((r) => r.data),
 }

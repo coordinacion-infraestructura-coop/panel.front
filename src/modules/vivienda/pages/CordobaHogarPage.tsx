@@ -1,4 +1,5 @@
 import { useState, useMemo, useId } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordobaHogarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
@@ -1140,6 +1141,12 @@ export function CordobaHogarPage() {
 
       {/* Barra de acciones */}
       <div className="flex items-center gap-2 mb-2 justify-end">
+        <Link
+          to="/vivienda/cordoba-hogar/informe"
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-navy text-gov-navy hover:bg-slate-50 transition-colors"
+        >
+          📊 Ver informe
+        </Link>
         <button
           onClick={() => {
             const rows = sorted.map((l) => ({

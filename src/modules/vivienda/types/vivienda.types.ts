@@ -365,3 +365,61 @@ export interface PaginatedResponse<T> {
   limit: number
   offset: number
 }
+
+// ── Informe por programa (Cordón Cuneta / Córdoba Hogar) ──────────────────────────
+
+export type ProgramaInforme = 'cordon_cuneta' | 'cordoba_hogar'
+
+export interface EstadoConteo {
+  estado_id: number | null
+  label: string
+  bg: string
+  text_color: string
+  cantidad: number
+}
+
+export interface DepartamentoCobertura {
+  departamento: string
+  cantidad: number
+  localidades_cubiertas: number
+  localidades_totales: number
+  pct_cobertura: number
+}
+
+export interface EvolucionMes {
+  mes: string
+  cantidad_cambios: number
+}
+
+export interface PuntoInforme {
+  id: string
+  nombre: string
+  departamento: string | null
+  lat: number | null
+  lon: number | null
+  estado_general_id: number | null
+  estado_label: string | null
+  estado_bg: string | null
+  estado_text_color: string | null
+  expediente: string | null
+  monto: number | null
+}
+
+export interface InformePayload {
+  programa: ProgramaInforme
+  total_entidades: number
+  monto_total: number
+  metricas_extra: Record<string, number>
+  departamentos_cubiertos: number
+  por_estado_general: EstadoConteo[]
+  por_departamento: DepartamentoCobertura[]
+  evolucion_temporal: EvolucionMes[]
+  puntos: PuntoInforme[]
+}
+
+export interface InformeSnapshot {
+  payload: InformePayload
+  computed_at: string
+  computed_by: string | null
+  duracion_ms: number | null
+}

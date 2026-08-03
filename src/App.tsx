@@ -11,6 +11,7 @@ import { BeneficiarioFormPage } from './modules/vivienda/pages/BeneficiarioFormP
 import { ExpedientesListPage } from './modules/vivienda/pages/ExpedientesListPage'
 import { CordonCunetaPage } from './modules/vivienda/pages/CordonCunetaPage'
 import { CordobaHogarPage } from './modules/vivienda/pages/CordobaHogarPage'
+import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
@@ -42,7 +43,15 @@ export default function App() {
               <Route path="vivienda/beneficiarios/nuevo" element={<BeneficiarioFormPage />} />
               <Route path="vivienda/expedientes" element={<ExpedientesListPage />} />
               <Route path="vivienda/cordon-cuneta" element={<CordonCunetaPage />} />
+              <Route
+                path="vivienda/cordon-cuneta/informe"
+                element={<ProgramaInformePage programa="cordon_cuneta" />}
+              />
               <Route path="vivienda/cordoba-hogar" element={<CordobaHogarPage />} />
+              <Route
+                path="vivienda/cordoba-hogar/informe"
+                element={<ProgramaInformePage programa="cordoba_hogar" />}
+              />
               <Route path="privada/gestiones" element={<GestionesListPage />} />
               <Route path="privada/tablero" element={<TableroPage />} />
               <Route

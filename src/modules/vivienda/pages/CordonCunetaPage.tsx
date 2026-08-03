@@ -1,4 +1,5 @@
 import { useState, useMemo, useId } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
@@ -1169,6 +1170,12 @@ export function CordonCunetaPage() {
           )}
           {syncError && <span role="alert" className="text-red-600">{syncError}</span>}
         </div>
+        <Link
+          to="/vivienda/cordon-cuneta/informe"
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-navy text-gov-navy hover:bg-slate-50 transition-colors"
+        >
+          📊 Ver informe
+        </Link>
         <button
           onClick={() => {
             const rows = sorted.map((m) => ({
