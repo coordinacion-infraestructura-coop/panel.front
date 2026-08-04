@@ -501,13 +501,12 @@ function EditModal({
 // ── Modal de alta ─────────────────────────────────────────────────────────────
 
 function CreateModal({
-  tipo, estados, config, onSave, onClose, isSaving, saveError,
+  tipo, config, onSave, onClose, isSaving, saveError,
 }: {
-  tipo: TipoProyectoML; estados: EstadoML[]; config: ConfigML | null
+  tipo: TipoProyectoML; config: ConfigML | null
   onSave: (data: ProyectoMLCreate) => void; onClose: () => void
   isSaving: boolean; saveError?: string | null
 }) {
-  const uid = useId()
   const lotesPorHa = config?.lotes_por_ha ?? 25
   const [form, setForm] = useState<Partial<ProyectoMLCreate>>({
     tipo, nombre: '', localidad_nombre: '', ok_gob: 'SI', geo_puntos: [],
@@ -521,7 +520,6 @@ function CreateModal({
 
   const lbl = 'block text-xs font-bold text-gray-500 uppercase mb-1'
   const inp = 'w-full border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
-  const sel = inp
 
   function parseGeoText(text: string) {
     return text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -705,7 +703,6 @@ function ParametrosModal({
 }: {
   estados: EstadoML[]; config: ConfigML | null; onClose: () => void
 }) {
-  const uid = useId()
   const [tab, setTab] = useState<'estados' | 'config'>('config')
   const [configForm, setConfigForm] = useState({
     tipo_cambio: String(config?.tipo_cambio ?? '1450'),
@@ -1148,7 +1145,6 @@ export function MiLugarPage() {
       {createTipo && (
         <CreateModal
           tipo={createTipo}
-          estados={estados}
           config={config}
           onSave={(data) => createMutation.mutate(data)}
           onClose={() => setCreateTipo(null)}
