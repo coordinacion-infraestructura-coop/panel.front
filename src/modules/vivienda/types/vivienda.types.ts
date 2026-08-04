@@ -346,6 +346,171 @@ export interface EstadoHistorialCH {
   created_by: string | null
 }
 
+// ── Mi Lugar ─────────────────────────────────────────────────────────────────────
+
+export type TipoProyectoML = 'exp' | 'muni' | 'prov'
+
+export interface EstadoML {
+  id: number
+  label: string
+  bg: string
+  text_color: string
+  orden: number
+  aplica_juridico: boolean
+  aplica_tecnico: boolean
+  aplica_financiero: boolean
+}
+
+export interface EstadoMLCreate {
+  label: string
+  bg: string
+  text_color: string
+  orden: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
+}
+
+export interface EstadoMLUpdate {
+  label?: string
+  bg?: string
+  text_color?: string
+  orden?: number
+  aplica_juridico?: boolean
+  aplica_tecnico?: boolean
+  aplica_financiero?: boolean
+}
+
+export interface GeoPuntoML {
+  id: string
+  lat: number
+  lng: number
+  orden: number
+}
+
+export interface GeoPuntoMLCreate {
+  lat: number
+  lng: number
+}
+
+export interface ProyectoML {
+  id: string
+  tipo: TipoProyectoML
+  nombre: string
+  localidad_id: string | null
+  localidad_nombre: string
+  departamento: string | null
+  expediente: string | null
+  responsable: string | null
+  superficie: number | null
+  lotes: number | null
+  monto: number | null
+  valor_fiscal: number | null
+  infra_sin_nexos: number | null
+  costo_nexos: number | null
+  convenio_unc: number | null
+  costo_total_infra: number | null
+  ok_gob: string
+  ejuridico: number | null
+  etecnico: number | null
+  efinanciero: number | null
+  estado_general: number | null
+  obs: string | null
+  created_at: string
+  updated_at: string
+  updated_by: string | null
+  geo_puntos: GeoPuntoML[]
+}
+
+export interface ProyectoMLCreate {
+  tipo: TipoProyectoML
+  nombre: string
+  localidad_id?: string | null
+  localidad_nombre: string
+  departamento?: string | null
+  expediente?: string | null
+  responsable?: string | null
+  superficie?: number | null
+  lotes?: number | null
+  monto?: number | null
+  valor_fiscal?: number | null
+  infra_sin_nexos?: number | null
+  costo_nexos?: number | null
+  convenio_unc?: number | null
+  costo_total_infra?: number | null
+  ok_gob?: string
+  ejuridico?: number | null
+  etecnico?: number | null
+  efinanciero?: number | null
+  estado_general?: number | null
+  obs?: string | null
+  geo_puntos?: GeoPuntoMLCreate[]
+}
+
+export interface ProyectoMLUpdate {
+  nombre?: string | null
+  localidad_id?: string | null
+  localidad_nombre?: string | null
+  departamento?: string | null
+  expediente?: string | null
+  responsable?: string | null
+  superficie?: number | null
+  lotes?: number | null
+  monto?: number | null
+  valor_fiscal?: number | null
+  infra_sin_nexos?: number | null
+  costo_nexos?: number | null
+  convenio_unc?: number | null
+  costo_total_infra?: number | null
+  ok_gob?: string | null
+  ejuridico?: number | null
+  etecnico?: number | null
+  efinanciero?: number | null
+  estado_general?: number | null
+  obs?: string | null
+  geo_puntos?: GeoPuntoMLCreate[] | null
+  fecha_cambio?: string | null
+}
+
+export interface EstadoHistorialML {
+  id: string
+  proyecto_id: string
+  campo: string
+  estado_anterior_id: number | null
+  estado_nuevo_id: number
+  created_at: string
+  created_by: string | null
+}
+
+export interface PedidoML {
+  id: string
+  proyecto_id: string
+  descripcion: string
+  fecha_pedido: string
+  created_at: string
+  created_by: string | null
+  created_by_nombre: string | null
+  secretaria: string | null
+}
+
+export interface PedidoMLCreate {
+  descripcion: string
+  fecha_pedido: string
+}
+
+export interface ConfigML {
+  id: number
+  tipo_cambio: number
+  usd_por_lote: number
+  lotes_por_ha: number
+}
+
+export interface ConfigMLUpdate {
+  tipo_cambio?: number | null
+  usd_por_lote?: number | null
+  lotes_por_ha?: number | null
+}
+
 // ── Geo ─────────────────────────────────────────────────────────────────────────
 
 export interface GeoLocalidad {

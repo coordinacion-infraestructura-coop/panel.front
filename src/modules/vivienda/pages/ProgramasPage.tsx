@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { cordonCunetaApi, cordobaHogarApi } from '../api/vivienda.api'
+import { cordonCunetaApi, cordobaHogarApi, miLugarApi } from '../api/vivienda.api'
 
 function fmtMonto(n: number) {
   if (!n) return '—'
@@ -74,6 +74,19 @@ export function ProgramasPage() {
     queryFn: cordobaHogarApi.getPanel,
   })
 
+  const mlExpQuery = useQuery({
+    queryKey: ['ml-proyectos', 'exp'],
+    queryFn: () => miLugarApi.getProyectos({ tipo: 'exp' }),
+  })
+  const mlMuniQuery = useQuery({
+    queryKey: ['ml-proyectos', 'muni'],
+    queryFn: () => miLugarApi.getProyectos({ tipo: 'muni' }),
+  })
+  const mlProvQuery = useQuery({
+    queryKey: ['ml-proyectos', 'prov'],
+    queryFn: () => miLugarApi.getProyectos({ tipo: 'prov' }),
+  })
+
   const cc = ccQuery.data
   const ch = chQuery.data
 
@@ -86,6 +99,16 @@ export function ProgramasPage() {
   const ccEnObraId = cc?.estados.find((e) => e.label.toLowerCase() === 'en obra')?.id
   const ccEnObra = ccEnObraId != null ? ccMunicipios.filter((m) => m.estado_general === ccEnObraId).length : 0
 
+  const mlExp = mlExpQuery.data ?? []
+  const mlMuni = mlMuniQuery.data ?? []
+  const mlProv = mlProvQuery.data ?? []
+  const mlAll = [...mlExp, ...mlMuni, ...mlProv]
+  const mlTotalLotes = mlAll.reduce((acc, p) => acc + (p.lotes ?? 0), 0)
+  const mlConExpediente = mlAll.filter((p) => p.expediente).length
+  const mlMonto = mlAll.reduce((acc, p) => acc + (p.monto ?? 0), 0)
+  const mlIsLoading = mlExpQuery.isLoading || mlMuniQuery.isLoading || mlProvQuery.isLoading
+  const mlIsError = !!mlExpQuery.error || !!mlMuniQuery.error || !!mlProvQuery.error
+
   const chLocalidades = ch?.localidades ?? []
   const chTotalCasas = chLocalidades.reduce((acc, l) => acc + (l.cantidad_casas ?? 0), 0)
   const chConOkGob = chLocalidades.filter((l) => l.ok_gob === 'SI').length
@@ -95,6 +118,20 @@ export function ProgramasPage() {
   const chEnTC = chTcId != null ? chLocalidades.filter((l) => l.estado_general === chTcId).length : 0
 
   const cards: ProgramCard[] = [
+    {
+      nombre: 'Mi Lugar — Adquisición de Tierras',
+      descripcion: 'Expropiaciones, convenios municipales y lotes provinciales',
+      tag: 'Tierra y hábitat',
+      to: '/vivienda/mi-lugar',
+      loading: mlIsLoading,
+      error: mlIsError,
+      kpis: [
+        { label: 'Proyectos totales', value: mlAll.length, sub: `Exp: ${mlExp.length} | Muni: ${mlMuni.length} | Prov: ${mlProv.length}` },
+        { label: 'Lotes totales', value: mlTotalLotes.toLocaleString('es-AR'), sub: 'sumados los 3 tipos' },
+        { label: 'Con expediente', value: mlConExpediente, sub: `de ${mlAll.length} proyectos` },
+        { label: 'Monto comprometido', value: fmtMonto(mlMonto) },
+      ],
+    },
     {
       nombre: 'Córdoba Hogar',
       descripcion: 'Programa habitacional — versión provisoria, sujeto a modificaciones',

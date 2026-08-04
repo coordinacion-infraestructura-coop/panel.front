@@ -11,6 +11,7 @@ import { BeneficiarioFormPage } from './modules/vivienda/pages/BeneficiarioFormP
 import { ExpedientesListPage } from './modules/vivienda/pages/ExpedientesListPage'
 import { CordonCunetaPage } from './modules/vivienda/pages/CordonCunetaPage'
 import { CordobaHogarPage } from './modules/vivienda/pages/CordobaHogarPage'
+import { MiLugarPage } from './modules/vivienda/pages/MiLugarPage'
 import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
@@ -52,6 +53,7 @@ export default function App() {
                 path="vivienda/cordoba-hogar/informe"
                 element={<ProgramaInformePage programa="cordoba_hogar" />}
               />
+              <Route path="vivienda/mi-lugar" element={<MiLugarPage />} />
               <Route path="privada/gestiones" element={<GestionesListPage />} />
               <Route path="privada/tablero" element={<TableroPage />} />
               <Route

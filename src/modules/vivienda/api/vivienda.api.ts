@@ -29,6 +29,17 @@ import type {
   EstadoHistorialCH,
   GeoLocalidad,
   InformeSnapshot,
+  ProyectoML,
+  ProyectoMLCreate,
+  ProyectoMLUpdate,
+  EstadoML,
+  EstadoMLCreate,
+  EstadoMLUpdate,
+  EstadoHistorialML,
+  PedidoML,
+  PedidoMLCreate,
+  ConfigML,
+  ConfigMLUpdate,
 } from '../types/vivienda.types'
 
 const BASE = '/api/v1/vivienda'
@@ -188,4 +199,53 @@ export const cordobaHogarApi = {
 
   actualizarInforme: () =>
     apiClient.post<InformeSnapshot>(`${BASE}/cordoba-hogar/informe/actualizar`).then((r) => r.data),
+}
+
+export const miLugarApi = {
+  // Proyectos
+  getProyectos: (params?: { tipo?: string; localidad_nombre?: string; estado_id?: number }) =>
+    apiClient.get<ProyectoML[]>(`${BASE}/mi-lugar/proyectos`, { params }).then((r) => r.data),
+
+  createProyecto: (data: ProyectoMLCreate) =>
+    apiClient.post<ProyectoML>(`${BASE}/mi-lugar/proyectos`, data).then((r) => r.data),
+
+  updateProyecto: (id: string, data: ProyectoMLUpdate) =>
+    apiClient.patch<ProyectoML>(`${BASE}/mi-lugar/proyectos/${id}`, data).then((r) => r.data),
+
+  deleteProyecto: (id: string) =>
+    apiClient.delete(`${BASE}/mi-lugar/proyectos/${id}`).then((r) => r.data),
+
+  // Historial
+  getHistorial: (proyectoId: string) =>
+    apiClient.get<EstadoHistorialML[]>(`${BASE}/mi-lugar/proyectos/${proyectoId}/historial`).then((r) => r.data),
+
+  // Pedidos / Comunicaciones
+  getPedidos: (proyectoId: string) =>
+    apiClient.get<PedidoML[]>(`${BASE}/mi-lugar/proyectos/${proyectoId}/pedidos`).then((r) => r.data),
+
+  createPedido: (proyectoId: string, data: PedidoMLCreate) =>
+    apiClient.post<PedidoML>(`${BASE}/mi-lugar/proyectos/${proyectoId}/pedidos`, data).then((r) => r.data),
+
+  deletePedido: (proyectoId: string, pedidoId: string) =>
+    apiClient.delete(`${BASE}/mi-lugar/proyectos/${proyectoId}/pedidos/${pedidoId}`).then((r) => r.data),
+
+  // Estados (catálogo)
+  getEstados: () =>
+    apiClient.get<EstadoML[]>(`${BASE}/mi-lugar/estados`).then((r) => r.data),
+
+  createEstado: (data: EstadoMLCreate) =>
+    apiClient.post<EstadoML>(`${BASE}/mi-lugar/estados`, data).then((r) => r.data),
+
+  updateEstado: (id: number, data: EstadoMLUpdate) =>
+    apiClient.patch<EstadoML>(`${BASE}/mi-lugar/estados/${id}`, data).then((r) => r.data),
+
+  deleteEstado: (id: number) =>
+    apiClient.delete(`${BASE}/mi-lugar/estados/${id}`).then((r) => r.data),
+
+  // Configuración
+  getConfig: () =>
+    apiClient.get<ConfigML>(`${BASE}/mi-lugar-config`).then((r) => r.data),
+
+  updateConfig: (data: ConfigMLUpdate) =>
+    apiClient.patch<ConfigML>(`${BASE}/mi-lugar-config`, data).then((r) => r.data),
 }

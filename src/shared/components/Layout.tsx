@@ -12,6 +12,7 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
     { to: '/vivienda/programas', label: 'Tablero' },
     { to: '/vivienda/cordoba-hogar', label: 'Córdoba Hogar' },
     { to: '/vivienda/cordon-cuneta', label: 'Cordón Cuneta' },
+    { to: '/vivienda/mi-lugar', label: 'Mi Lugar' },
     // { to: '/vivienda/beneficiarios', label: 'Beneficiarios' }, // oculto — módulo en desarrollo
     // { to: '/vivienda/expedientes', label: 'Expedientes' },     // oculto — módulo en desarrollo
   ],
