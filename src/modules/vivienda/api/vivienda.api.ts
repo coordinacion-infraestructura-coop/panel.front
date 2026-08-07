@@ -248,4 +248,8 @@ export const miLugarApi = {
 
   updateConfig: (data: ConfigMLUpdate) =>
     apiClient.patch<ConfigML>(`${BASE}/mi-lugar-config`, data).then((r) => r.data),
+
+  // Geo localidades (reutiliza la tabla compartida viv_geo_localidades)
+  getGeo: () =>
+    apiClient.get<GeoLocalidad[]>(`${BASE}/cordon-cuneta/geo`).then((r) => r.data),
 }

@@ -1,11 +1,13 @@
 import { useState, useMemo, useId } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import * as XLSX from 'xlsx'
 import { miLugarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { MapaDualPuntos } from '../../../shared/components/informe/MapaDualPuntos'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
-  EstadoMLCreate, EstadoMLUpdate, GeoPuntoMLCreate,
+  EstadoMLCreate, EstadoMLUpdate, GeoPuntoMLCreate, GeoLocalidad, PuntoInforme,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ const CAMPO_LABELS: Record<string, string> = {
 
 // ── Sticky column styles ──────────────────────────────────────────────────────
 
-const S1_HEAD = { position: 'sticky' as const, left: 0, zIndex: 3, background: 'var(--color-gov-navy)', minWidth: 36, width: 36 }
+const S1_HEAD = { position: 'sticky' as const, left: 0, zIndex: 3, background: '#101f2d', minWidth: 36, width: 36 }
 const S2_HEAD = { position: 'sticky' as const, left: 36, zIndex: 3, background: 'var(--color-gov-navy)', minWidth: 170 }
 const S1_BODY = { position: 'sticky' as const, left: 0, zIndex: 2, background: '#f8fafc', minWidth: 36, width: 36 }
 const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: '#f8fafc', minWidth: 170, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.08)' }
@@ -78,6 +80,41 @@ function avanceColor(pct: number) {
   if (pct < 40) return '#f59e0b'
   if (pct < 80) return 'var(--color-gov-blue)'
   return '#22c55e'
+}
+
+function estadoLabel(id: number | null, estados: EstadoML[]): string {
+  return estados.find((e) => e.id === id)?.label ?? '—'
+}
+
+function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProyectoML) {
+  const rows = proyectos.map((p, i) => ({
+    '#': i + 1,
+    'Nombre': p.nombre,
+    'Localidad': p.localidad_nombre,
+    'Departamento': p.departamento ?? '',
+    'Expediente': p.expediente ?? '',
+    'Responsable': p.responsable ?? '',
+    'Superficie (Ha)': p.superficie ?? '',
+    'Lotes': p.lotes ?? '',
+    'Monto ($)': p.monto ?? '',
+    'Valor Fiscal ($)': p.valor_fiscal ?? '',
+    'INFRA s/Nexos ($)': p.infra_sin_nexos ?? '',
+    'Costo Nexos ($)': p.costo_nexos ?? '',
+    'Convenio UNC ($)': p.convenio_unc ?? '',
+    'Costo Total Infra ($)': p.costo_total_infra ?? '',
+    'E. Jurídico': estadoLabel(p.ejuridico, estados),
+    'E. Técnico': estadoLabel(p.etecnico, estados),
+    'E. Presup.': estadoLabel(p.efinanciero, estados),
+    'E. General': estadoLabel(p.estado_general, estados),
+    'Avance (%)': avancePct(p, estados),
+    'OK Gobernación': p.ok_gob,
+    'Coordenadas': p.geo_puntos.map((g) => `${g.lat},${g.lng}`).join(' | '),
+    'Observaciones': p.obs ?? '',
+  }))
+  const ws = XLSX.utils.json_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, TIPO_CONFIG[tipo].label.slice(0, 31))
+  XLSX.writeFile(wb, `mi-lugar-${tipo}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
 // ── SVG icons ─────────────────────────────────────────────────────────────────
@@ -337,6 +374,16 @@ function EditModal({
   const uid = useId()
   const today = new Date().toISOString().split('T')[0]
   const lotesPorHa = Number(config?.lotes_por_ha ?? 25)
+  const [deptoGeo, setDeptoGeo] = useState(proyecto.departamento ?? '')
+
+  const geoQuery = useQuery({ queryKey: ['ml-geo'], queryFn: miLugarApi.getGeo, staleTime: 15 * 60_000 })
+  const geoData: GeoLocalidad[] = geoQuery.data ?? []
+  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort(), [geoData])
+  const localidadesFiltradas = useMemo(
+    () => geoData.filter((g) => !deptoGeo || g.departamento === deptoGeo),
+    [geoData, deptoGeo]
+  )
+
   const [form, setForm] = useState<ProyectoMLUpdate>({
     nombre: proyecto.nombre,
     localidad_nombre: proyecto.localidad_nombre,
@@ -394,12 +441,29 @@ function EditModal({
               <input id={`${uid}-nom`} className={inp} value={form.nombre ?? ''} onChange={(e) => set('nombre', e.target.value)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
-              <input id={`${uid}-loc`} className={inp} value={form.localidad_nombre ?? ''} onChange={(e) => set('localidad_nombre', e.target.value)} />
+              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
+              <select id={`${uid}-dep`} className={inp} value={deptoGeo}
+                onChange={(e) => { setDeptoGeo(e.target.value); set('departamento', e.target.value || null); set('localidad_nombre', null); set('localidad_id', null) }}>
+                <option value="">— Seleccionar —</option>
+                {deptosGeo.map((d) => <option key={d}>{d}</option>)}
+              </select>
             </div>
             <div>
-              <label htmlFor={`${uid}-dep`} className={lbl}>Departamento</label>
-              <input id={`${uid}-dep`} className={inp} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value || null)} />
+              <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
+              <select id={`${uid}-loc`} className={inp}
+                value={geoData.find((g) => g.localidad === form.localidad_nombre && g.departamento === deptoGeo)?.id_geo ?? ''}
+                onChange={(e) => {
+                  const loc = geoData.find((g) => g.id_geo === e.target.value)
+                  if (!loc) return
+                  set('localidad_id', loc.id_geo)
+                  set('localidad_nombre', loc.localidad)
+                  set('departamento', loc.departamento)
+                  setDeptoGeo(loc.departamento)
+                }}>
+                <option value="">— Seleccionar —</option>
+                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
+              </select>
+              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Actual: <b>{form.localidad_nombre}</b></p>}
             </div>
             <div>
               <label htmlFor={`${uid}-exp`} className={lbl}>Expediente</label>
@@ -559,6 +623,27 @@ function AgregarProyectoModal({
   })
   const [geoText, setGeoText] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [deptoGeo, setDeptoGeo] = useState('')
+
+  const geoQuery = useQuery({ queryKey: ['ml-geo'], queryFn: miLugarApi.getGeo, staleTime: 15 * 60_000 })
+  const geoData: GeoLocalidad[] = geoQuery.data ?? []
+  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort(), [geoData])
+  const localidadesFiltradas = useMemo(
+    () => geoData.filter((g) => !deptoGeo || g.departamento === deptoGeo),
+    [geoData, deptoGeo]
+  )
+
+  function selectLocalidad(idGeo: string) {
+    const loc = geoData.find((g) => g.id_geo === idGeo)
+    if (!loc) return
+    setForm((p) => ({
+      ...p,
+      localidad_id: loc.id_geo,
+      localidad_nombre: loc.localidad,
+      departamento: loc.departamento,
+    }))
+    setDeptoGeo(loc.departamento)
+  }
 
   const createMut = useMutation({
     mutationFn: (data: ProyectoMLCreate) => miLugarApi.createProyecto(data),
@@ -627,12 +712,19 @@ function AgregarProyectoModal({
               <input className={inp} value={form.nombre ?? ''} onChange={(e) => set('nombre', e.target.value)} autoFocus />
             </div>
             <div>
-              <label className={lbl}>Localidad *</label>
-              <input className={inp} value={form.localidad_nombre ?? ''} onChange={(e) => set('localidad_nombre', e.target.value)} />
+              <label className={lbl}>Departamento</label>
+              <select className={inp} value={deptoGeo} onChange={(e) => { setDeptoGeo(e.target.value); setForm((p) => ({ ...p, departamento: e.target.value || undefined, localidad_nombre: '', localidad_id: undefined })) }}>
+                <option value="">— Seleccionar —</option>
+                {deptosGeo.map((d) => <option key={d}>{d}</option>)}
+              </select>
             </div>
             <div>
-              <label className={lbl}>Departamento</label>
-              <input className={inp} value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value || undefined)} />
+              <label className={lbl}>Localidad *</label>
+              <select className={inp} value={form.localidad_id ?? ''} onChange={(e) => selectLocalidad(e.target.value)}>
+                <option value="">— Seleccionar —</option>
+                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
+              </select>
+              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Seleccionada: <b>{form.localidad_nombre}</b></p>}
             </div>
             <div>
               <label className={lbl}>Expediente</label>
@@ -931,6 +1023,143 @@ function GestionarParametrosModal({
   )
 }
 
+// ── Modal de informe ──────────────────────────────────────────────────────────
+
+function InformeMLModal({
+  allExp, allMuni, allProv, estados, onClose,
+}: {
+  allExp: ProyectoML[]
+  allMuni: ProyectoML[]
+  allProv: ProyectoML[]
+  estados: EstadoML[]
+  onClose: () => void
+}) {
+  const uid = useId()
+  const allProyectos = [...allExp, ...allMuni, ...allProv]
+
+  // Construir puntos para el mapa (un PuntoInforme por geo_punto)
+  const puntosMap: PuntoInforme[] = allProyectos.flatMap((p) =>
+    p.geo_puntos.map((geo) => {
+      const eg = estados.find((e) => e.id === p.estado_general)
+      return {
+        id: `${p.id}-${geo.id}`,
+        nombre: p.nombre,
+        departamento: p.departamento,
+        lat: geo.lat,
+        lon: geo.lng,
+        estado_general_id: p.estado_general,
+        estado_label: TIPO_CONFIG[p.tipo].label,
+        estado_bg: TIPO_CONFIG[p.tipo].color,
+        estado_text_color: '#fff',
+        expediente: p.expediente,
+        monto: p.monto != null ? Number(p.monto) : null,
+        // extra data en descripción del popup (estado real)
+        ...(eg ? { estado_label: `${TIPO_CONFIG[p.tipo].label} · ${eg.label}`, estado_bg: eg.bg, estado_text_color: eg.text_color } : {}),
+      }
+    })
+  )
+
+  const sinCoordenadas = allProyectos.filter((p) => p.geo_puntos.length === 0).length
+  const totalLotes = allProyectos.reduce((s, p) => s + (p.lotes ?? 0), 0)
+  const totalMonto = allProyectos.reduce((s, p) => s + (p.monto ?? 0), 0)
+
+  // Distribución por estado_general
+  const porEstado = useMemo(() => {
+    const map = new Map<string, { label: string; bg: string; text: string; count: number }>()
+    for (const p of allProyectos) {
+      const eg = estados.find((e) => e.id === p.estado_general)
+      const key = eg ? String(eg.id) : 'sin'
+      if (!map.has(key)) map.set(key, { label: eg?.label ?? 'Sin estado', bg: eg?.bg ?? '#e2e8f0', text: eg?.text_color ?? '#374151', count: 0 })
+      map.get(key)!.count++
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count)
+  }, [allProyectos, estados])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
+      <div className="bg-white rounded-lg w-[900px] max-w-[97vw] max-h-[93vh] overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="px-5 py-3.5 flex items-center gap-3 sticky top-0 z-10 rounded-t-lg" style={{ background: 'var(--color-gov-navy)' }}>
+          <div className="flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-cyan mb-0.5">Mi Lugar — Adquisición de Tierras</p>
+            <h3 id={`${uid}-t`} className="text-white font-semibold text-sm">Informe de situación</h3>
+          </div>
+          <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Totales */}
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Expropiaciones', value: allExp.length, sub: `${allExp.reduce((s,p)=>s+(p.lotes??0),0).toLocaleString('es-AR')} lotes`, color: TIPO_CONFIG.exp.color },
+              { label: 'Conv. Municipios', value: allMuni.length, sub: `${allMuni.reduce((s,p)=>s+(p.lotes??0),0).toLocaleString('es-AR')} lotes`, color: TIPO_CONFIG.muni.color },
+              { label: 'Lotes Provinciales', value: allProv.length, sub: `${allProv.reduce((s,p)=>s+(p.lotes??0),0).toLocaleString('es-AR')} lotes`, color: TIPO_CONFIG.prov.color },
+              { label: 'Total proyectos', value: allProyectos.length, sub: `${totalLotes.toLocaleString('es-AR')} lotes totales`, color: 'var(--color-gov-navy)' },
+              { label: 'Monto total', value: totalMonto > 0 ? fmtMontoResumen(totalMonto) : '—', sub: 'comprometido', color: '#22c55e' },
+              { label: 'Sin coordenadas', value: sinCoordenadas, sub: 'proyectos sin geo', color: '#94a3b8' },
+            ].map((c) => (
+              <div key={c.label} className="bg-white rounded-md px-4 py-3 min-w-[120px] shadow-sm border border-slate-100" style={{ borderTop: `4px solid ${c.color}` }}>
+                <div className="text-2xl font-bold leading-none" style={{ color: c.color }}>{typeof c.value === 'number' ? c.value : c.value}</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mt-1">{c.label}</div>
+                {c.sub && <div className="text-[10px] text-gray-400 mt-0.5">{c.sub}</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* Mapa */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Mapa de puntos de lotes</h4>
+              <div className="flex gap-3 flex-wrap">
+                {(['exp', 'muni', 'prov'] as TipoProyectoML[]).map((t) => (
+                  <span key={t} className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: TIPO_CONFIG[t].color }} aria-hidden="true" />
+                    {TIPO_CONFIG[t].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-md overflow-hidden border border-slate-200">
+              {puntosMap.length > 0
+                ? <MapaDualPuntos puntos={puntosMap} height={420} centerLat={-31.5} centerLon={-64.5} zoom={6} />
+                : <div className="h-64 flex items-center justify-center text-sm text-gray-400 bg-slate-50">Ningún proyecto tiene coordenadas geo cargadas.</div>
+              }
+            </div>
+            {sinCoordenadas > 0 && (
+              <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                {sinCoordenadas} proyecto{sinCoordenadas !== 1 ? 's' : ''} no tienen coordenadas registradas y no aparecen en el mapa.
+              </p>
+            )}
+          </div>
+
+          {/* Distribución por estado general */}
+          {porEstado.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-2">Distribución por estado general</h4>
+              <div className="flex flex-col gap-1.5">
+                {porEstado.map((e) => (
+                  <div key={e.label} className="flex items-center gap-3">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold w-48 text-center truncate" style={{ background: e.bg, color: e.text }}>{e.label}</span>
+                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.round((e.count / allProyectos.length) * 100)}%`, background: e.bg }} />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-700 w-6 text-right">{e.count}</span>
+                    <span className="text-xs text-gray-400 w-9">{Math.round((e.count / allProyectos.length) * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
+          <button onClick={onClose} className="px-4 py-1.5 text-sm border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export function MiLugarPage() {
@@ -952,6 +1181,7 @@ export function MiLugarPage() {
   const [detailTarget, setDetailTarget] = useState<ProyectoML | null>(null)
   const [showParams, setShowParams] = useState(false)
   const [showAgregar, setShowAgregar] = useState(false)
+  const [showInforme, setShowInforme] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [sortCol, setSortCol] = useState('')
@@ -1033,7 +1263,7 @@ export function MiLugarPage() {
 
   const hasFilters = !!(search || deptoFilter || egFilter)
   const tieneFinanciero = tab === 'exp' || tab === 'prov'
-  const { color: tabColor, label: tabLabel } = TIPO_CONFIG[tab]
+  const { label: tabLabel } = TIPO_CONFIG[tab]
 
   const th = `px-2.5 py-2 text-left font-semibold whitespace-nowrap select-none cursor-pointer hover:bg-white/10`
   const thFixed = `px-2.5 py-2 text-left font-semibold whitespace-nowrap select-none`
@@ -1076,7 +1306,19 @@ export function MiLugarPage() {
       </div>
 
       {/* Barra de acciones */}
-      <div className="flex items-center gap-2 mt-3 mb-2 justify-end">
+      <div className="flex items-center gap-2 mt-3 mb-2">
+        <button onClick={() => setShowInforme(true)}
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-navy text-gov-navy hover:bg-slate-50 transition-colors">
+          📊 Ver informe
+        </button>
+        <button
+          onClick={() => exportXlsx(sorted, estados, tab)}
+          disabled={!sorted.length}
+          className="px-3 py-1.5 text-xs font-semibold rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+          title={`Exportar ${sorted.length} registros a Excel`}>
+          ↓ Exportar ({sorted.length})
+        </button>
+        <div className="flex-1" />
         {canEdit && (
           <button onClick={() => setShowAgregar(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-gov-cyan text-gov-cyan hover:bg-sky-50 transition-colors">
@@ -1142,7 +1384,7 @@ export function MiLugarPage() {
         <div className="overflow-x-auto" role="region" aria-label="Tabla de proyectos Mi Lugar">
           <table className="w-full border-collapse" style={{ fontSize: '12px' }}>
             <thead>
-              <tr style={{ background: tabColor, color: '#fff' }}>
+              <tr style={{ background: 'var(--color-gov-navy)', color: '#fff' }}>
                 <th scope="col" style={S1_HEAD} className={thFixed + ' cursor-pointer hover:bg-white/10'} onClick={() => handleSort('nombre')}>
                   <span className="flex items-center gap-0.5">#</span>
                 </th>
@@ -1168,11 +1410,11 @@ export function MiLugarPage() {
                   <span className="flex items-center gap-0.5">Monto {sortIndicator('monto')}</span>
                 </th>
                 {tieneFinanciero && <>
-                  {tab === 'exp' && <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(0,0,0,0.15)' }}>Valor Fiscal</th>}
-                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(0,0,0,0.15)' }}>Infra s/Nexos</th>
-                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(0,0,0,0.15)' }}>Nexos</th>
-                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(0,0,0,0.15)' }}>UNC</th>
-                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(0,0,0,0.15)' }}>Costo Total</th>
+                  {tab === 'exp' && <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Valor Fiscal</th>}
+                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Infra s/Nexos</th>
+                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Nexos</th>
+                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>UNC</th>
+                  <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Costo Total</th>
                 </>}
                 <th scope="col" className={th} onClick={() => handleSort('avance')} style={{ fontSize: '11px' }}>
                   <span className="flex items-center gap-0.5">Avance {sortIndicator('avance')}</span>
@@ -1299,6 +1541,15 @@ export function MiLugarPage() {
           tipo={tab}
           config={config}
           onClose={() => setShowAgregar(false)}
+        />
+      )}
+      {showInforme && (
+        <InformeMLModal
+          allExp={allExp}
+          allMuni={allMuni}
+          allProv={allProv}
+          estados={estados}
+          onClose={() => setShowInforme(false)}
         />
       )}
     </div>
