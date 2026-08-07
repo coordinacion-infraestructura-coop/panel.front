@@ -356,6 +356,7 @@ export interface EstadoML {
   bg: string
   text_color: string
   orden: number
+  tipo: string
   aplica_juridico: boolean
   aplica_tecnico: boolean
   aplica_financiero: boolean
@@ -366,6 +367,7 @@ export interface EstadoMLCreate {
   bg: string
   text_color: string
   orden: number
+  tipo?: string
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
@@ -503,6 +505,7 @@ export interface ConfigML {
   tipo_cambio: number
   usd_por_lote: number
   lotes_por_ha: number
+  monto_por_lote_muni: number
 }
 
 export interface ConfigMLUpdate {

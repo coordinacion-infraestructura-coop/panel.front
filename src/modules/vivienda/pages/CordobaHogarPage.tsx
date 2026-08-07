@@ -178,7 +178,7 @@ function EditModal({
                     }}>
                     <option value="">— Todos los departamentos —</option>
                     {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
-                      <option key={d}>{d}</option>
+                      <option key={d} value={d}>{d.toUpperCase()}</option>
                     ))}
                   </select>
                 )}
@@ -197,7 +197,7 @@ function EditModal({
               >
                 <option value="">— Seleccioná una localidad —</option>
                 {geoList.filter((g) => g.departamento === deptoCascade).map((g) => (
-                  <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>
+                  <option key={g.id_geo} value={g.id_geo}>{g.localidad.toUpperCase()}</option>
                 ))}
               </select>
             </div>
@@ -430,8 +430,8 @@ function DetailPanel({
         <div className="px-5 py-4 flex items-start justify-between border-b border-slate-200" style={{ background: 'var(--color-gov-navy)' }}>
           <div>
             <div className="text-[10px] font-semibold tracking-widest mb-0.5 text-gov-cyan uppercase">Córdoba Hogar</div>
-            <h3 id={`${uid}-t`} className="text-white font-semibold text-sm">{localidad.localidad}</h3>
-            {localidad.departamento && <p className="text-xs mt-0.5 text-white/60">{localidad.departamento}</p>}
+            <h3 id={`${uid}-t`} className="text-white font-semibold text-sm uppercase">{localidad.localidad}</h3>
+            {localidad.departamento && <p className="text-xs mt-0.5 text-white/60 uppercase">{localidad.departamento}</p>}
           </div>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none ml-4 mt-0.5 transition-colors" aria-label="Cerrar">✕</button>
         </div>
@@ -859,7 +859,7 @@ function AgregarLocalidadModal({
                   >
                     <option value="">— Seleccioná un departamento —</option>
                     {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
-                      <option key={d}>{d}</option>
+                      <option key={d} value={d}>{d.toUpperCase()}</option>
                     ))}
                   </select>
                 )}
@@ -878,7 +878,7 @@ function AgregarLocalidadModal({
               >
                 <option value="">— Seleccioná una localidad —</option>
                 {geoList.filter((g) => g.departamento === form.departamento).map((g) => (
-                  <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>
+                  <option key={g.id_geo} value={g.id_geo}>{g.localidad.toUpperCase()}</option>
                 ))}
               </select>
             </div>
@@ -1203,7 +1203,7 @@ export function CordobaHogarPage() {
           <label htmlFor={deptoId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Depto.</label>
           <select id={deptoId} value={deptoFilter} onChange={(e) => setDeptoFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {deptos.map((d) => <option key={d}>{d}</option>)}
+            {deptos.map((d) => <option key={d} value={d}>{d.toUpperCase()}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1288,7 +1288,7 @@ export function CordobaHogarPage() {
                     <td style={S2_BODY} className="p-0 font-bold">
                       <button
                         onClick={() => setDetailTarget(l)}
-                        className="w-full px-2.5 py-1.5 text-left font-bold hover:text-gov-cyan transition-colors group"
+                        className="w-full px-2.5 py-1.5 text-left font-bold hover:text-gov-cyan transition-colors group uppercase"
                         title="Ver historial"
                       >
                         {l.localidad}
@@ -1297,7 +1297,7 @@ export function CordobaHogarPage() {
                     </td>
                     <td className="px-2.5 py-1.5">
                       {l.departamento && (
-                        <span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap" style={{ background: '#E8EAF6', color: '#283593' }}>{l.departamento}</span>
+                        <span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap uppercase" style={{ background: '#E8EAF6', color: '#283593' }}>{l.departamento}</span>
                       )}
                     </td>
                     <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtFecha(l.fecha_anuncio)}</td>

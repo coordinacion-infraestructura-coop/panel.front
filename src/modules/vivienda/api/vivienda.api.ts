@@ -230,8 +230,8 @@ export const miLugarApi = {
     apiClient.delete(`${BASE}/mi-lugar/proyectos/${proyectoId}/pedidos/${pedidoId}`).then((r) => r.data),
 
   // Estados (catálogo)
-  getEstados: () =>
-    apiClient.get<EstadoML[]>(`${BASE}/mi-lugar/estados`).then((r) => r.data),
+  getEstados: (params?: { tipo?: string }) =>
+    apiClient.get<EstadoML[]>(`${BASE}/mi-lugar/estados`, { params }).then((r) => r.data),
 
   createEstado: (data: EstadoMLCreate) =>
     apiClient.post<EstadoML>(`${BASE}/mi-lugar/estados`, data).then((r) => r.data),

@@ -67,10 +67,11 @@ const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: 
 // ── avance ────────────────────────────────────────────────────────────────────
 
 function avancePct(p: ProyectoML, estados: EstadoML[]) {
-  const maxPos = Math.max(estados.length - 1, 1)
+  const tipoEstados = estados.filter((e) => e.tipo === p.tipo)
+  const maxPos = Math.max(tipoEstados.length - 1, 1)
   const pos = (id: number | null) => {
     if (!id) return 0
-    const i = estados.findIndex((e) => e.id === id)
+    const i = tipoEstados.findIndex((e) => e.id === id)
     return i < 0 ? 0 : i
   }
   return Math.round(((pos(p.ejuridico) + pos(p.etecnico) + pos(p.efinanciero)) / (maxPos * 3)) * 100)
@@ -87,6 +88,7 @@ function estadoLabel(id: number | null, estados: EstadoML[]): string {
 }
 
 function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProyectoML) {
+  const tipoEstados = estados.filter((e) => e.tipo === tipo)
   const rows = proyectos.map((p, i) => ({
     '#': i + 1,
     'Nombre': p.nombre,
@@ -102,11 +104,11 @@ function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProy
     'Costo Nexos ($)': p.costo_nexos ?? '',
     'Convenio UNC ($)': p.convenio_unc ?? '',
     'Costo Total Infra ($)': p.costo_total_infra ?? '',
-    'E. Jurídico': estadoLabel(p.ejuridico, estados),
-    'E. Técnico': estadoLabel(p.etecnico, estados),
-    'E. Presup.': estadoLabel(p.efinanciero, estados),
-    'E. General': estadoLabel(p.estado_general, estados),
-    'Avance (%)': avancePct(p, estados),
+    'E. Jurídico': estadoLabel(p.ejuridico, tipoEstados),
+    'E. Técnico': estadoLabel(p.etecnico, tipoEstados),
+    'E. Presup.': estadoLabel(p.efinanciero, tipoEstados),
+    'E. General': estadoLabel(p.estado_general, tipoEstados),
+    'Avance (%)': avancePct(p, tipoEstados),
     'OK Gobernación': p.ok_gob,
     'Coordenadas': p.geo_puntos.map((g) => `${g.lat},${g.lng}`).join(' | '),
     'Observaciones': p.obs ?? '',
@@ -275,7 +277,7 @@ function DetailPanel({
           <div>
             <div className="text-[10px] font-semibold tracking-widest mb-0.5 text-gov-cyan uppercase">Mi Lugar — {tipoLabel}</div>
             <h3 id={`${uid}-t`} className="text-white font-semibold text-sm">{proyecto.nombre}</h3>
-            {proyecto.localidad_nombre && <p className="text-xs mt-0.5 text-white/60">{proyecto.localidad_nombre}{proyecto.departamento ? ` · ${proyecto.departamento}` : ''}</p>}
+            {proyecto.localidad_nombre && <p className="text-xs mt-0.5 text-white/60 uppercase">{proyecto.localidad_nombre}{proyecto.departamento ? ` · ${proyecto.departamento}` : ''}</p>}
           </div>
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none ml-4 mt-0.5 transition-colors" aria-label="Cerrar">✕</button>
         </div>
@@ -374,6 +376,7 @@ function EditModal({
   const uid = useId()
   const today = new Date().toISOString().split('T')[0]
   const lotesPorHa = Number(config?.lotes_por_ha ?? 25)
+  const montoPorLoteMuni = config?.monto_por_lote_muni != null ? Number(config.monto_por_lote_muni) : null
   const [deptoGeo, setDeptoGeo] = useState(proyecto.departamento ?? '')
 
   const geoQuery = useQuery({ queryKey: ['ml-geo'], queryFn: miLugarApi.getGeo, staleTime: 15 * 60_000 })
@@ -445,7 +448,7 @@ function EditModal({
               <select id={`${uid}-dep`} className={inp} value={deptoGeo}
                 onChange={(e) => { setDeptoGeo(e.target.value); set('departamento', e.target.value || null); set('localidad_nombre', null); set('localidad_id', null) }}>
                 <option value="">— Seleccionar —</option>
-                {deptosGeo.map((d) => <option key={d}>{d}</option>)}
+                {deptosGeo.map((d) => <option key={d} value={d}>{d.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
@@ -461,9 +464,9 @@ function EditModal({
                   setDeptoGeo(loc.departamento)
                 }}>
                 <option value="">— Seleccionar —</option>
-                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
+                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad.toUpperCase()}</option>)}
               </select>
-              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Actual: <b>{form.localidad_nombre}</b></p>}
+              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Actual: <b className="uppercase">{form.localidad_nombre}</b></p>}
             </div>
             <div>
               <label htmlFor={`${uid}-exp`} className={lbl}>Expediente</label>
@@ -502,14 +505,25 @@ function EditModal({
                 {lotesMatchAuto && <span className="ml-2 text-[10px] text-cyan-600 font-medium normal-case">= {form.superficie} Ha × {lotesPorHa}</span>}
               </label>
               <input id={`${uid}-lot`} type="number" className={inp}
-                value={form.lotes ?? ''} onChange={(e) => set('lotes', e.target.value === '' ? null : parseInt(e.target.value))} />
+                value={form.lotes ?? ''} onChange={(e) => {
+                  const v = e.target.value === '' ? null : parseInt(e.target.value)
+                  set('lotes', v)
+                  if (proyecto.tipo === 'muni' && v != null && montoPorLoteMuni != null) {
+                    set('monto', v * montoPorLoteMuni)
+                  }
+                }} />
             </div>
           </div>
 
           {/* Financiero */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor={`${uid}-monto`} className={lbl}>Monto ($)</label>
+              <label htmlFor={`${uid}-monto`} className={lbl}>
+                Monto ($)
+                {proyecto.tipo === 'muni' && form.lotes != null && montoPorLoteMuni != null && (
+                  <span className="ml-2 text-[10px] text-cyan-600 font-medium normal-case">= {form.lotes} lotes × ${montoPorLoteMuni.toLocaleString('es-AR')}</span>
+                )}
+              </label>
               <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value === '' ? null : parseFloat(e.target.value))} />
             </div>
             {tieneFinanciero && <>
@@ -618,6 +632,7 @@ function AgregarProyectoModal({
   const uid = useId()
   const qc = useQueryClient()
   const lotesPorHa = Number(config?.lotes_por_ha ?? 25)
+  const montoPorLoteMuni = config?.monto_por_lote_muni != null ? Number(config.monto_por_lote_muni) : null
   const [form, setForm] = useState<Partial<ProyectoMLCreate>>({
     tipo, nombre: '', localidad_nombre: '', ok_gob: 'SI',
   })
@@ -715,16 +730,16 @@ function AgregarProyectoModal({
               <label className={lbl}>Departamento</label>
               <select className={inp} value={deptoGeo} onChange={(e) => { setDeptoGeo(e.target.value); setForm((p) => ({ ...p, departamento: e.target.value || undefined, localidad_nombre: '', localidad_id: undefined })) }}>
                 <option value="">— Seleccionar —</option>
-                {deptosGeo.map((d) => <option key={d}>{d}</option>)}
+                {deptosGeo.map((d) => <option key={d} value={d}>{d.toUpperCase()}</option>)}
               </select>
             </div>
             <div>
               <label className={lbl}>Localidad *</label>
               <select className={inp} value={form.localidad_id ?? ''} onChange={(e) => selectLocalidad(e.target.value)}>
                 <option value="">— Seleccionar —</option>
-                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad}</option>)}
+                {localidadesFiltradas.map((g) => <option key={g.id_geo} value={g.id_geo}>{g.localidad.toUpperCase()}</option>)}
               </select>
-              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Seleccionada: <b>{form.localidad_nombre}</b></p>}
+              {form.localidad_nombre && <p className="text-xs text-gray-500 mt-0.5">Seleccionada: <b className="uppercase">{form.localidad_nombre}</b></p>}
             </div>
             <div>
               <label className={lbl}>Expediente</label>
@@ -740,7 +755,11 @@ function AgregarProyectoModal({
                 onChange={(e) => {
                   const v = e.target.value === '' ? undefined : parseFloat(e.target.value)
                   set('superficie', v)
-                  if (v != null) set('lotes', Math.round(v * lotesPorHa))
+                  if (v != null) {
+                    const lotesCalc = Math.round(v * lotesPorHa)
+                    set('lotes', lotesCalc)
+                    if (tipo === 'muni' && montoPorLoteMuni != null) set('monto', lotesCalc * montoPorLoteMuni)
+                  }
                 }} />
             </div>
             <div>
@@ -749,10 +768,19 @@ function AgregarProyectoModal({
                 {lotesMatchAuto && <span className="ml-2 text-[10px] text-cyan-600 font-medium normal-case">= {form.superficie} Ha × {lotesPorHa}</span>}
               </label>
               <input type="number" className={inp} value={form.lotes ?? ''}
-                onChange={(e) => set('lotes', e.target.value === '' ? undefined : parseInt(e.target.value))} />
+                onChange={(e) => {
+                  const v = e.target.value === '' ? undefined : parseInt(e.target.value)
+                  set('lotes', v)
+                  if (tipo === 'muni' && v != null && montoPorLoteMuni != null) set('monto', v * montoPorLoteMuni)
+                }} />
             </div>
             <div>
-              <label className={lbl}>Monto ($)</label>
+              <label className={lbl}>
+                Monto ($)
+                {tipo === 'muni' && form.lotes != null && montoPorLoteMuni != null && (
+                  <span className="ml-2 text-[10px] text-cyan-600 font-medium normal-case">= {form.lotes} lotes × ${montoPorLoteMuni.toLocaleString('es-AR')}</span>
+                )}
+              </label>
               <input type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value === '' ? undefined : parseFloat(e.target.value))} />
             </div>
             {tieneFinanciero && <>
@@ -794,29 +822,11 @@ function AgregarProyectoModal({
 
 // ── Modal de parámetros ───────────────────────────────────────────────────────
 
-function GestionarParametrosModal({
-  estados, config, onClose,
+function EstadosCatalogPanel({
+  estados, tipo, onInvalidate,
 }: {
-  estados: EstadoML[]; config: ConfigML | null; onClose: () => void
+  estados: EstadoML[]; tipo: string; onInvalidate: () => void
 }) {
-  const uid = useId()
-  const qc = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'estados' | 'parametros'>('estados')
-
-  const [configForm, setConfigForm] = useState({
-    tipo_cambio: String(config?.tipo_cambio ?? '1450'),
-    usd_por_lote: String(config?.usd_por_lote ?? '10000'),
-    lotes_por_ha: String(config?.lotes_por_ha ?? '25'),
-  })
-  const [configError, setConfigError] = useState<string | null>(null)
-
-  const configMut = useMutation({
-    mutationFn: (data: { tipo_cambio?: number; usd_por_lote?: number; lotes_por_ha?: number }) =>
-      miLugarApi.updateConfig(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ml-config'] }); setConfigError(null) },
-    onError: (err: unknown) => setConfigError(extractErrorMessage(err, 'Error al guardar la configuración.')),
-  })
-
   const [editId, setEditId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<EstadoMLUpdate>({})
   const [editSaveError, setEditSaveError] = useState<string | null>(null)
@@ -824,19 +834,21 @@ function GestionarParametrosModal({
   const [showNew, setShowNew] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [newForm, setNewForm] = useState<EstadoMLCreate>({
-    label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10,
+    label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10, tipo,
     aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true,
   })
 
+  const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: EstadoMLUpdate }) => miLugarApi.updateEstado(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ml-estados'] }); setEditId(null); setEditSaveError(null) },
+    onSuccess: () => { onInvalidate(); setEditId(null); setEditSaveError(null) },
     onError: (err: unknown) => setEditSaveError(extractErrorMessage(err, 'Error al guardar el estado.')),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => miLugarApi.deleteEstado(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ml-estados'] }),
+    onSuccess: () => onInvalidate(),
     onError: (err: unknown, id: number) => {
       setDeleteError((prev) => ({ ...prev, [id]: extractErrorMessage(err, 'Error al eliminar el estado.') }))
     },
@@ -845,12 +857,165 @@ function GestionarParametrosModal({
   const createMut = useMutation({
     mutationFn: (data: EstadoMLCreate) => miLugarApi.createEstado(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ml-estados'] })
+      onInvalidate()
       setShowNew(false); setCreateError(null)
-      setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
+      setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, tipo, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
     },
     onError: (err: unknown) => setCreateError(extractErrorMessage(err, 'Error al crear el estado.')),
   })
+
+  return (
+    <div className="space-y-3">
+      {estados.map((e) => (
+        <div key={e.id}>
+          {editId === e.id ? (
+            <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label</label>
+                  <input className={inp + ' w-full text-sm'} value={editForm.label ?? e.label}
+                    onChange={(ev) => setEditForm((p) => ({ ...p, label: ev.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
+                  <input type="number" className={inp + ' w-full text-sm'} value={editForm.orden ?? e.orden}
+                    onChange={(ev) => setEditForm((p) => ({ ...p, orden: parseInt(ev.target.value) }))} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
+                  <div className="flex gap-1">
+                    <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.bg ?? e.bg}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
+                    <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.bg ?? e.bg}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
+                  <div className="flex gap-1">
+                    <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.text_color ?? e.text_color}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
+                    <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.text_color ?? e.text_color}
+                      onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
+                  </div>
+                </div>
+              </div>
+              {editSaveError && <p role="alert" className="text-xs text-red-600">{editSaveError}</p>}
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => { setEditId(null); setEditForm({}); setEditSaveError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                <button disabled={updateMut.isPending} onClick={() => updateMut.mutate({ id: e.id, data: editForm })}
+                  className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
+                  style={{ background: 'var(--color-gov-navy)' }}>
+                  {updateMut.isPending ? '...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 border border-slate-100 rounded px-3 py-2 bg-white">
+              <span className="w-5 text-xs text-gray-400 text-center">{e.orden}</span>
+              <span className="flex-1 text-sm">{e.label}</span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: e.bg, color: e.text_color }}>{e.label}</span>
+              <button onClick={() => { setEditId(e.id); setEditForm({}) }} className="p-1 rounded text-gray-400 hover:text-gov-navy hover:bg-sky-50 transition-colors" aria-label="Editar estado">
+                <IconEdit />
+              </button>
+              <button onClick={() => deleteMut.mutate(e.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" aria-label="Eliminar estado">
+                <IconTrash />
+              </button>
+            </div>
+          )}
+          {deleteError[e.id] && (
+            <p role="alert" className="text-xs text-red-600 mt-1 px-3">{deleteError[e.id]}</p>
+          )}
+        </div>
+      ))}
+      {showNew ? (
+        <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
+          <p className="text-xs font-bold uppercase text-gray-500">Nuevo estado</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label *</label>
+              <input className={inp + ' w-full text-sm'} autoFocus value={newForm.label}
+                onChange={(e) => setNewForm((p) => ({ ...p, label: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
+              <div className="flex gap-1">
+                <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.bg}
+                  onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
+                <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.bg}
+                  onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
+              <div className="flex gap-1">
+                <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.text_color}
+                  onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
+                <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.text_color}
+                  onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
+              <input type="number" className={inp + ' w-full text-sm'} value={newForm.orden}
+                onChange={(e) => setNewForm((p) => ({ ...p, orden: parseInt(e.target.value) }))} />
+            </div>
+          </div>
+          {createError && <p role="alert" className="text-xs text-red-600">{createError}</p>}
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+            <button disabled={createMut.isPending || !newForm.label.trim()} onClick={() => createMut.mutate(newForm)}
+              className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
+              style={{ background: 'var(--color-gov-navy)' }}>
+              {createMut.isPending ? '...' : '+ Crear'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setShowNew(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
+          + Agregar estado
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Modal de parámetros ───────────────────────────────────────────────────────
+
+function GestionarParametrosModal({
+  estadosExp, estadosMuni, estadosProv, config, onClose,
+}: {
+  estadosExp: EstadoML[]; estadosMuni: EstadoML[]; estadosProv: EstadoML[]
+  config: ConfigML | null; onClose: () => void
+}) {
+  const uid = useId()
+  const qc = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'estados' | 'parametros'>('estados')
+  const [estadoTipoTab, setEstadoTipoTab] = useState<'exp' | 'muni' | 'prov'>('exp')
+
+  const [configForm, setConfigForm] = useState({
+    tipo_cambio: String(config?.tipo_cambio ?? '1450'),
+    usd_por_lote: String(config?.usd_por_lote ?? '10000'),
+    lotes_por_ha: String(config?.lotes_por_ha ?? '25'),
+    monto_por_lote_muni: String(config?.monto_por_lote_muni ?? '14000000'),
+  })
+  const [configError, setConfigError] = useState<string | null>(null)
+
+  const configMut = useMutation({
+    mutationFn: (data: { tipo_cambio?: number; usd_por_lote?: number; lotes_por_ha?: number; monto_por_lote_muni?: number }) =>
+      miLugarApi.updateConfig(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['ml-config'] }); setConfigError(null) },
+    onError: (err: unknown) => setConfigError(extractErrorMessage(err, 'Error al guardar la configuración.')),
+  })
+
+  const invalidateEstados = () => qc.invalidateQueries({ queryKey: ['ml-estados'] })
+
+  const estadosByTipoTab = { exp: estadosExp, muni: estadosMuni, prov: estadosProv }
+  const tipoTabLabels: Record<string, string> = {
+    exp: 'Expropiaciones',
+    muni: 'Conv. Municipios',
+    prov: 'Lotes Provinciales',
+  }
 
   const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
 
@@ -874,11 +1039,12 @@ function GestionarParametrosModal({
 
         {activeTab === 'parametros' && (
           <div className="p-5 space-y-4">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {[
                 { key: 'tipo_cambio', label: 'Tipo de cambio ($/US$)' },
                 { key: 'usd_por_lote', label: 'US$ por lote' },
                 { key: 'lotes_por_ha', label: 'Lotes por hectárea' },
+                { key: 'monto_por_lote_muni', label: 'Monto por lote — Municipios ($)' },
               ].map(({ key, label }) => (
                 <div key={key}>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{label}</label>
@@ -895,6 +1061,7 @@ function GestionarParametrosModal({
                   tipo_cambio: parseFloat(configForm.tipo_cambio),
                   usd_por_lote: parseFloat(configForm.usd_por_lote),
                   lotes_por_ha: parseFloat(configForm.lotes_por_ha),
+                  monto_por_lote_muni: parseFloat(configForm.monto_por_lote_muni),
                 })}
                 className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
                 style={{ background: 'var(--color-gov-navy)' }}>
@@ -905,117 +1072,24 @@ function GestionarParametrosModal({
         )}
 
         {activeTab === 'estados' && (
-          <div className="p-5 space-y-3">
-            {estados.map((e) => (
-              <div key={e.id}>
-                {editId === e.id ? (
-                  <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label</label>
-                        <input className={inp + ' w-full text-sm'} value={editForm.label ?? e.label}
-                          onChange={(ev) => setEditForm((p) => ({ ...p, label: ev.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
-                        <input type="number" className={inp + ' w-full text-sm'} value={editForm.orden ?? e.orden}
-                          onChange={(ev) => setEditForm((p) => ({ ...p, orden: parseInt(ev.target.value) }))} />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
-                        <div className="flex gap-1">
-                          <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.bg ?? e.bg}
-                            onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
-                          <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.bg ?? e.bg}
-                            onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
-                        <div className="flex gap-1">
-                          <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.text_color ?? e.text_color}
-                            onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
-                          <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.text_color ?? e.text_color}
-                            onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
-                        </div>
-                      </div>
-                    </div>
-                    {editSaveError && <p role="alert" className="text-xs text-red-600">{editSaveError}</p>}
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => { setEditId(null); setEditForm({}); setEditSaveError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                      <button disabled={updateMut.isPending} onClick={() => updateMut.mutate({ id: e.id, data: editForm })}
-                        className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
-                        style={{ background: 'var(--color-gov-navy)' }}>
-                        {updateMut.isPending ? '...' : 'Guardar'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 border border-slate-100 rounded px-3 py-2 bg-white">
-                    <span className="w-5 text-xs text-gray-400 text-center">{e.orden}</span>
-                    <span className="flex-1 text-sm">{e.label}</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: e.bg, color: e.text_color }}>{e.label}</span>
-                    <button onClick={() => { setEditId(e.id); setEditForm({}) }} className="p-1 rounded text-gray-400 hover:text-gov-navy hover:bg-sky-50 transition-colors" aria-label="Editar estado">
-                      <IconEdit />
-                    </button>
-                    <button onClick={() => deleteMut.mutate(e.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" aria-label="Eliminar estado">
-                      <IconTrash />
-                    </button>
-                  </div>
-                )}
-                {deleteError[e.id] && (
-                  <p role="alert" className="text-xs text-red-600 mt-1 px-3">{deleteError[e.id]}</p>
-                )}
-              </div>
-            ))}
-            {showNew ? (
-              <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
-                <p className="text-xs font-bold uppercase text-gray-500">Nuevo estado</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2">
-                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label *</label>
-                    <input className={inp + ' w-full text-sm'} autoFocus value={newForm.label}
-                      onChange={(e) => setNewForm((p) => ({ ...p, label: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
-                    <div className="flex gap-1">
-                      <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.bg}
-                        onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
-                      <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.bg}
-                        onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
-                    <div className="flex gap-1">
-                      <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.text_color}
-                        onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
-                      <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.text_color}
-                        onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
-                    <input type="number" className={inp + ' w-full text-sm'} value={newForm.orden}
-                      onChange={(e) => setNewForm((p) => ({ ...p, orden: parseInt(e.target.value) }))} />
-                  </div>
-                </div>
-                {createError && <p role="alert" className="text-xs text-red-600">{createError}</p>}
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                  <button disabled={createMut.isPending || !newForm.label.trim()} onClick={() => createMut.mutate(newForm)}
-                    className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
-                    style={{ background: 'var(--color-gov-navy)' }}>
-                    {createMut.isPending ? '...' : '+ Crear'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowNew(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
-                + Agregar estado
-              </button>
-            )}
+          <div className="px-5 pt-4 pb-5 space-y-3">
+            {/* Sub-tabs por tipo */}
+            <div className="flex gap-1 border-b border-slate-200 mb-3">
+              {(['exp', 'muni', 'prov'] as const).map((t) => (
+                <button key={t} onClick={() => setEstadoTipoTab(t)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-t border-b-2 transition-colors ${
+                    estadoTipoTab === t ? 'border-gov-cyan text-gov-cyan bg-sky-50' : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}>
+                  {tipoTabLabels[t]}
+                </button>
+              ))}
+            </div>
+            <EstadosCatalogPanel
+              key={estadoTipoTab}
+              estados={estadosByTipoTab[estadoTipoTab]}
+              tipo={estadoTipoTab}
+              onInvalidate={invalidateEstados}
+            />
           </div>
         )}
       </div>
@@ -1187,14 +1261,21 @@ export function MiLugarPage() {
   const [sortCol, setSortCol] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const estadosQuery = useQuery({ queryKey: ['ml-estados'], queryFn: miLugarApi.getEstados })
+  const estadosExpQuery = useQuery({ queryKey: ['ml-estados', 'exp'], queryFn: () => miLugarApi.getEstados({ tipo: 'exp' }) })
+  const estadosMuniQuery = useQuery({ queryKey: ['ml-estados', 'muni'], queryFn: () => miLugarApi.getEstados({ tipo: 'muni' }) })
+  const estadosProvQuery = useQuery({ queryKey: ['ml-estados', 'prov'], queryFn: () => miLugarApi.getEstados({ tipo: 'prov' }) })
   const configQuery = useQuery({ queryKey: ['ml-config'], queryFn: miLugarApi.getConfig })
   const expQuery = useQuery({ queryKey: ['ml-proyectos', 'exp'], queryFn: () => miLugarApi.getProyectos({ tipo: 'exp' }) })
   const muniQuery = useQuery({ queryKey: ['ml-proyectos', 'muni'], queryFn: () => miLugarApi.getProyectos({ tipo: 'muni' }) })
   const provQuery = useQuery({ queryKey: ['ml-proyectos', 'prov'], queryFn: () => miLugarApi.getProyectos({ tipo: 'prov' }) })
 
   const tabQuery = tab === 'exp' ? expQuery : tab === 'muni' ? muniQuery : provQuery
-  const estados = estadosQuery.data ?? []
+  const estadosExp = estadosExpQuery.data ?? []
+  const estadosMuni = estadosMuniQuery.data ?? []
+  const estadosProv = estadosProvQuery.data ?? []
+  const estadosByTipo = { exp: estadosExp, muni: estadosMuni, prov: estadosProv }
+  const estados = estadosByTipo[tab]
+  const todosEstados = [...estadosExp, ...estadosMuni, ...estadosProv]
   const config = configQuery.data ?? null
   const proyectos = tabQuery.data ?? []
 
@@ -1346,7 +1427,7 @@ export function MiLugarPage() {
           <select id={deptoId} value={deptoFilter} onChange={(e) => setDeptoFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {deptos.map((d) => <option key={d}>{d}</option>)}
+            {deptos.map((d) => <option key={d} value={d}>{d.toUpperCase()}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1447,9 +1528,9 @@ export function MiLugarPage() {
                     </td>
                     <td className="px-2.5 py-1.5">
                       {p.departamento
-                        ? <><span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap" style={{ background: '#E8EAF6', color: '#283593' }}>{p.departamento}</span><br /></>
+                        ? <><span className="px-1.5 py-0.5 rounded-full text-xs whitespace-nowrap uppercase" style={{ background: '#E8EAF6', color: '#283593' }}>{p.departamento}</span><br /></>
                         : null}
-                      <span className="text-xs text-gray-600">{p.localidad_nombre}</span>
+                      <span className="text-xs text-gray-600 uppercase">{p.localidad_nombre}</span>
                     </td>
                     <td className="px-2.5 py-1.5 font-mono text-gray-600" style={{ fontSize: '11px' }}>{p.expediente || '—'}</td>
                     <td className="px-2.5 py-1.5"><GeoLinks puntos={p.geo_puntos} /></td>
@@ -1522,7 +1603,7 @@ export function MiLugarPage() {
       {editTarget && (
         <EditModal
           proyecto={editTarget}
-          estados={estados}
+          estados={estadosByTipo[editTarget.tipo] ?? estadosExp}
           config={config}
           isSaving={updateMut.isPending}
           saveError={editError}
@@ -1531,10 +1612,10 @@ export function MiLugarPage() {
         />
       )}
       {detailTarget && (
-        <DetailPanel proyecto={detailTarget} estados={estados} onClose={() => setDetailTarget(null)} />
+        <DetailPanel proyecto={detailTarget} estados={estadosByTipo[detailTarget.tipo] ?? estadosExp} onClose={() => setDetailTarget(null)} />
       )}
       {showParams && canManage && (
-        <GestionarParametrosModal estados={estados} config={config} onClose={() => setShowParams(false)} />
+        <GestionarParametrosModal estadosExp={estadosExp} estadosMuni={estadosMuni} estadosProv={estadosProv} config={config} onClose={() => setShowParams(false)} />
       )}
       {showAgregar && (
         <AgregarProyectoModal
@@ -1548,7 +1629,7 @@ export function MiLugarPage() {
           allExp={allExp}
           allMuni={allMuni}
           allProv={allProv}
-          estados={estados}
+          estados={todosEstados}
           onClose={() => setShowInforme(false)}
         />
       )}

@@ -38,10 +38,11 @@ export function MapaDualPuntos({
 
   useEffect(() => {
     if (!mapDivRef.current) return
-    const map = L.map(mapDivRef.current, { scrollWheelZoom: false }).setView(
+    const map = L.map(mapDivRef.current, { scrollWheelZoom: false, zoomControl: false }).setView(
       [centerLat, centerLon],
       zoom,
     )
+    L.control.zoom({ position: 'topright' }).addTo(map)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap © CARTO',
       subdomains: 'abcd',
