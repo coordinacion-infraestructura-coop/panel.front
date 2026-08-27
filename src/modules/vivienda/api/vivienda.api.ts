@@ -40,6 +40,18 @@ import type {
   PedidoMLCreate,
   ConfigML,
   ConfigMLUpdate,
+  ProgramaChecklist,
+  ChecklistTecnico,
+  ChecklistTecnicoUpdate,
+  ChecklistItemUpdate,
+  HitoChecklistUpdate,
+  CatalogosChecklist,
+  CatalogoEstadoExpediente,
+  CatalogoEstadoExpedienteCreate,
+  CatalogoEstadoExpedienteUpdate,
+  CatalogoReparticion,
+  CatalogoReparticionCreate,
+  CatalogoReparticionUpdate,
 } from '../types/vivienda.types'
 
 const BASE = '/api/v1/vivienda'
@@ -252,4 +264,50 @@ export const miLugarApi = {
   // Geo localidades (reutiliza la tabla compartida viv_geo_localidades)
   getGeo: () =>
     apiClient.get<GeoLocalidad[]>(`${BASE}/cordon-cuneta/geo`).then((r) => r.data),
+}
+
+export const checklistTecnicoApi = {
+  getCatalogos: () =>
+    apiClient.get<CatalogosChecklist>(`${BASE}/checklist-tecnico/catalogos`).then((r) => r.data),
+
+  getChecklist: (programa: ProgramaChecklist, entidadId: string) =>
+    apiClient
+      .get<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}`)
+      .then((r) => r.data),
+
+  updateChecklist: (programa: ProgramaChecklist, entidadId: string, data: ChecklistTecnicoUpdate) =>
+    apiClient
+      .patch<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}`, data)
+      .then((r) => r.data),
+
+  updateItem: (programa: ProgramaChecklist, entidadId: string, itemNum: number, data: ChecklistItemUpdate) =>
+    apiClient
+      .patch<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/items/${itemNum}`, data)
+      .then((r) => r.data),
+
+  updateHito: (programa: ProgramaChecklist, entidadId: string, tipo: string, data: HitoChecklistUpdate) =>
+    apiClient
+      .patch<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/hitos/${tipo}`, data)
+      .then((r) => r.data),
+
+  // Admin de catálogos (solo Admin)
+  createEstadoExpediente: (data: CatalogoEstadoExpedienteCreate) =>
+    apiClient
+      .post<CatalogoEstadoExpediente>(`${BASE}/checklist-tecnico/admin/estado-expediente`, data)
+      .then((r) => r.data),
+
+  updateEstadoExpediente: (id: number, data: CatalogoEstadoExpedienteUpdate) =>
+    apiClient
+      .patch<CatalogoEstadoExpediente>(`${BASE}/checklist-tecnico/admin/estado-expediente/${id}`, data)
+      .then((r) => r.data),
+
+  createReparticion: (data: CatalogoReparticionCreate) =>
+    apiClient
+      .post<CatalogoReparticion>(`${BASE}/checklist-tecnico/admin/reparticion`, data)
+      .then((r) => r.data),
+
+  updateReparticion: (id: number, data: CatalogoReparticionUpdate) =>
+    apiClient
+      .patch<CatalogoReparticion>(`${BASE}/checklist-tecnico/admin/reparticion/${id}`, data)
+      .then((r) => r.data),
 }

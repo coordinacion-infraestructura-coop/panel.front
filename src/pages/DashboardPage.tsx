@@ -27,6 +27,8 @@ const SECRETARIAS: Secretaria[] = [
       { label: 'Tablero de Programas', desc: 'KPIs y estado de todos los programas activos', to: '/vivienda/programas' },
       { label: 'Córdoba Hogar', desc: 'Panel provisorio — seguimiento de localidades', to: '/vivienda/cordoba-hogar' },
       { label: 'Cordón Cuneta y Adoquinado', desc: 'Seguimiento de convenios con municipios', to: '/vivienda/cordon-cuneta' },
+      { label: 'Mi Lugar', desc: 'Adquisición de tierras — expropiaciones, municipios, provincia', to: '/vivienda/mi-lugar' },
+      { label: 'Checklist Técnico', desc: 'Editor de estados por localidad y programa — área técnica DGV', to: '/vivienda/checklist-tecnico' },
       { label: 'Registro de Beneficiarios', desc: 'Alta, búsqueda y consulta por DNI', to: '/vivienda/beneficiarios', hidden: true },
       { label: 'Expedientes', desc: 'Tramitación y seguimiento de expedientes', to: '/vivienda/expedientes', hidden: true },
     ],
@@ -87,8 +89,15 @@ function ChevronRight() {
   )
 }
 
-function SecretariaCard({ sec, fullWidth }: { sec: Secretaria; fullWidth?: boolean }) {
-  const visibleModulos = sec.modulos.filter((m) => !m.hidden)
+function SecretariaCard({ sec, fullWidth, rol }: { sec: Secretaria; fullWidth?: boolean; rol?: string }) {
+  // El área técnica DGV solo debe ver Tablero + Checklist Técnico, nunca los paneles
+  // completos (mismo criterio que el nav de Layout.tsx — ver spec-checklist-tecnico-dgv.md §8).
+  const esTecnicoDgv = sec.id === 'vivienda' && rol === 'TecnicoDGV'
+  const visibleModulos = sec.modulos.filter((m) => {
+    if (m.hidden) return false
+    if (esTecnicoDgv) return m.to === '/vivienda/programas' || m.to === '/vivienda/checklist-tecnico'
+    return true
+  })
   return (
     <section
       aria-label={sec.nombre}
@@ -202,6 +211,7 @@ export function DashboardPage() {
               key={sec.id}
               sec={sec}
               fullWidth={idx === 0 && sec.id === 'vivienda'}
+              rol={portalUser?.rol}
             />
           ))}
 

@@ -591,3 +591,120 @@ export interface InformeSnapshot {
   computed_by: string | null
   duracion_ms: number | null
 }
+
+// ── Checklist Técnico DGV ────────────────────────────────────────────────────
+
+export type ProgramaChecklist = 'cc' | 'ch' | 'ml'
+export type ValorItemChecklist = 'sin_presentar' | 'eval_tecnica' | 'a_corregir' | 'eval_juridica' | 'completo'
+export type TipoHitoChecklist = 'anticipo' | '40' | '70' | '100'
+
+export interface CatalogoEstadoExpediente {
+  id: number
+  label: string
+  orden: number
+  activo: boolean
+}
+
+export interface CatalogoEstadoExpedienteCreate {
+  label: string
+  orden: number
+  activo?: boolean
+}
+
+export interface CatalogoEstadoExpedienteUpdate {
+  label?: string
+  orden?: number
+  activo?: boolean
+}
+
+export interface CatalogoReparticion {
+  id: number
+  programa: ProgramaChecklist | null
+  label: string
+  orden: number
+  activo: boolean
+}
+
+export interface CatalogoReparticionCreate {
+  programa?: ProgramaChecklist | null
+  label: string
+  orden: number
+  activo?: boolean
+}
+
+export interface CatalogoReparticionUpdate {
+  programa?: ProgramaChecklist | null
+  label?: string
+  orden?: number
+  activo?: boolean
+}
+
+export interface ItemSubDefinicion {
+  sub_item_num: number
+  label: string
+}
+
+export interface ItemDefinicion {
+  item_num: number
+  label: string
+  sub_items: ItemSubDefinicion[] | null
+}
+
+export interface CatalogosChecklist {
+  estados_expediente: CatalogoEstadoExpediente[]
+  reparticiones: CatalogoReparticion[]
+  items_por_programa: Record<ProgramaChecklist, ItemDefinicion[]>
+}
+
+export interface EntidadResumenChecklist {
+  nombre: string
+  departamento: string | null
+  expediente: string | null
+  monto: number | null
+  dato_extra_label: string | null
+  dato_extra_valor: string | null
+}
+
+export interface ChecklistItemDetalle {
+  item_num: number
+  sub_item_num: number | null
+  label: string
+  valor: ValorItemChecklist
+}
+
+export interface ChecklistItemUpdate {
+  valor: ValorItemChecklist
+  sub_item_num?: number | null
+}
+
+export interface HitoChecklist {
+  tipo: TipoHitoChecklist
+  label: string
+  monto: number | null
+  fecha_acreditado: string | null
+}
+
+export interface HitoChecklistUpdate {
+  fecha_acreditado: string | null
+}
+
+export interface ChecklistTecnico {
+  programa: ProgramaChecklist
+  entidad_id: string
+  entidad: EntidadResumenChecklist
+  estado_expediente_id: number | null
+  estado_expediente_label: string | null
+  fecha_radicacion: string | null
+  reparticion_id: number | null
+  reparticion_label: string | null
+  items: ChecklistItemDetalle[]
+  hitos: HitoChecklist[] | null
+  updated_at: string
+  updated_by: string | null
+}
+
+export interface ChecklistTecnicoUpdate {
+  estado_expediente_id?: number | null
+  fecha_radicacion?: string | null
+  reparticion_id?: number | null
+}

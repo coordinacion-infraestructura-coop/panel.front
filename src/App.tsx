@@ -12,10 +12,12 @@ import { ExpedientesListPage } from './modules/vivienda/pages/ExpedientesListPag
 import { CordonCunetaPage } from './modules/vivienda/pages/CordonCunetaPage'
 import { CordobaHogarPage } from './modules/vivienda/pages/CordobaHogarPage'
 import { MiLugarPage } from './modules/vivienda/pages/MiLugarPage'
+import { ChecklistTecnicoPage } from './modules/vivienda/pages/ChecklistTecnicoPage'
 import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
+import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +56,7 @@ export default function App() {
                 element={<ProgramaInformePage programa="cordoba_hogar" />}
               />
               <Route path="vivienda/mi-lugar" element={<MiLugarPage />} />
+              <Route path="vivienda/checklist-tecnico" element={<ChecklistTecnicoPage />} />
               <Route path="privada/gestiones" element={<GestionesListPage />} />
               <Route path="privada/tablero" element={<TableroPage />} />
               <Route
@@ -61,6 +64,14 @@ export default function App() {
                 element={
                   <ProtectedRoute roles={['Admin']}>
                     <AdminUsuariosPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/catalogos-checklist"
+                element={
+                  <ProtectedRoute roles={['Admin']}>
+                    <AdminCatalogosChecklistPage />
                   </ProtectedRoute>
                 }
               />

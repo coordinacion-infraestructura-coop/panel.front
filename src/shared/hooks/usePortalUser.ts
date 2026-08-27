@@ -4,7 +4,7 @@ import apiClient from '../api/client'
 export interface PortalUser {
   email: string
   nombre?: string
-  rol: 'Admin' | 'Supervisor' | 'Operador' | 'Consulta'
+  rol: 'Admin' | 'Supervisor' | 'Operador' | 'Consulta' | 'TecnicoDGV'
   secretarias: string[]
 }
 

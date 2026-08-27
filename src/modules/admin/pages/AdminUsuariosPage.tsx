@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../../../shared/api/client'
 
@@ -19,7 +20,7 @@ interface UsuarioPayload {
   activo?: boolean
 }
 
-const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta'] as const
+const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV'] as const
 const SECRETARIAS = [
   { id: 'vivienda', label: 'Vivienda' },
   { id: 'privada', label: 'Privada del Ministro' },
@@ -131,6 +132,7 @@ function UsuarioModal({
                   {r === 'Supervisor' && ' — ver, editar, crear y eliminar'}
                   {r === 'Operador' && ' — ver, editar y crear'}
                   {r === 'Consulta' && ' — solo lectura'}
+                  {r === 'TecnicoDGV' && ' — área técnica DGV, solo Tablero + Checklist Técnico'}
                 </option>
               ))}
             </select>
@@ -266,12 +268,20 @@ export function AdminUsuariosPage() {
             Gestioná el acceso al sistema por secretaría y rol.
           </p>
         </div>
-        <button
-          onClick={() => { setModalUsuario('nuevo'); setError(null) }}
-          className="bg-gov-navy text-white text-sm px-4 py-2 rounded hover:bg-gov-navy/90 transition-colors"
-        >
-          + Nuevo usuario
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/admin/catalogos-checklist"
+            className="text-sm text-gov-navy border border-gray-200 px-4 py-2 rounded hover:bg-slate-50 transition-colors"
+          >
+            Catálogos Checklist Técnico
+          </Link>
+          <button
+            onClick={() => { setModalUsuario('nuevo'); setError(null) }}
+            className="bg-gov-navy text-white text-sm px-4 py-2 rounded hover:bg-gov-navy/90 transition-colors"
+          >
+            + Nuevo usuario
+          </button>
+        </div>
       </div>
 
       {error && (

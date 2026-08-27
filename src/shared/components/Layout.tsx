@@ -13,6 +13,7 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
     { to: '/vivienda/cordoba-hogar', label: 'Córdoba Hogar' },
     { to: '/vivienda/cordon-cuneta', label: 'Cordón Cuneta' },
     { to: '/vivienda/mi-lugar', label: 'Mi Lugar' },
+    { to: '/vivienda/checklist-tecnico', label: 'Checklist Técnico' },
     // { to: '/vivienda/beneficiarios', label: 'Beneficiarios' }, // oculto — módulo en desarrollo
     // { to: '/vivienda/expedientes', label: 'Expedientes' },     // oculto — módulo en desarrollo
   ],
@@ -20,6 +21,18 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
     { to: '/privada/gestiones', label: 'Gestiones' },
     { to: '/privada/tablero', label: 'Tablero' },
   ],
+}
+
+// El área técnica DGV solo debe ver Tablero + Checklist Técnico — nunca los paneles
+// completos de Cordón Cuneta / Córdoba Hogar / Mi Lugar (aprobado por el área,
+// ver docs/files/spec-checklist-tecnico-dgv.md §8). El backend ya bloquea el acceso
+// (403) a esos paneles para este rol; este filtro es solo la capa de navegación.
+function navItemsFor(secretaria: string, rol: string | undefined): NavItem[] {
+  const items = SECRETARIA_NAV[secretaria] ?? []
+  if (secretaria === 'vivienda' && rol === 'TecnicoDGV') {
+    return items.filter((i) => i.to === '/vivienda/programas' || i.to === '/vivienda/checklist-tecnico')
+  }
+  return items
 }
 
 const SECRETARIA_LABEL: Record<string, string> = {
@@ -39,7 +52,7 @@ export function Layout() {
   const location = useLocation()
 
   const activeSecretaria = getActiveSecretaria(location.pathname)
-  const navItems = activeSecretaria ? (SECRETARIA_NAV[activeSecretaria] ?? []) : []
+  const navItems = activeSecretaria ? navItemsFor(activeSecretaria, portalUser?.rol) : []
   const isAdmin = portalUser?.rol === 'Admin'
   const isAdminPage = location.pathname.startsWith('/admin')
 
