@@ -8,3 +8,28 @@
   --color-gov-orange: #d17612;
   --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
 }
+
+/* ── Impresión del Resumen Territorial (primer @media print del proyecto) ──
+   La página renderiza `.rt-print-doc` (oculto en pantalla, `print:block`) y
+   envuelve la UI interactiva en `.rt-screen-only`. En impresión se oculta el
+   header/nav del Layout y la UI de pantalla, y se deja sólo el documento A4. */
+@media print {
+  @page { size: A4 portrait; margin: 13mm; }
+
+  body:has(.rt-print-doc) header { display: none !important; }
+  body:has(.rt-print-doc) main { max-width: none !important; padding: 0 !important; }
+  body:has(.rt-print-doc) .rt-screen-only { display: none !important; }
+
+  .rt-print-doc { display: block !important; color: #14212b; font-size: 10px; }
+  .rt-print-doc table { width: 100%; border-collapse: collapse; }
+  .rt-print-doc thead { display: table-header-group; }
+  .rt-print-doc tr { break-inside: avoid; }
+  .rt-print-doc th,
+  .rt-print-doc td {
+    border: 1px solid #b9c4cc;
+    padding: 3px 6px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .rt-print-doc thead th { background: #eef3f6; }
+}

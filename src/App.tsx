@@ -16,6 +16,7 @@ import { ChecklistTecnicoPage } from './modules/vivienda/pages/ChecklistTecnicoP
 import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
+import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
 
@@ -41,6 +42,16 @@ export default function App() {
               }
             >
               <Route index element={<DashboardPage />} />
+              <Route
+                path="resumen-territorial"
+                element={
+                  <ProtectedRoute
+                    roles={['Admin', 'Autoridad', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV']}
+                  >
+                    <ResumenTerritorialPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="vivienda/programas" element={<ProgramasPage />} />
               <Route path="vivienda/beneficiarios" element={<BeneficiariosListPage />} />
               <Route path="vivienda/beneficiarios/nuevo" element={<BeneficiarioFormPage />} />

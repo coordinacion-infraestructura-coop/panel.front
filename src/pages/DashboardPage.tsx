@@ -195,11 +195,32 @@ export function DashboardPage() {
       )}
 
       {/* Sin acceso */}
+      {!isLoading && portalUser && (
+        <Link
+          to="/resumen-territorial"
+          className="block mb-4 rounded-lg border border-gov-cyan/40 bg-gradient-to-r from-gov-navy to-[#1e3a52] text-white px-5 py-4 hover:brightness-110 transition group focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-cyan mb-0.5">
+                Panel transversal
+              </p>
+              <h3 className="font-semibold">Resumen Territorial</h3>
+              <p className="text-xs text-white/60 mt-0.5">
+                Qué programas y gestiones tiene cada localidad y en qué estado está cada uno.
+              </p>
+            </div>
+            <span className="text-gov-cyan group-hover:translate-x-0.5 transition-transform">→</span>
+          </div>
+        </Link>
+      )}
+
       {!isLoading && !isError && portalUser && visibleActivas.length === 0 && visibleDesarrollo.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-5 py-6 text-center">
           <p className="text-amber-800 font-medium">Tu cuenta no tiene secretarías asignadas.</p>
           <p className="text-amber-600 text-sm mt-1">
-            Contactá al administrador del sistema para que te asigne acceso.
+            Podés consultar el <strong>Resumen Territorial</strong> arriba. Para acceder a los
+            paneles operativos, contactá al administrador del sistema.
           </p>
         </div>
       )}

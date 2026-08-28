@@ -20,7 +20,7 @@ interface UsuarioPayload {
   activo?: boolean
 }
 
-const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV'] as const
+const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV', 'Autoridad'] as const
 const SECRETARIAS = [
   { id: 'vivienda', label: 'Vivienda' },
   { id: 'privada', label: 'Privada del Ministro' },
@@ -36,6 +36,8 @@ const ROL_COLORS: Record<string, string> = {
   Supervisor: 'bg-blue-100 text-blue-700',
   Operador: 'bg-green-100 text-green-700',
   Consulta: 'bg-gray-100 text-gray-600',
+  TecnicoDGV: 'bg-amber-100 text-amber-700',
+  Autoridad: 'bg-gov-cyan/15 text-gov-blue',
 }
 
 function UsuarioModal({
@@ -133,6 +135,7 @@ function UsuarioModal({
                   {r === 'Operador' && ' — ver, editar y crear'}
                   {r === 'Consulta' && ' — solo lectura'}
                   {r === 'TecnicoDGV' && ' — área técnica DGV, solo Tablero + Checklist Técnico'}
+                  {r === 'Autoridad' && ' — lectura consolidada de todas las áreas (Resumen Territorial)'}
                 </option>
               ))}
             </select>

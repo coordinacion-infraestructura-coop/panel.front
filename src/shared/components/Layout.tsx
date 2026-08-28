@@ -116,6 +116,23 @@ export function Layout() {
               Inicio
             </Link>
 
+            {/* Resumen Territorial — transversal, siempre visible para usuarios con perfil de portal */}
+            {portalUser && (
+              <Link
+                to="/resumen-territorial"
+                aria-current={
+                  location.pathname.startsWith('/resumen-territorial') ? 'page' : undefined
+                }
+                className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan ${
+                  location.pathname.startsWith('/resumen-territorial')
+                    ? 'border-gov-cyan text-white'
+                    : 'border-transparent text-white/65 hover:text-white hover:border-white/30'
+                }`}
+              >
+                Resumen Territorial
+              </Link>
+            )}
+
             {/* Módulos de la secretaría activa */}
             {activeSecretaria && (
               <>
