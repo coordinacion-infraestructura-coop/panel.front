@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
+import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
   ResumenSnapshot,
+  ResumenTerritorialPayload,
 } from '../types/resumenTerritorial.types'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
@@ -260,6 +262,19 @@ export function ResumenTerritorialPage() {
     staleTime: Infinity,
   })
 
+  // Privada la trae el frontend con el token del usuario (plan B — el backend no puede
+  // llamar a svc-privada server-to-server). Solo si el usuario puede verla.
+  const puedeVerPrivada =
+    ['Admin', 'Autoridad'].includes(portalUser?.rol ?? '') ||
+    (portalUser?.secretarias ?? []).includes('privada')
+  const privadaQuery = useQuery({
+    queryKey: ['resumen-territorial-privada'],
+    queryFn: fetchPrivadaPorLocalidad,
+    enabled: puedeVerPrivada,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+
   const [error, setError] = useState<string | null>(null)
   const actualizarMut = useMutation({
     mutationFn: resumenTerritorialApi.actualizarResumen,
@@ -279,7 +294,46 @@ export function ResumenTerritorialPage() {
   const [fChecklist, setFChecklist] = useState('')
   const [detalleLoc, setDetalleLoc] = useState<ResumenLocalidad | null>(null)
 
-  const payload = snapshot?.payload
+  // Payload efectivo = snapshot de Vivienda (backend) + líneas de Privada (frontend), mergeadas
+  // por clave de localidad normalizada.
+  const payload = useMemo<ResumenTerritorialPayload | undefined>(() => {
+    const base = snapshot?.payload
+    if (!base) return undefined
+    const priv = privadaQuery.data
+    if (!priv || priv.length === 0) return base
+
+    const byKey = new Map<string, ResumenLocalidad>()
+    const locs: ResumenLocalidad[] = base.localidades.map((l) => {
+      const copia: ResumenLocalidad = { ...l, programas: [...l.programas] }
+      byKey.set(`${norm(l.departamento ?? '')}|${norm(l.localidad)}`, copia)
+      return copia
+    })
+    for (const p of priv) {
+      const existente = byKey.get(p.key)
+      if (existente) {
+        existente.programas.push(p.programa)
+      } else {
+        const nueva: ResumenLocalidad = {
+          localidad: p.localidad,
+          departamento: p.departamento,
+          programas: [p.programa],
+        }
+        byKey.set(p.key, nueva)
+        locs.push(nueva)
+      }
+    }
+    locs.sort(
+      (a, b) =>
+        (a.departamento ?? '￿').localeCompare(b.departamento ?? '￿', 'es') ||
+        a.localidad.localeCompare(b.localidad, 'es'),
+    )
+    return {
+      generado_para_areas: [...base.generado_para_areas, 'privada'],
+      total_localidades: locs.length,
+      total_programas: locs.reduce((n, l) => n + l.programas.length, 0),
+      localidades: locs,
+    }
+  }, [snapshot, privadaQuery.data])
 
   const opciones = useMemo(() => {
     const deps = new Set<string>()
@@ -485,6 +539,12 @@ export function ResumenTerritorialPage() {
               </div>
               <span className="text-xs text-gray-500">
                 Alcance: <strong className="text-gov-navy">{alcance}</strong>
+                {puedeVerPrivada && privadaQuery.isLoading && (
+                  <span className="text-gray-400"> · cargando Privada…</span>
+                )}
+                {puedeVerPrivada && privadaQuery.isError && (
+                  <span className="text-amber-600"> · Privada no disponible</span>
+                )}
               </span>
               <div className="ml-auto flex gap-2">
                 <button
