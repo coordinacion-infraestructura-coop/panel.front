@@ -1,6 +1,7 @@
 import apiClient from '../../../shared/api/client'
 import type {
   Programa,
+  TableroVivienda,
   Beneficiario,
   BeneficiarioCreate,
   Expediente,
@@ -60,6 +61,11 @@ const BASE = '/api/v1/vivienda'
 
 export const programasApi = {
   list: () => apiClient.get<Programa[]>(`${BASE}/programas`).then((r) => r.data),
+
+  // KPIs agregados de CC/CH/ML para el Tablero — no expone los paneles completos,
+  // asi que TecnicoDGV puede verlo (spec-checklist-tecnico-dgv §8/§9).
+  getTablero: () =>
+    apiClient.get<TableroVivienda>(`${BASE}/programas/tablero`).then((r) => r.data),
 }
 
 export const beneficiariosApi = {

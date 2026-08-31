@@ -10,6 +10,35 @@ export interface Programa {
   updated_at: string
 }
 
+/** KPIs agregados del Tablero de Programas — endpoint propio, accesible a TecnicoDGV. */
+export interface TableroVivienda {
+  cordon_cuneta: {
+    municipios: number
+    con_expediente: number
+    convenio_firmado: number
+    monto: number
+    en_obra: number
+    en_tc: number
+  }
+  cordoba_hogar: {
+    localidades: number
+    total_casas: number
+    con_ok_gob: number
+    con_expediente: number
+    monto: number
+    en_tc: number
+  }
+  mi_lugar: {
+    total: number
+    exp: number
+    muni: number
+    prov: number
+    total_lotes: number
+    con_expediente: number
+    monto: number
+  }
+}
+
 export interface Beneficiario {
   id: string
   dni: string

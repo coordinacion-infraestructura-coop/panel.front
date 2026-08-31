@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { cordonCunetaApi, cordobaHogarApi, miLugarApi } from '../api/vivienda.api'
+import { programasApi } from '../api/vivienda.api'
 
 function fmtMonto(n: number) {
   if (!n) return '—'
@@ -64,58 +64,14 @@ function ProgramaKPICard({ card }: { card: ProgramCard }) {
 }
 
 export function ProgramasPage() {
-  const ccQuery = useQuery({
-    queryKey: ['cordon-cuneta'],
-    queryFn: cordonCunetaApi.getPanel,
+  const { data: tablero, isLoading, isError } = useQuery({
+    queryKey: ['programas-tablero'],
+    queryFn: programasApi.getTablero,
   })
 
-  const chQuery = useQuery({
-    queryKey: ['cordoba-hogar'],
-    queryFn: cordobaHogarApi.getPanel,
-  })
-
-  const mlExpQuery = useQuery({
-    queryKey: ['ml-proyectos', 'exp'],
-    queryFn: () => miLugarApi.getProyectos({ tipo: 'exp' }),
-  })
-  const mlMuniQuery = useQuery({
-    queryKey: ['ml-proyectos', 'muni'],
-    queryFn: () => miLugarApi.getProyectos({ tipo: 'muni' }),
-  })
-  const mlProvQuery = useQuery({
-    queryKey: ['ml-proyectos', 'prov'],
-    queryFn: () => miLugarApi.getProyectos({ tipo: 'prov' }),
-  })
-
-  const cc = ccQuery.data
-  const ch = chQuery.data
-
-  const ccMunicipios = cc?.municipios ?? []
-  const ccConExpediente = ccMunicipios.filter((m) => m.expediente).length
-  const ccConvenioFirmado = ccMunicipios.filter((m) => m.ok_gob === 'SI').length
-  const ccMonto = ccMunicipios.reduce((acc, m) => acc + (m.monto ?? 0), 0)
-  const ccTcId = cc?.estados.find((e) => e.label.toLowerCase() === 'tc')?.id
-  const ccEnTC = ccTcId != null ? ccMunicipios.filter((m) => m.estado_general === ccTcId).length : 0
-  const ccEnObraId = cc?.estados.find((e) => e.label.toLowerCase() === 'en obra')?.id
-  const ccEnObra = ccEnObraId != null ? ccMunicipios.filter((m) => m.estado_general === ccEnObraId).length : 0
-
-  const mlExp = mlExpQuery.data ?? []
-  const mlMuni = mlMuniQuery.data ?? []
-  const mlProv = mlProvQuery.data ?? []
-  const mlAll = [...mlExp, ...mlMuni, ...mlProv]
-  const mlTotalLotes = mlAll.reduce((acc, p) => acc + (p.lotes ?? 0), 0)
-  const mlConExpediente = mlAll.filter((p) => p.expediente).length
-  const mlMonto = mlAll.reduce((acc, p) => acc + (p.monto ?? 0), 0)
-  const mlIsLoading = mlExpQuery.isLoading || mlMuniQuery.isLoading || mlProvQuery.isLoading
-  const mlIsError = !!mlExpQuery.error || !!mlMuniQuery.error || !!mlProvQuery.error
-
-  const chLocalidades = ch?.localidades ?? []
-  const chTotalCasas = chLocalidades.reduce((acc, l) => acc + (l.cantidad_casas ?? 0), 0)
-  const chConOkGob = chLocalidades.filter((l) => l.ok_gob === 'SI').length
-  const chConExpediente = chLocalidades.filter((l) => l.expediente).length
-  const chMonto = chLocalidades.reduce((acc, l) => acc + (l.monto ?? 0), 0)
-  const chTcId = ch?.estados.find((e) => e.label.toLowerCase() === 'tc')?.id
-  const chEnTC = chTcId != null ? chLocalidades.filter((l) => l.estado_general === chTcId).length : 0
+  const cc = tablero?.cordon_cuneta
+  const ch = tablero?.cordoba_hogar
+  const ml = tablero?.mi_lugar
 
   const cards: ProgramCard[] = [
     {
@@ -123,13 +79,13 @@ export function ProgramasPage() {
       descripcion: 'Expropiaciones, convenios municipales y lotes provinciales',
       tag: 'Tierra y hábitat',
       to: '/vivienda/mi-lugar',
-      loading: mlIsLoading,
-      error: mlIsError,
+      loading: isLoading,
+      error: isError,
       kpis: [
-        { label: 'Proyectos totales', value: mlAll.length, sub: `Exp: ${mlExp.length} | Muni: ${mlMuni.length} | Prov: ${mlProv.length}` },
-        { label: 'Lotes totales', value: mlTotalLotes.toLocaleString('es-AR'), sub: 'sumados los 3 tipos' },
-        { label: 'Con expediente', value: mlConExpediente, sub: `de ${mlAll.length} proyectos` },
-        { label: 'Monto comprometido', value: fmtMonto(mlMonto) },
+        { label: 'Proyectos totales', value: ml?.total ?? 0, sub: `Exp: ${ml?.exp ?? 0} | Muni: ${ml?.muni ?? 0} | Prov: ${ml?.prov ?? 0}` },
+        { label: 'Lotes totales', value: (ml?.total_lotes ?? 0).toLocaleString('es-AR'), sub: 'sumados los 3 tipos' },
+        { label: 'Con expediente', value: ml?.con_expediente ?? 0, sub: `de ${ml?.total ?? 0} proyectos` },
+        { label: 'Monto comprometido', value: fmtMonto(ml?.monto ?? 0) },
       ],
     },
     {
@@ -137,22 +93,22 @@ export function ProgramasPage() {
       descripcion: 'Programa habitacional — versión provisoria, sujeto a modificaciones',
       tag: 'Programa habitacional',
       to: '/vivienda/cordoba-hogar',
-      loading: chQuery.isLoading,
-      error: !!chQuery.error,
+      loading: isLoading,
+      error: isError,
       kpis: [
-        { label: 'Localidades', value: chLocalidades.length },
+        { label: 'Localidades', value: ch?.localidades ?? 0 },
         {
           label: 'Viviendas anunciadas',
-          value: chTotalCasas.toLocaleString('es-AR'),
+          value: (ch?.total_casas ?? 0).toLocaleString('es-AR'),
           sub: 'casas',
         },
         {
           label: 'OK Gobernación',
-          value: chLocalidades.length ? `${chConOkGob} / ${chLocalidades.length}` : '—',
-          sub: `con expediente: ${chConExpediente}`,
+          value: ch?.localidades ? `${ch.con_ok_gob} / ${ch.localidades}` : '—',
+          sub: `con expediente: ${ch?.con_expediente ?? 0}`,
         },
-        { label: 'Inversión total', value: fmtMonto(chMonto) },
-        { label: 'Tribunal de Cuentas', value: chEnTC, sub: 'en estado TC' },
+        { label: 'Inversión total', value: fmtMonto(ch?.monto ?? 0) },
+        { label: 'Tribunal de Cuentas', value: ch?.en_tc ?? 0, sub: 'en estado TC' },
       ],
     },
     {
@@ -160,22 +116,22 @@ export function ProgramasPage() {
       descripcion: 'Convenios con municipios — seguimiento de estados de avance',
       tag: 'Infraestructura urbana',
       to: '/vivienda/cordon-cuneta',
-      loading: ccQuery.isLoading,
-      error: !!ccQuery.error,
+      loading: isLoading,
+      error: isError,
       kpis: [
-        { label: 'Municipios', value: ccMunicipios.length },
+        { label: 'Municipios', value: cc?.municipios ?? 0 },
         {
           label: 'Con expediente',
-          value: ccMunicipios.length ? `${ccConExpediente} / ${ccMunicipios.length}` : '—',
+          value: cc?.municipios ? `${cc.con_expediente} / ${cc.municipios}` : '—',
         },
         {
           label: 'Convenio firmado',
-          value: ccMunicipios.length ? `${ccConvenioFirmado} / ${ccMunicipios.length}` : '—',
+          value: cc?.municipios ? `${cc.convenio_firmado} / ${cc.municipios}` : '—',
           sub: 'OK Gobernación',
         },
-        { label: 'Monto comprometido', value: fmtMonto(ccMonto) },
-        { label: 'En Obra', value: ccEnObra, sub: 'estado general' },
-        { label: 'Tribunal de Cuentas', value: ccEnTC, sub: 'en estado TC' },
+        { label: 'Monto comprometido', value: fmtMonto(cc?.monto ?? 0) },
+        { label: 'En Obra', value: cc?.en_obra ?? 0, sub: 'estado general' },
+        { label: 'Tribunal de Cuentas', value: cc?.en_tc ?? 0, sub: 'en estado TC' },
       ],
     },
   ]
