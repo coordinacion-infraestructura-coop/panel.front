@@ -45,6 +45,8 @@ import type {
   ChecklistTecnicoUpdate,
   ChecklistItemUpdate,
   HitoChecklistUpdate,
+  EntidadChecklistItem,
+  PedidoChecklist,
   CatalogosChecklist,
   CatalogoEstadoExpediente,
   CatalogoEstadoExpedienteCreate,
@@ -270,9 +272,31 @@ export const checklistTecnicoApi = {
   getCatalogos: () =>
     apiClient.get<CatalogosChecklist>(`${BASE}/checklist-tecnico/catalogos`).then((r) => r.data),
 
+  // Selector de localidad/programa — endpoint propio (los GET de panel completo
+  // de CC/CH/ML están vedados a TecnicoDGV). Spec §6, enmienda 1.1.0.
+  getEntidades: () =>
+    apiClient
+      .get<EntidadChecklistItem[]>(`${BASE}/checklist-tecnico/entidades`)
+      .then((r) => r.data),
+
   getChecklist: (programa: ProgramaChecklist, entidadId: string) =>
     apiClient
       .get<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}`)
+      .then((r) => r.data),
+
+  // Observaciones (pedidos) vía el módulo checklist — mismo motivo que getEntidades.
+  getPedidos: (programa: ProgramaChecklist, entidadId: string) =>
+    apiClient
+      .get<PedidoChecklist[]>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/pedidos`)
+      .then((r) => r.data),
+
+  createPedido: (
+    programa: ProgramaChecklist,
+    entidadId: string,
+    data: { descripcion: string; fecha_pedido: string },
+  ) =>
+    apiClient
+      .post<PedidoChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/pedidos`, data)
       .then((r) => r.data),
 
   updateChecklist: (programa: ProgramaChecklist, entidadId: string, data: ChecklistTecnicoUpdate) =>

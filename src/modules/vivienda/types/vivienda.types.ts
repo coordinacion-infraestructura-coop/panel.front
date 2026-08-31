@@ -598,6 +598,24 @@ export type ProgramaChecklist = 'cc' | 'ch' | 'ml'
 export type ValorItemChecklist = 'sin_presentar' | 'eval_tecnica' | 'a_corregir' | 'eval_juridica' | 'completo'
 export type TipoHitoChecklist = 'anticipo' | '40' | '70' | '100'
 
+/** Fila del selector localidad/programa — endpoint propio del módulo, accesible a TecnicoDGV. */
+export interface EntidadChecklistItem {
+  programa: ProgramaChecklist
+  id: string
+  nombre: string
+  departamento: string | null
+}
+
+export interface PedidoChecklist {
+  id: string
+  descripcion: string
+  fecha_pedido: string
+  created_at: string
+  created_by: string | null
+  created_by_nombre: string | null
+  secretaria: string | null
+}
+
 export interface CatalogoEstadoExpediente {
   id: number
   label: string

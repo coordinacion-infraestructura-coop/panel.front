@@ -1,6 +1,6 @@
 import { useMemo, useState, useId } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { checklistTecnicoApi, cordonCunetaApi, cordobaHogarApi, miLugarApi } from '../api/vivienda.api'
+import { checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import type {
   ChecklistItemDetalle,
@@ -74,18 +74,6 @@ interface LocalidadGroup {
   programs: Partial<Record<ProgramaChecklist, EntidadRef>>
 }
 
-const PEDIDOS_API: Record<
-  ProgramaChecklist,
-  {
-    get: (id: string) => Promise<{ id: string; descripcion: string; fecha_pedido: string; created_by_nombre?: string | null; created_by?: string | null }[]>
-    create: (id: string, data: { descripcion: string; fecha_pedido: string }) => Promise<unknown>
-  }
-> = {
-  cc: { get: cordonCunetaApi.getPedidos, create: cordonCunetaApi.createPedido },
-  ch: { get: cordobaHogarApi.getPedidos, create: cordobaHogarApi.createPedido },
-  ml: { get: miLugarApi.getPedidos, create: miLugarApi.createPedido },
-}
-
 // ── Página ───────────────────────────────────────────────────────────────────────
 
 export function ChecklistTecnicoPage() {
@@ -94,9 +82,10 @@ export function ChecklistTecnicoPage() {
   const qc = useQueryClient()
   const searchId = useId()
 
-  const { data: panelCC } = useQuery({ queryKey: ['cc-panel-checklist'], queryFn: cordonCunetaApi.getPanel })
-  const { data: panelCH } = useQuery({ queryKey: ['ch-panel-checklist'], queryFn: cordobaHogarApi.getPanel })
-  const { data: proyectosML } = useQuery({ queryKey: ['ml-proyectos-checklist'], queryFn: () => miLugarApi.getProyectos() })
+  const { data: entidades } = useQuery({
+    queryKey: ['checklist-entidades'],
+    queryFn: checklistTecnicoApi.getEntidades,
+  })
 
   const grupos = useMemo<LocalidadGroup[]>(() => {
     const map = new Map<string, LocalidadGroup>()
@@ -109,11 +98,9 @@ export function ChecklistTecnicoPage() {
       }
       g.programs[programa] = { id, nombre }
     }
-    for (const m of panelCC?.municipios ?? []) upsert('cc', m.id, m.municipio, m.departamento)
-    for (const l of panelCH?.localidades ?? []) upsert('ch', l.id, l.localidad, l.departamento)
-    for (const p of proyectosML ?? []) upsert('ml', p.id, p.nombre || p.localidad_nombre, p.departamento)
+    for (const e of entidades ?? []) upsert(e.programa, e.id, e.nombre, e.departamento)
     return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  }, [panelCC, panelCH, proyectosML])
+  }, [entidades])
 
   const [search, setSearch] = useState('')
   const [comboOpen, setComboOpen] = useState(false)
@@ -675,11 +662,11 @@ function ObservacionesCard({
 
   const { data: pedidos } = useQuery({
     queryKey,
-    queryFn: () => PEDIDOS_API[programa].get(entidadId),
+    queryFn: () => checklistTecnicoApi.getPedidos(programa, entidadId),
   })
 
   const createMut = useMutation({
-    mutationFn: () => PEDIDOS_API[programa].create(entidadId, { descripcion: texto, fecha_pedido: fecha }),
+    mutationFn: () => checklistTecnicoApi.createPedido(programa, entidadId, { descripcion: texto, fecha_pedido: fecha }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey })
       setTexto('')
