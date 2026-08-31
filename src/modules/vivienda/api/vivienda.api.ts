@@ -65,7 +65,7 @@ export const programasApi = {
   // KPIs agregados de CC/CH/ML para el Tablero — no expone los paneles completos,
   // asi que TecnicoDGV puede verlo (spec-checklist-tecnico-dgv §8/§9).
   getTablero: () =>
-    apiClient.get<TableroVivienda>(`${BASE}/programas/tablero`).then((r) => r.data),
+    apiClient.get<TableroVivienda>(`${BASE}/programas-tablero`).then((r) => r.data),
 }
 
 export const beneficiariosApi = {
