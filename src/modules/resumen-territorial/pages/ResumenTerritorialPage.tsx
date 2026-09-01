@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
+import { fichaLocalidadApi } from '../api/fichaLocalidad.api'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -101,6 +102,102 @@ function ChecklistPill({ prog }: { prog: ResumenPrograma }) {
   )
 }
 
+// ── Ficha demográfica (E5b) ────────────────────────────────────────────────────
+
+const SEMAFORO: Record<string, { label: string; dot: string; bg: string }> = {
+  verde: { label: 'Verde', dot: 'bg-green-500', bg: 'bg-green-50 text-green-700 border-green-200' },
+  amarillo: { label: 'Amarillo', dot: 'bg-yellow-400', bg: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+  rojo: { label: 'Rojo', dot: 'bg-red-500', bg: 'bg-red-50 text-red-700 border-red-200' },
+}
+const fmtNum = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('es-AR'))
+
+function FichaDemografica({ localidad }: { localidad: ResumenLocalidad }) {
+  const dep = localidad.departamento ?? ''
+  const loc = localidad.localidad
+  const habilitado = !!dep && !!loc
+
+  const locQ = useQuery({
+    queryKey: ['ficha-localidad', dep, loc],
+    queryFn: () => fichaLocalidadApi.localidad(dep, loc),
+    enabled: habilitado,
+    staleTime: 5 * 60 * 1000,
+  })
+  const depQ = useQuery({
+    queryKey: ['ficha-departamento', dep],
+    queryFn: () => fichaLocalidadApi.departamento(dep),
+    enabled: habilitado,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  if (!habilitado) return null
+
+  const li = locQ.data
+  const di = depQ.data
+  const sem = li?.color_semaforo ? SEMAFORO[li.color_semaforo.toLowerCase()] : undefined
+  const sinDatos =
+    !!li && li.habitantes == null && li.electores == null &&
+    !li.intendente_jefe_comunal && !li.tipo_localidad && !li.color_semaforo
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/60">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-widest text-gray-400">Ficha demográfica</p>
+        {sem && (
+          <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${sem.bg}`}>
+            <span className={`w-2 h-2 rounded-full ${sem.dot}`} /> Semáforo {sem.label}
+          </span>
+        )}
+      </div>
+
+      {locQ.isLoading ? (
+        <p className="text-xs text-slate-400 mt-2">Cargando ficha…</p>
+      ) : locQ.isError ? (
+        <p className="text-xs text-slate-400 mt-2">No se pudo cargar la ficha de la localidad.</p>
+      ) : sinDatos ? (
+        <p className="text-xs text-slate-400 mt-2 italic">Sin datos de padrón cargados para esta localidad.</p>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3 text-xs">
+          <div><dt className="text-gray-400">Habitantes</dt><dd className="font-semibold text-gov-navy">{fmtNum(li?.habitantes)}</dd></div>
+          <div><dt className="text-gray-400">Electores</dt><dd className="font-semibold text-gov-navy">{fmtNum(li?.electores)}</dd></div>
+          <div className="col-span-2">
+            <dt className="text-gray-400">Intendente / Jefe comunal</dt>
+            <dd className="text-slate-700">{li?.intendente_jefe_comunal || '—'}{li?.partido_politico ? ` · ${li.partido_politico}` : ''}</dd>
+          </div>
+          <div className="col-span-2"><dt className="text-gray-400">Tipo de localidad</dt><dd className="text-slate-700">{li?.tipo_localidad || '—'}</dd></div>
+        </dl>
+      )}
+
+      {di && (di.legislador_departamental || di.legislador_sabana1 || di.legislador_sabana2 || di.electores != null || di.habitantes != null) && (
+        <div className="mt-3 pt-3 border-t border-slate-200">
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Departamento · {di.departamento}</p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            {di.electores != null && <div><dt className="text-gray-400">Electores (depto)</dt><dd className="font-semibold text-gov-navy">{fmtNum(di.electores)}</dd></div>}
+            {di.habitantes != null && <div><dt className="text-gray-400">Habitantes (depto)</dt><dd className="font-semibold text-gov-navy">{fmtNum(di.habitantes)}</dd></div>}
+            {di.legislador_departamental && (
+              <div className="col-span-2"><dt className="text-gray-400">Legislador departamental</dt>
+                <dd className="text-slate-700">{di.legislador_departamental}{di.partido_politico ? ` · ${di.partido_politico}` : ''}</dd></div>
+            )}
+            {di.legislador_sabana1 && (
+              <div className="col-span-2"><dt className="text-gray-400">Legislador (sábana 1)</dt>
+                <dd className="text-slate-700">{di.legislador_sabana1}{di.partido_politico_sabana1 ? ` · ${di.partido_politico_sabana1}` : ''}</dd></div>
+            )}
+            {di.legislador_sabana2 && (
+              <div className="col-span-2"><dt className="text-gray-400">Legislador (sábana 2)</dt>
+                <dd className="text-slate-700">{di.legislador_sabana2}{di.partido_politico_sabana2 ? ` · ${di.partido_politico_sabana2}` : ''}</dd></div>
+            )}
+          </dl>
+        </div>
+      )}
+
+      {li?.updated_at && (
+        <p className="text-[10px] text-gray-400 mt-2">
+          Actualizado {fmtDate(li.updated_at)}{li.updated_by ? ` · ${li.updated_by}` : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── Ficha de localidad (drawer) ─────────────────────────────────────────────────
 
 function DetailDrawer({
@@ -143,6 +240,7 @@ function DetailDrawer({
               </p>
             </header>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <FichaDemografica localidad={localidad} />
               {localidad.programas.map((p, i) => (
                 <div key={i} className="border border-slate-200 rounded-lg p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -466,7 +564,7 @@ export function ResumenTerritorialPage() {
           <div>
             <h2 className="text-xl font-semibold text-gov-navy">Resumen Territorial</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Programas y gestiones por localidad — Ministerio de Cooperativas y Mutuales
+              Programas y gestiones por localidad — Secretaría General de Gobierno
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
@@ -755,7 +853,7 @@ export function ResumenTerritorialPage() {
         <div className="rt-print-doc hidden">
           <div style={{ borderBottom: '2px solid #14212b', paddingBottom: 8, marginBottom: 4 }}>
             <div style={{ fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#036aa1' }}>
-              Ministerio de Cooperativas y Mutuales · Provincia de Córdoba
+              Secretaría General de Gobierno · Provincia de Córdoba
             </div>
             <h1 style={{ fontSize: 16, margin: '3px 0 0' }}>
               Resumen Territorial — {unidad === 'localidad' ? 'por localidad' : 'por departamento'}
