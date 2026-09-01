@@ -16,6 +16,9 @@ export interface Gestion {
   direccion?: string
   canal_origen?: string
   tipo_gestion?: string
+  costo_estimado?: number | null
+  costo_moneda?: string | null
+  dias_transcurridos?: number | null
   created_at?: string
   created_by?: string
 }

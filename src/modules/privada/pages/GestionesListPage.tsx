@@ -4,7 +4,8 @@ import { gestionesApi } from '../api/gestiones.api'
 import { GestionDetalleDrawer } from './GestionDetalleDrawer'
 import { CambiarEstadoModal } from './CambiarEstadoModal'
 import { AgregarGestionModal } from './AgregarGestionModal'
-import type { GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
+import { exportToXlsx } from '../../../shared/utils/exportTable'
+import type { Gestion, GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
 
 const PAGE_SIZE = 50
 
@@ -133,6 +134,9 @@ export function GestionesListPage() {
   const [modal, setModal] = useState<{ id: string; estadoActual: string; nroExpediente?: string | null } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showAgregar, setShowAgregar] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [copiedExp, setCopiedExp] = useState<string | null>(null)
 
   const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad)
 
@@ -242,6 +246,76 @@ export function GestionesListPage() {
     setModal({ id, estadoActual, nroExpediente })
   }, [])
 
+  function copyExpediente(nro: string) {
+    navigator.clipboard?.writeText(nro).then(
+      () => {
+        setCopiedExp(nro)
+        window.setTimeout(() => setCopiedExp((c) => (c === nro ? null : c)), 1500)
+      },
+      () => { /* clipboard bloqueado — sin feedback */ },
+    )
+  }
+
+  async function handleExport() {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      const filtros = {
+        q: q || undefined,
+        estado: estado || undefined,
+        ministerio: ministerio || undefined,
+        categoria: categoria || undefined,
+        tipo_gestion: tipoGestion || undefined,
+        canal_origen: canalOrigen || undefined,
+        departamento: departamento || undefined,
+        localidad: localidad || undefined,
+      }
+      const EXPORT_LIMIT = 200
+      const all: Gestion[] = []
+      let off = 0
+      for (;;) {
+        const page: GestionesResponse = await gestionesApi.list({ ...filtros, limit: EXPORT_LIMIT, offset: off })
+        const rows = page.items ?? []
+        all.push(...rows)
+        const tot = page.total ?? all.length
+        if (rows.length < EXPORT_LIMIT || all.length >= tot) break
+        off += EXPORT_LIMIT
+      }
+      if (all.length === 0) {
+        setExportError('No hay gestiones que coincidan con los filtros aplicados.')
+        return
+      }
+      const nombreDe = (lista: CatalogoItem[] | undefined, id?: string | null) =>
+        (id ? lista?.find((x) => x.id === id)?.nombre : undefined) ?? id ?? ''
+      const mapped = all.map((g) => ({
+        'ID': g.id_gestion,
+        'Departamento': g.departamento ?? '',
+        'Localidad': g.localidad ?? '',
+        'Estado': g.estado_nombre ?? g.estado ?? '',
+        'Urgencia': g.urgencia ?? '',
+        'Ministerio/Agencia': nombreDe(ministerios, g.ministerio_agencia_id),
+        'Categoría': nombreDe(categorias, g.categoria_general_id),
+        'Tipo de gestión': nombreDe(tiposGestion, g.tipo_gestion),
+        'Canal de origen': nombreDe(canalesOrigen, g.canal_origen),
+        'Detalle': g.detalle ?? '',
+        'Nro. Expediente': g.nro_expediente ?? '',
+        'Costo estimado': g.costo_estimado ?? '',
+        'Moneda': g.costo_moneda ?? '',
+        'Fecha ingreso': g.fecha_ingreso ?? '',
+        'Días transcurridos': g.dias_transcurridos ?? '',
+      }))
+      const hoy = new Date().toISOString().slice(0, 10)
+      const slug = (s: string) => s.replace(/\s+/g, '-')
+      const fname = `gestiones_${departamento ? slug(departamento) : 'todos'}${localidad ? '_' + slug(localidad) : ''}_${hoy}.xlsx`
+      exportToXlsx(mapped, 'Gestiones', fname)
+    } catch {
+      setExportError('No se pudo exportar. Intentá de nuevo.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -251,14 +325,26 @@ export function GestionesListPage() {
             {total > 0 ? `${total} gestión${total !== 1 ? 'es' : ''} registrada${total !== 1 ? 's' : ''}` : ' '}
           </p>
         </div>
-        {canModify && (
-          <button
-            onClick={() => setShowAgregar(true)}
-            className="shrink-0 bg-gov-navy text-white px-4 py-2 rounded text-sm hover:bg-gov-blue transition-colors"
-          >
-            + Nueva gestión
-          </button>
-        )}
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="border border-slate-300 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'Exportando…' : `↓ Exportar${total > 0 ? ` (${total})` : ''}`}
+            </button>
+            {canModify && (
+              <button
+                onClick={() => setShowAgregar(true)}
+                className="bg-gov-navy text-white px-4 py-2 rounded text-sm hover:bg-gov-blue transition-colors"
+              >
+                + Nueva gestión
+              </button>
+            )}
+          </div>
+          {exportError && <p role="alert" className="text-xs text-red-600">{exportError}</p>}
+        </div>
       </div>
 
       {/* ── Filtros ── */}
@@ -362,7 +448,7 @@ export function GestionesListPage() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-gov-navy text-white">
-                {['Fecha / Expediente', 'Estado', 'Urgencia', 'Localidad', 'Detalle', 'Acciones'].map((h) => (
+                {['Fecha ingreso', 'Nro expediente', 'Estado', 'Urgencia', 'Localidad', 'Detalle', 'Acciones'].map((h) => (
                   <th key={h} scope="col" className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -372,27 +458,48 @@ export function GestionesListPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400" role="status">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400" role="status">
                     Cargando gestiones…
                   </td>
                 </tr>
               )}
               {!isLoading && items.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                     No se encontraron gestiones con los filtros aplicados.
                   </td>
                 </tr>
               )}
               {items.map((g) => (
                 <tr key={g.id_gestion} className="hover:bg-slate-50 transition-colors">
-                  {/* Fecha / Expediente */}
+                  {/* Fecha ingreso */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <time className="text-slate-600 text-sm" dateTime={g.fecha_ingreso}>
                       {formatFecha(g.fecha_ingreso)}
                     </time>
-                    {g.nro_expediente && (
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">{g.nro_expediente}</p>
+                  </td>
+
+                  {/* Nro expediente */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {g.nro_expediente ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-xs text-slate-600 font-mono">{g.nro_expediente}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyExpediente(g.nro_expediente!)}
+                          title="Copiar nro de expediente"
+                          aria-label="Copiar nro de expediente"
+                          className="text-slate-400 hover:text-gov-blue transition-colors"
+                        >
+                          {copiedExp === g.nro_expediente ? (
+                            <span className="text-xs text-green-600">✓ copiado</span>
+                          ) : (
+                            <span aria-hidden="true">📋</span>
+                          )}
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
                     )}
                   </td>
 
