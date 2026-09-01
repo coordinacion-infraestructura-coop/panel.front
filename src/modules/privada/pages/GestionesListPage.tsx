@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { gestionesApi } from '../api/gestiones.api'
 import { GestionDetalleDrawer } from './GestionDetalleDrawer'
 import { CambiarEstadoModal } from './CambiarEstadoModal'
+import { AgregarGestionModal } from './AgregarGestionModal'
 import type { GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
 
 const PAGE_SIZE = 50
@@ -131,6 +132,7 @@ export function GestionesListPage() {
   const [drawerGestionId, setDrawerGestionId] = useState<string | null>(null)
   const [modal, setModal] = useState<{ id: string; estadoActual: string; nroExpediente?: string | null } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [showAgregar, setShowAgregar] = useState(false)
 
   const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad)
 
@@ -242,11 +244,21 @@ export function GestionesListPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gov-navy">Gestiones del Ministro</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {total > 0 ? `${total} gestión${total !== 1 ? 'es' : ''} registrada${total !== 1 ? 's' : ''}` : ' '}
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gov-navy">Gestiones del Ministro</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {total > 0 ? `${total} gestión${total !== 1 ? 'es' : ''} registrada${total !== 1 ? 's' : ''}` : ' '}
+          </p>
+        </div>
+        {canModify && (
+          <button
+            onClick={() => setShowAgregar(true)}
+            className="shrink-0 bg-gov-navy text-white px-4 py-2 rounded text-sm hover:bg-gov-blue transition-colors"
+          >
+            + Nueva gestión
+          </button>
+        )}
       </div>
 
       {/* ── Filtros ── */}
@@ -483,6 +495,13 @@ export function GestionesListPage() {
         onCambiarEstado={(id, estadoActual, nroExpediente) => {
           handleCambiarEstado(id, estadoActual, nroExpediente)
         }}
+      />
+
+      {/* ── Modal nueva gestión ── */}
+      <AgregarGestionModal
+        open={showAgregar}
+        onClose={() => setShowAgregar(false)}
+        onCreated={(id) => setDrawerGestionId(id)}
       />
 
       {/* ── Modal cambiar estado ── */}

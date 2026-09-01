@@ -80,6 +80,24 @@ export interface CambioEstadoPayload {
   acciones_implementadas?: string
 }
 
+export interface GestionCreatePayload {
+  ministerio_agencia_id: string
+  categoria_general_id: string
+  detalle: string
+  departamento: string
+  localidad: string
+  urgencia?: string
+  direccion?: string | null
+  observaciones?: string | null
+  tipo_gestion?: string | null
+  canal_origen?: string | null
+  organismo_id?: string | null
+  subtipo_detalle?: string | null
+  costo_estimado?: number | null
+  costo_moneda?: string | null
+  nro_expediente?: string | null
+}
+
 export interface MeResponse {
   email: string
   nombre?: string

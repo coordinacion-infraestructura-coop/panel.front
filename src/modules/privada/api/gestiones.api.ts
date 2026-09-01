@@ -1,5 +1,5 @@
 import apiClient from '../../../shared/api/client'
-import type { CambioEstadoPayload, MeResponse } from '../types/gestiones.types'
+import type { CambioEstadoPayload, GestionCreatePayload, MeResponse } from '../types/gestiones.types'
 
 const BASE = '/api/v1/privada'
 
@@ -22,6 +22,9 @@ export const gestionesApi = {
 
   get: (id: string) =>
     apiClient.get(`${BASE}/gestiones/${id}`).then((r) => r.data),
+
+  crear: (payload: GestionCreatePayload) =>
+    apiClient.post(`${BASE}/gestiones`, payload).then((r) => r.data),
 
   getEventos: (id: string) =>
     apiClient.get(`${BASE}/gestiones/${id}/eventos`).then((r) => r.data),
