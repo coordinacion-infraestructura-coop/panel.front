@@ -360,11 +360,15 @@ export function ResumenTerritorialPage() {
     staleTime: Infinity,
   })
 
-  // Privada la trae el frontend con el token del usuario (plan B — el backend no puede
-  // llamar a svc-privada server-to-server). Solo si el usuario puede verla.
+  // E5a / ADR-016: cuando la federación server-side está activa (svc-vivienda ya
+  // trae las líneas de Privada en el snapshot), NO se hace el merge en el browser
+  // para no duplicar. El código cliente se conserva un release detrás del flag (RE-7):
+  // poner VITE_PRIVADA_SERVER_FEDERATION=true al desplegar E5a.
+  const federacionServidor = import.meta.env.VITE_PRIVADA_SERVER_FEDERATION === 'true'
   const puedeVerPrivada =
-    ['Admin', 'Autoridad'].includes(portalUser?.rol ?? '') ||
-    (portalUser?.secretarias ?? []).includes('privada')
+    !federacionServidor &&
+    (['Admin', 'Autoridad'].includes(portalUser?.rol ?? '') ||
+      (portalUser?.secretarias ?? []).includes('privada'))
   const privadaQuery = useQuery({
     queryKey: ['resumen-territorial-privada'],
     queryFn: fetchPrivadaPorLocalidad,
@@ -426,7 +430,7 @@ export function ResumenTerritorialPage() {
         a.localidad.localeCompare(b.localidad, 'es'),
     )
     return {
-      generado_para_areas: [...base.generado_para_areas, 'privada'],
+      generado_para_areas: [...new Set([...base.generado_para_areas, 'privada'])],
       total_localidades: locs.length,
       total_programas: locs.reduce((n, l) => n + l.programas.length, 0),
       localidades: locs,
