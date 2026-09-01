@@ -79,6 +79,8 @@ export interface CambioEstadoPayload {
   comentario?: string
   nro_expediente?: string
   fecha_ingreso?: string
+  departamento?: string
+  localidad?: string
   derivado_a?: string
   acciones_implementadas?: string
 }

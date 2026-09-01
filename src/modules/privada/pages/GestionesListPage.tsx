@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
 import { GestionDetalleDrawer } from './GestionDetalleDrawer'
@@ -8,6 +8,32 @@ import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type { Gestion, GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
 
 const PAGE_SIZE = 50
+
+// ─── Definición de columnas de la tabla ──────────────────────────────────────
+// `minimal` = set por defecto / botón "Min". Todas son toggleables y ordenables.
+type ColKey =
+  | 'fecha_ingreso' | 'nro_expediente' | 'estado' | 'urgencia' | 'departamento'
+  | 'localidad' | 'ministerio' | 'categoria' | 'tipo_gestion' | 'canal_origen'
+  | 'detalle' | 'costo_estimado' | 'dias_transcurridos' | 'id_gestion'
+
+const COL_META: { key: ColKey; label: string; minimal: boolean }[] = [
+  { key: 'fecha_ingreso', label: 'Fecha ingreso', minimal: true },
+  { key: 'nro_expediente', label: 'Nro expediente', minimal: true },
+  { key: 'estado', label: 'Estado', minimal: true },
+  { key: 'urgencia', label: 'Urgencia', minimal: true },
+  { key: 'departamento', label: 'Departamento', minimal: false },
+  { key: 'localidad', label: 'Localidad', minimal: true },
+  { key: 'ministerio', label: 'Ministerio', minimal: false },
+  { key: 'categoria', label: 'Categoría', minimal: false },
+  { key: 'tipo_gestion', label: 'Tipo', minimal: false },
+  { key: 'canal_origen', label: 'Canal', minimal: false },
+  { key: 'detalle', label: 'Detalle', minimal: true },
+  { key: 'costo_estimado', label: 'Costo', minimal: false },
+  { key: 'dias_transcurridos', label: 'Días', minimal: false },
+  { key: 'id_gestion', label: 'ID', minimal: false },
+]
+const MINIMAL_COLS = COL_META.filter((c) => c.minimal).map((c) => c.key)
+const LS_COLS_KEY = 'privada.gestiones.cols.v1'
 
 // ─── Helpers de estilo ────────────────────────────────────────────────────────
 
@@ -136,7 +162,35 @@ export function GestionesListPage() {
   const [showAgregar, setShowAgregar] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
-  const [copiedExp, setCopiedExp] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+  const [showCols, setShowCols] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [sort, setSort] = useState<{ key: ColKey; dir: 'asc' | 'desc' } | null>(null)
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
+    try {
+      const raw = localStorage.getItem(LS_COLS_KEY)
+      if (raw) {
+        const arr = JSON.parse(raw) as ColKey[]
+        const valid = arr.filter((k) => COL_META.some((c) => c.key === k))
+        if (valid.length) return new Set(valid)
+      }
+    } catch { /* localStorage no disponible */ }
+    return new Set(MINIMAL_COLS)
+  })
+
+  function persistCols(next: Set<ColKey>) {
+    setVisibleCols(next)
+    try { localStorage.setItem(LS_COLS_KEY, JSON.stringify([...next])) } catch { /* noop */ }
+  }
+  function toggleCol(key: ColKey) {
+    const next = new Set(visibleCols)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    if (next.size === 0) return
+    persistCols(next)
+  }
+  function toggleSort(key: ColKey) {
+    setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+  }
 
   const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad)
 
@@ -246,48 +300,95 @@ export function GestionesListPage() {
     setModal({ id, estadoActual, nroExpediente })
   }, [])
 
-  function copyExpediente(nro: string) {
-    navigator.clipboard?.writeText(nro).then(
+  function copyText(text: string, tag: string) {
+    navigator.clipboard?.writeText(text).then(
       () => {
-        setCopiedExp(nro)
-        window.setTimeout(() => setCopiedExp((c) => (c === nro ? null : c)), 1500)
+        setCopied(tag)
+        window.setTimeout(() => setCopied((c) => (c === tag ? null : c)), 1500)
       },
       () => { /* clipboard bloqueado — sin feedback */ },
     )
   }
 
-  async function handleExport() {
+  const nombreDe = useCallback(
+    (lista: CatalogoItem[] | undefined, id?: string | null) =>
+      (id ? lista?.find((x) => x.id === id)?.nombre : undefined) ?? id ?? '',
+    [],
+  )
+
+  // Texto plano de una celda — usado para ordenar y para exportar
+  const cellText = useCallback((g: Gestion, key: ColKey): string => {
+    switch (key) {
+      case 'fecha_ingreso': return g.fecha_ingreso ?? ''
+      case 'nro_expediente': return g.nro_expediente ?? ''
+      case 'estado': return g.estado_nombre ?? g.estado ?? ''
+      case 'urgencia': return g.urgencia ?? ''
+      case 'departamento': return g.departamento ?? ''
+      case 'localidad': return g.localidad ?? ''
+      case 'ministerio': return nombreDe(ministerios, g.ministerio_agencia_id)
+      case 'categoria': return nombreDe(categorias, g.categoria_general_id)
+      case 'tipo_gestion': return nombreDe(tiposGestion, g.tipo_gestion)
+      case 'canal_origen': return nombreDe(canalesOrigen, g.canal_origen)
+      case 'detalle': return g.detalle ?? ''
+      case 'costo_estimado': return g.costo_estimado != null ? String(g.costo_estimado) : ''
+      case 'dias_transcurridos': return g.dias_transcurridos != null ? String(g.dias_transcurridos) : ''
+      case 'id_gestion': return g.id_gestion
+    }
+  }, [ministerios, categorias, tiposGestion, canalesOrigen, nombreDe])
+
+  const sortedItems = useMemo(() => {
+    if (!sort) return items
+    const num = sort.key === 'costo_estimado' || sort.key === 'dias_transcurridos'
+    const copy = [...items]
+    copy.sort((a, b) => {
+      const va = cellText(a, sort.key)
+      const vb = cellText(b, sort.key)
+      let c: number
+      if (num) c = (parseFloat(va) || 0) - (parseFloat(vb) || 0)
+      else c = va.localeCompare(vb, 'es', { sensitivity: 'base' })
+      return sort.dir === 'asc' ? c : -c
+    })
+    return copy
+  }, [items, sort, cellText])
+
+  async function fetchAllFiltered(): Promise<Gestion[]> {
+    const filtros = {
+      q: q || undefined,
+      estado: estado || undefined,
+      ministerio: ministerio || undefined,
+      categoria: categoria || undefined,
+      tipo_gestion: tipoGestion || undefined,
+      canal_origen: canalOrigen || undefined,
+      departamento: departamento || undefined,
+      localidad: localidad || undefined,
+    }
+    const LIMIT = 200
+    const all: Gestion[] = []
+    let off = 0
+    for (;;) {
+      const page: GestionesResponse = await gestionesApi.list({ ...filtros, limit: LIMIT, offset: off })
+      const rows = page.items ?? []
+      all.push(...rows)
+      const tot = page.total ?? all.length
+      if (rows.length < LIMIT || all.length >= tot) break
+      off += LIMIT
+    }
+    return all
+  }
+
+  function baseFilename() {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const slug = (s: string) => s.replace(/\s+/g, '-')
+    return `gestiones_${departamento ? slug(departamento) : 'todos'}${localidad ? '_' + slug(localidad) : ''}_${hoy}`
+  }
+
+  async function handleExportExcel() {
     if (exporting) return
     setExporting(true)
     setExportError(null)
     try {
-      const filtros = {
-        q: q || undefined,
-        estado: estado || undefined,
-        ministerio: ministerio || undefined,
-        categoria: categoria || undefined,
-        tipo_gestion: tipoGestion || undefined,
-        canal_origen: canalOrigen || undefined,
-        departamento: departamento || undefined,
-        localidad: localidad || undefined,
-      }
-      const EXPORT_LIMIT = 200
-      const all: Gestion[] = []
-      let off = 0
-      for (;;) {
-        const page: GestionesResponse = await gestionesApi.list({ ...filtros, limit: EXPORT_LIMIT, offset: off })
-        const rows = page.items ?? []
-        all.push(...rows)
-        const tot = page.total ?? all.length
-        if (rows.length < EXPORT_LIMIT || all.length >= tot) break
-        off += EXPORT_LIMIT
-      }
-      if (all.length === 0) {
-        setExportError('No hay gestiones que coincidan con los filtros aplicados.')
-        return
-      }
-      const nombreDe = (lista: CatalogoItem[] | undefined, id?: string | null) =>
-        (id ? lista?.find((x) => x.id === id)?.nombre : undefined) ?? id ?? ''
+      const all = await fetchAllFiltered()
+      if (all.length === 0) { setExportError('No hay gestiones que coincidan con los filtros aplicados.'); return }
       const mapped = all.map((g) => ({
         'ID': g.id_gestion,
         'Departamento': g.departamento ?? '',
@@ -305,14 +406,118 @@ export function GestionesListPage() {
         'Fecha ingreso': g.fecha_ingreso ?? '',
         'Días transcurridos': g.dias_transcurridos ?? '',
       }))
-      const hoy = new Date().toISOString().slice(0, 10)
-      const slug = (s: string) => s.replace(/\s+/g, '-')
-      const fname = `gestiones_${departamento ? slug(departamento) : 'todos'}${localidad ? '_' + slug(localidad) : ''}_${hoy}.xlsx`
-      exportToXlsx(mapped, 'Gestiones', fname)
+      exportToXlsx(mapped, 'Gestiones', `${baseFilename()}.xlsx`)
     } catch {
       setExportError('No se pudo exportar. Intentá de nuevo.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handleExportPdf() {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    try {
+      const all = await fetchAllFiltered()
+      if (all.length === 0) { setExportError('No hay gestiones que coincidan con los filtros aplicados.'); return }
+      const partes: string[] = []
+      if (departamento) partes.push(`Departamento: ${departamento}`)
+      if (localidad) partes.push(`Localidad: ${localidad}`)
+      if (estado) partes.push(`Estado: ${nombreDe(estados, estado)}`)
+      if (ministerio) partes.push(`Ministerio: ${nombreDe(ministerios, ministerio)}`)
+      if (categoria) partes.push(`Categoría: ${nombreDe(categorias, categoria)}`)
+      if (tipoGestion) partes.push(`Tipo: ${nombreDe(tiposGestion, tipoGestion)}`)
+      if (canalOrigen) partes.push(`Canal: ${nombreDe(canalesOrigen, canalOrigen)}`)
+      if (q) partes.push(`Búsqueda: "${q}"`)
+      const filtroTexto = partes.length ? partes.join('  |  ') : 'Sin filtros (todos los registros)'
+
+      const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+      const autoTable = autoTableMod.default
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+      doc.setFontSize(13)
+      doc.text('Gestiones del Ministro', 40, 36)
+      doc.setFontSize(9)
+      doc.text(`Exportado: ${new Date().toLocaleString('es-AR')}`, 40, 52)
+      doc.text(`Filtros: ${filtroTexto}`, 40, 65)
+      doc.text(`Total: ${all.length}`, 40, 78)
+
+      autoTable(doc, {
+        startY: 90,
+        styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
+        headStyles: { fillColor: [23, 44, 63] },
+        columnStyles: { 9: { cellWidth: 200 } },
+        head: [['Fecha', 'Nro exp.', 'Estado', 'Urgencia', 'Departamento', 'Localidad', 'Ministerio', 'Categoría', 'Tipo', 'Detalle', 'Días']],
+        body: all.map((g) => [
+          g.fecha_ingreso ?? '',
+          g.nro_expediente ?? '',
+          g.estado_nombre ?? g.estado ?? '',
+          g.urgencia ?? '',
+          g.departamento ?? '',
+          g.localidad ?? '',
+          nombreDe(ministerios, g.ministerio_agencia_id),
+          nombreDe(categorias, g.categoria_general_id),
+          nombreDe(tiposGestion, g.tipo_gestion),
+          g.detalle ?? '',
+          g.dias_transcurridos != null ? String(g.dias_transcurridos) : '',
+        ]),
+      })
+      doc.save(`${baseFilename()}.pdf`)
+    } catch {
+      setExportError('No se pudo exportar a PDF. Intentá de nuevo.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const orderedVisibleCols = COL_META.filter((c) => visibleCols.has(c.key))
+
+  function renderCell(g: Gestion, key: ColKey) {
+    switch (key) {
+      case 'fecha_ingreso':
+        return <time className="text-slate-600" dateTime={g.fecha_ingreso}>{formatFecha(g.fecha_ingreso)}</time>
+      case 'nro_expediente':
+        return g.nro_expediente ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-slate-600 font-mono">{g.nro_expediente}</span>
+            <button type="button" onClick={() => copyText(g.nro_expediente!, `exp:${g.id_gestion}`)}
+              title="Copiar nro de expediente" aria-label="Copiar nro de expediente"
+              className="text-slate-400 hover:text-gov-blue transition-colors">
+              {copied === `exp:${g.id_gestion}` ? <span className="text-xs text-green-600">✓</span> : <span aria-hidden="true">📋</span>}
+            </button>
+          </span>
+        ) : <span className="text-slate-300">—</span>
+      case 'estado':
+        return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${estadoBadge(g.estado)}`}>{g.estado_nombre ?? g.estado}</span>
+      case 'urgencia':
+        return g.urgencia
+          ? <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${urgenciaBadge(g.urgencia)}`}>{g.urgencia}</span>
+          : <span className="text-slate-300">—</span>
+      case 'localidad':
+        return (
+          <>
+            <p className="text-sm font-medium text-slate-700">{g.localidad}</p>
+            <p className="text-xs text-slate-400">{g.departamento}</p>
+          </>
+        )
+      case 'detalle':
+        return <p className="truncate max-w-xs text-slate-700" title={g.detalle}>{g.detalle}</p>
+      case 'id_gestion':
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 font-mono">{g.id_gestion.slice(0, 8)}…</span>
+            <button type="button" onClick={() => copyText(g.id_gestion, `id:${g.id_gestion}`)}
+              title="Copiar ID" aria-label="Copiar ID" className="text-slate-400 hover:text-gov-blue transition-colors">
+              {copied === `id:${g.id_gestion}` ? <span className="text-xs text-green-600">✓</span> : <span aria-hidden="true">⧉</span>}
+            </button>
+          </span>
+        )
+      case 'costo_estimado':
+        return <span className="text-slate-600">{g.costo_estimado != null ? `${g.costo_estimado.toLocaleString('es-AR')}${g.costo_moneda ? ' ' + g.costo_moneda : ''}` : '—'}</span>
+      case 'dias_transcurridos':
+        return <span className="text-slate-600">{g.dias_transcurridos ?? '—'}</span>
+      default:
+        return <span className="text-slate-600">{cellText(g, key) || '—'}</span>
     }
   }
 
@@ -327,13 +532,64 @@ export function GestionesListPage() {
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1">
           <div className="flex gap-2">
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="border border-slate-300 text-slate-600 px-4 py-2 rounded text-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {exporting ? 'Exportando…' : `↓ Exportar${total > 0 ? ` (${total})` : ''}`}
-            </button>
+            {/* Selector de columnas */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowCols((v) => !v); setShowExportMenu(false) }}
+                className="border border-slate-300 text-slate-600 px-3 py-2 rounded text-sm hover:bg-slate-50 transition-colors"
+                aria-haspopup="true" aria-expanded={showCols}
+              >
+                Columnas
+              </button>
+              {showCols && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowCols(false)} aria-hidden="true" />
+                  <div className="absolute right-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-2" role="menu">
+                    <div className="flex gap-1 mb-2">
+                      <button className="flex-1 text-xs border border-slate-200 rounded py-1 hover:bg-slate-50"
+                        onClick={() => persistCols(new Set(MINIMAL_COLS))}>Min</button>
+                      <button className="flex-1 text-xs border border-slate-200 rounded py-1 hover:bg-slate-50"
+                        onClick={() => persistCols(new Set(COL_META.map((c) => c.key)))}>Todo</button>
+                      <button className="flex-1 text-xs border border-slate-200 rounded py-1 hover:bg-slate-50"
+                        onClick={() => persistCols(new Set(MINIMAL_COLS))}>Reset</button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {COL_META.map((c) => (
+                        <label key={c.key} className="flex items-center gap-2 px-1 py-1 text-sm text-slate-700 hover:bg-slate-50 rounded cursor-pointer">
+                          <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1 px-1">Se guarda en este navegador.</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Exportar */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowExportMenu((v) => !v); setShowCols(false) }}
+                disabled={exporting}
+                className="border border-slate-300 text-slate-600 px-3 py-2 rounded text-sm hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-haspopup="true" aria-expanded={showExportMenu}
+              >
+                {exporting ? 'Exportando…' : `↓ Exportar${total > 0 ? ` (${total})` : ''} ▾`}
+              </button>
+              {showExportMenu && !exporting && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} aria-hidden="true" />
+                  <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1" role="menu">
+                    <button className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                      onClick={() => { setShowExportMenu(false); handleExportExcel() }}>Excel (.xlsx)</button>
+                    <button className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                      onClick={() => { setShowExportMenu(false); handleExportPdf() }}>PDF</button>
+                  </div>
+                </>
+              )}
+            </div>
+
             {canModify && (
               <button
                 onClick={() => setShowAgregar(true)}
@@ -448,94 +704,48 @@ export function GestionesListPage() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-gov-navy text-white">
-                {['Fecha ingreso', 'Nro expediente', 'Estado', 'Urgencia', 'Localidad', 'Detalle', 'Acciones'].map((h) => (
-                  <th key={h} scope="col" className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">
-                    {h}
+                {orderedVisibleCols.map((c) => (
+                  <th key={c.key} scope="col" className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(c.key)}
+                      className="inline-flex items-center gap-1 hover:text-white/80"
+                      title="Ordenar por esta columna (página actual)"
+                    >
+                      {c.label}
+                      <span className="text-[10px] opacity-70">
+                        {sort?.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+                      </span>
+                    </button>
                   </th>
                 ))}
+                <th scope="col" className="px-4 py-3 text-left font-medium text-xs uppercase tracking-wider whitespace-nowrap">
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400" role="status">
+                  <td colSpan={orderedVisibleCols.length + 1} className="px-4 py-8 text-center text-slate-400" role="status">
                     Cargando gestiones…
                   </td>
                 </tr>
               )}
-              {!isLoading && items.length === 0 && (
+              {!isLoading && sortedItems.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={orderedVisibleCols.length + 1} className="px-4 py-8 text-center text-slate-400">
                     No se encontraron gestiones con los filtros aplicados.
                   </td>
                 </tr>
               )}
-              {items.map((g) => (
-                <tr key={g.id_gestion} className="hover:bg-slate-50 transition-colors">
-                  {/* Fecha ingreso */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <time className="text-slate-600 text-sm" dateTime={g.fecha_ingreso}>
-                      {formatFecha(g.fecha_ingreso)}
-                    </time>
-                  </td>
-
-                  {/* Nro expediente */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {g.nro_expediente ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-xs text-slate-600 font-mono">{g.nro_expediente}</span>
-                        <button
-                          type="button"
-                          onClick={() => copyExpediente(g.nro_expediente!)}
-                          title="Copiar nro de expediente"
-                          aria-label="Copiar nro de expediente"
-                          className="text-slate-400 hover:text-gov-blue transition-colors"
-                        >
-                          {copiedExp === g.nro_expediente ? (
-                            <span className="text-xs text-green-600">✓ copiado</span>
-                          ) : (
-                            <span aria-hidden="true">📋</span>
-                          )}
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
-                  </td>
-
-                  {/* Estado */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${estadoBadge(g.estado)}`}>
-                      {g.estado_nombre ?? g.estado}
-                    </span>
-                  </td>
-
-                  {/* Urgencia */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {g.urgencia && (
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${urgenciaBadge(g.urgencia)}`}>
-                        {g.urgencia}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Localidad / Departamento */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <p className="text-sm font-medium text-slate-700">{g.localidad}</p>
-                    <p className="text-xs text-slate-400">{g.departamento}</p>
-                  </td>
-
-                  {/* Detalle */}
-                  <td className="px-4 py-3 max-w-xs">
-                    <p className="truncate text-slate-700" title={g.detalle}>{g.detalle}</p>
-                    {(g.ministerio_nombre || g.categoria_nombre) && (
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {[g.ministerio_nombre, g.categoria_nombre].filter(Boolean).join(' · ')}
-                      </p>
-                    )}
-                  </td>
-
-                  {/* Acciones */}
+              {sortedItems.map((g) => (
+                <tr key={g.id_gestion} className="hover:bg-slate-50 transition-colors align-top">
+                  {orderedVisibleCols.map((c) => (
+                    <td key={c.key} className={`px-4 py-3 ${c.key === 'detalle' ? 'max-w-xs' : 'whitespace-nowrap'}`}>
+                      {renderCell(g, c.key)}
+                    </td>
+                  ))}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <button

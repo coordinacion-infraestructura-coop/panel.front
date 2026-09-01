@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
-import type { EstadoGestion, CambioEstadoPayload } from '../types/gestiones.types'
+import type { EstadoGestion, CambioEstadoPayload, GestionDetalle } from '../types/gestiones.types'
 
 const ESTADOS: { value: EstadoGestion; label: string }[] = [
   { value: 'INGRESADO', label: 'Ingresado' },
@@ -28,13 +28,50 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
   const [comentario, setComentario] = useState('')
   const [nroExpediente, setNroExpediente] = useState(nroExpedienteActual ?? '')
   const [fechaIngreso, setFechaIngreso] = useState('')
+  const [derivadoA, setDerivadoA] = useState('')
+  const [acciones, setAcciones] = useState('')
+  const [departamento, setDepartamento] = useState('')
+  const [localidad, setLocalidad] = useState('')
+  // valores originales de depto/localidad para enviar sólo si cambian
+  const [origen, setOrigen] = useState<{ departamento: string; localidad: string }>({ departamento: '', localidad: '' })
+
+  // Detalle de la gestión — para prefilar departamento / localidad actuales
+  const { data: detalle } = useQuery<GestionDetalle>({
+    queryKey: ['gestion-detalle', gestionId],
+    queryFn: () => gestionesApi.get(gestionId!),
+    enabled: !!gestionId,
+  })
+
+  const { data: departamentos } = useQuery<string[]>({
+    queryKey: ['privada-cat-departamentos'],
+    queryFn: () => gestionesApi.catalogo('departamentos'),
+    staleTime: Infinity,
+  })
+  const { data: localidades } = useQuery<string[]>({
+    queryKey: ['privada-cat-localidades', departamento],
+    queryFn: () => gestionesApi.catalogoLocalidades(departamento),
+    enabled: !!gestionId && !!departamento,
+    staleTime: Infinity,
+  })
 
   useEffect(() => {
     setNuevoEstado(estadoActual as EstadoGestion)
     setNroExpediente(nroExpedienteActual ?? '')
     setComentario('')
     setFechaIngreso('')
+    setDerivadoA('')
+    setAcciones('')
   }, [gestionId, estadoActual, nroExpedienteActual])
+
+  useEffect(() => {
+    if (detalle) {
+      const dep = detalle.departamento ?? ''
+      const loc = detalle.localidad ?? ''
+      setDepartamento(dep)
+      setLocalidad(loc)
+      setOrigen({ departamento: dep, localidad: loc })
+    }
+  }, [detalle])
 
   useEffect(() => {
     if (!gestionId) return
@@ -54,33 +91,42 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
   })
 
   const requireComentario = REQUIERE_COMENTARIO.includes(nuevoEstado)
-  const canSubmit = !!nuevoEstado && (!requireComentario || comentario.trim().length > 0)
+  const canSubmit = !!nuevoEstado && !!departamento && !!localidad &&
+    (!requireComentario || comentario.trim().length > 0)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit || mutation.isPending) return
+    const deptoCambio = departamento !== origen.departamento
+    const locCambio = localidad !== origen.localidad
     const payload: CambioEstadoPayload = {
       nuevo_estado: nuevoEstado,
       ...(comentario.trim() && { comentario: comentario.trim() }),
       ...(nroExpediente.trim() !== (nroExpedienteActual ?? '') && { nro_expediente: nroExpediente.trim() || undefined }),
       ...(fechaIngreso && { fecha_ingreso: fechaIngreso }),
+      ...(derivadoA.trim() && { derivado_a: derivadoA.trim() }),
+      ...(acciones.trim() && { acciones_implementadas: acciones.trim() }),
+      ...((deptoCambio || locCambio) && { departamento, localidad }),
     }
     mutation.mutate(payload)
   }
 
   if (!gestionId) return null
 
+  const inputCls = 'w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan bg-white disabled:bg-slate-50 disabled:text-slate-400'
+  const labelCls = 'block text-sm font-medium text-slate-700 mb-1'
+
   return (
     <>
       <div className="fixed inset-0 bg-black/50 z-60" onClick={onClose} aria-hidden="true" />
       <div
-        className="fixed inset-0 z-60 flex items-center justify-center p-4 pointer-events-none"
+        className="fixed inset-0 z-60 flex items-start justify-center p-4 overflow-y-auto pointer-events-none"
         role="dialog"
         aria-modal="true"
         aria-label="Cambiar estado de gestión"
       >
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md pointer-events-auto">
-          <div className="bg-gov-navy text-white px-5 py-4 rounded-t-xl flex items-center justify-between">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg my-8 pointer-events-auto">
+          <div className="bg-gov-navy text-white px-5 py-4 rounded-t-xl flex items-center justify-between sticky top-0">
             <h2 className="font-semibold">Modificar gestión</h2>
             <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none" aria-label="Cerrar">
               ✕
@@ -89,59 +135,80 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
 
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div className="bg-slate-50 rounded px-3 py-2 text-xs text-slate-500">
-              Estado actual:{' '}
-              <span className="font-semibold text-slate-700">{estadoActual}</span>
+              Estado actual: <span className="font-semibold text-slate-700">{estadoActual}</span>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className={labelCls}>
                 Nuevo estado <span className="text-red-500">*</span>
               </label>
-              <select
-                value={nuevoEstado}
-                onChange={(e) => setNuevoEstado(e.target.value as EstadoGestion)}
-                className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-                required
-              >
-                {ESTADOS.map((e) => (
-                  <option key={e.value} value={e.value}>{e.label}</option>
-                ))}
+              <select value={nuevoEstado} onChange={(e) => setNuevoEstado(e.target.value as EstadoGestion)}
+                className={inputCls} required>
+                {ESTADOS.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nro expediente</label>
-              <input
-                type="text"
-                value={nroExpediente}
-                onChange={(e) => setNroExpediente(e.target.value)}
-                placeholder="EXP-2026-…"
-                className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-              />
+              <label className={labelCls}>Derivado a</label>
+              <input type="text" value={derivadoA} onChange={(e) => setDerivadoA(e.target.value)}
+                placeholder="Área / persona / organismo" className={inputCls} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Nro expediente</label>
+                <input type="text" value={nroExpediente} onChange={(e) => setNroExpediente(e.target.value)}
+                  placeholder="EXP-2026-…" className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Fecha ingreso</label>
+                <input type="date" value={fechaIngreso} onChange={(e) => setFechaIngreso(e.target.value)}
+                  className={inputCls} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>
+                  Departamento <span className="text-red-500">*</span>
+                </label>
+                <select value={departamento}
+                  onChange={(e) => { setDepartamento(e.target.value); setLocalidad('') }}
+                  className={inputCls} required>
+                  <option value="">(Seleccionar)</option>
+                  {(departamentos ?? []).map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>
+                  Localidad <span className="text-red-500">*</span>
+                </label>
+                <select value={localidad} onChange={(e) => setLocalidad(e.target.value)}
+                  className={inputCls} disabled={!departamento} required>
+                  <option value="">{departamento ? '(Seleccionar)' : 'Elegí un departamento'}</option>
+                  {/* mantiene la localidad original aunque el catálogo aún no cargó */}
+                  {localidad && !(localidades ?? []).includes(localidad) && (
+                    <option value={localidad}>{localidad}</option>
+                  )}
+                  {(localidades ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Fecha ingreso</label>
-              <input
-                type="date"
-                value={fechaIngreso}
-                onChange={(e) => setFechaIngreso(e.target.value)}
-                className="w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-              />
+              <label className={labelCls}>Acciones implementadas</label>
+              <textarea value={acciones} onChange={(e) => setAcciones(e.target.value)} rows={3}
+                placeholder="Qué se hizo / pasos realizados…"
+                className={`${inputCls} resize-none`} />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className={labelCls}>
                 Comentario{requireComentario && <span className="text-red-500"> *</span>}
               </label>
-              <textarea
-                value={comentario}
-                onChange={(e) => setComentario(e.target.value)}
-                rows={3}
+              <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows={3}
                 placeholder={requireComentario ? 'Requerido para este estado…' : 'Opcional…'}
-                className="w-full border border-slate-200 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gov-cyan"
-                required={requireComentario}
-              />
+                className={`${inputCls} resize-none`} required={requireComentario} />
             </div>
 
             {mutation.isError && (
@@ -151,18 +218,12 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
             )}
 
             <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 border border-slate-200 text-slate-600 py-2 rounded text-sm hover:bg-slate-50 transition-colors"
-              >
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-slate-200 text-slate-600 py-2 rounded text-sm hover:bg-slate-50 transition-colors">
                 Cancelar
               </button>
-              <button
-                type="submit"
-                disabled={!canSubmit || mutation.isPending}
-                className="flex-1 bg-gov-navy text-white py-2 rounded text-sm hover:bg-gov-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button type="submit" disabled={!canSubmit || mutation.isPending}
+                className="flex-1 bg-gov-navy text-white py-2 rounded text-sm hover:bg-gov-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {mutation.isPending ? 'Guardando…' : 'Guardar'}
               </button>
             </div>
