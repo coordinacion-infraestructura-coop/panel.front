@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
-import { fichaLocalidadApi } from '../api/fichaLocalidad.api'
+import { fichaLocalidadApi, type LocalidadInfo } from '../api/fichaLocalidad.api'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -530,6 +530,31 @@ export function ResumenTerritorialPage() {
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
+  // Fichas demográficas de todas las localidades — para Excel / PDF / impresión.
+  const fichasQ = useQuery({
+    queryKey: ['fichas-localidad-all'],
+    queryFn: fichaLocalidadApi.todas,
+    staleTime: 10 * 60 * 1000,
+  })
+  const fichaMap = useMemo(() => {
+    const m = new Map<string, LocalidadInfo>()
+    for (const f of fichasQ.data ?? []) m.set(`${norm(f.departamento ?? '')}|${norm(f.localidad ?? '')}`, f)
+    return m
+  }, [fichasQ.data])
+  const semLabel = (c?: string | null) =>
+    c ? { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' }[c.toLowerCase()] ?? c : ''
+  function fichaCols(loc: ResumenLocalidad) {
+    const f = fichaMap.get(`${norm(loc.departamento ?? '')}|${norm(loc.localidad)}`)
+    return {
+      Habitantes: f?.habitantes ?? '',
+      Electores: f?.electores ?? '',
+      'Semáforo': semLabel(f?.color_semaforo),
+      Intendente: f?.intendente_jefe_comunal ?? '',
+      'Partido': f?.partido_politico ?? '',
+      'Tipo localidad': f?.tipo_localidad ?? '',
+    }
+  }
+
   const hayFiltros = q || fDep || fArea || fProg || fEstado || fChecklist
   const limpiar = () => {
     setQ('')
@@ -540,11 +565,12 @@ export function ResumenTerritorialPage() {
     setFChecklist('')
   }
 
-  function exportar() {
-    const rows = localidadesFiltradas.flatMap((loc) =>
+  function exportRows() {
+    return localidadesFiltradas.flatMap((loc) =>
       loc.programas.map((p) => ({
         Localidad: loc.localidad,
         Departamento: loc.departamento ?? '',
+        ...fichaCols(loc),
         Área: AREA_LABEL[p.area] ?? p.area,
         Programa: p.programa_label,
         Detalle: p.detalle ?? '',
@@ -557,7 +583,43 @@ export function ResumenTerritorialPage() {
         Expediente: p.expediente ?? '',
       })),
     )
-    exportToXlsx(rows, 'Resumen territorial', `resumen_territorial_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  function exportar() {
+    exportToXlsx(exportRows(), 'Resumen territorial', `resumen_territorial_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  const [exportandoPdf, setExportandoPdf] = useState(false)
+  async function exportarPdf() {
+    if (exportandoPdf) return
+    setExportandoPdf(true)
+    try {
+      const rows = exportRows()
+      const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+      const autoTable = autoTableMod.default
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+      doc.setFontSize(13)
+      doc.text('Resumen Territorial', 40, 34)
+      doc.setFontSize(8)
+      doc.text(
+        `Alcance: ${alcance}  |  ${localidadesFiltradas.length} localidades  |  ${new Date().toLocaleString('es-AR')}${hayFiltros ? '  |  (con filtros)' : ''}`,
+        40, 48,
+      )
+      const cols = ['Localidad', 'Depto', 'Hab.', 'Elect.', 'Semáforo', 'Intendente', 'Área', 'Programa', 'Estado general', 'Últ. com.']
+      autoTable(doc, {
+        startY: 60,
+        styles: { fontSize: 6.5, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [23, 44, 63] },
+        head: [cols],
+        body: rows.map((r) => [
+          r.Localidad, r.Departamento, r.Habitantes, r.Electores, r['Semáforo'], r.Intendente,
+          r['Área'], r.Programa, r['Estado general'], r['Última comunicación (fecha)'],
+        ]),
+      })
+      doc.save(`resumen_territorial_${new Date().toISOString().slice(0, 10)}.pdf`)
+    } finally {
+      setExportandoPdf(false)
+    }
   }
 
   return (
@@ -654,6 +716,13 @@ export function ResumenTerritorialPage() {
                   className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue"
                 >
                   ⤓ Excel
+                </button>
+                <button
+                  onClick={exportarPdf}
+                  disabled={exportandoPdf}
+                  className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue disabled:opacity-50"
+                >
+                  {exportandoPdf ? '…' : '⤓ PDF'}
                 </button>
                 <button
                   onClick={() => window.print()}
@@ -873,6 +942,10 @@ export function ResumenTerritorialPage() {
               <tr>
                 <th>Localidad</th>
                 <th>Departamento</th>
+                <th>Hab.</th>
+                <th>Elect.</th>
+                <th>Semáforo</th>
+                <th>Intendente</th>
                 <th>Área</th>
                 <th>Programa</th>
                 <th>Estado general</th>
@@ -881,8 +954,9 @@ export function ResumenTerritorialPage() {
               </tr>
             </thead>
             <tbody>
-              {localidadesFiltradas.flatMap((loc) =>
-                loc.programas.map((p, j) => (
+              {localidadesFiltradas.flatMap((loc) => {
+                const fc = fichaCols(loc)
+                return loc.programas.map((p, j) => (
                   <tr key={`${loc.localidad}-${j}`}>
                     {j === 0 && (
                       <td rowSpan={loc.programas.length}>
@@ -892,6 +966,10 @@ export function ResumenTerritorialPage() {
                     {j === 0 && (
                       <td rowSpan={loc.programas.length}>{loc.departamento ?? 'Sin depto.'}</td>
                     )}
+                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Habitantes}</td>}
+                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Electores}</td>}
+                    {j === 0 && <td rowSpan={loc.programas.length}>{fc['Semáforo']}</td>}
+                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Intendente}</td>}
                     <td>{AREA_LABEL[p.area] ?? p.area}</td>
                     <td>
                       {p.programa_label}
@@ -915,8 +993,8 @@ export function ResumenTerritorialPage() {
                         : '—'}
                     </td>
                   </tr>
-                )),
-              )}
+                ))
+              })}
             </tbody>
           </table>
         </div>

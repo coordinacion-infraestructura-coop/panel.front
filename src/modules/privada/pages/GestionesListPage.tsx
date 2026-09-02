@@ -35,6 +35,14 @@ const COL_META: { key: ColKey; label: string; minimal: boolean }[] = [
 const MINIMAL_COLS = COL_META.filter((c) => c.minimal).map((c) => c.key)
 const LS_COLS_KEY = 'privada.gestiones.cols.v1'
 
+// El backend ordena por estas claves (whitelist en service._SORT_COLS de svc-privada).
+// `detalle` / `id_gestion` no tienen orden server-side → fallback client-side sobre la página.
+const SORT_SERVER: ReadonlySet<ColKey> = new Set<ColKey>([
+  'fecha_ingreso', 'estado', 'urgencia', 'departamento', 'localidad',
+  'nro_expediente', 'costo_estimado', 'dias_transcurridos',
+  'ministerio', 'categoria', 'tipo_gestion', 'canal_origen',
+])
+
 // ─── Helpers de estilo ────────────────────────────────────────────────────────
 
 function urgenciaBadge(urgencia?: string) {
@@ -190,6 +198,7 @@ export function GestionesListPage() {
   }
   function toggleSort(key: ColKey) {
     setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+    setOffset(0)
   }
 
   const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad)
@@ -251,9 +260,11 @@ export function GestionesListPage() {
     staleTime: Infinity,
   })
 
+  const sortServer = sort && SORT_SERVER.has(sort.key) ? sort : null
+
   // ── Listado de gestiones ───────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery<GestionesResponse>({
-    queryKey: ['gestiones', q, estado, ministerio, categoria, tipoGestion, canalOrigen, departamento, localidad, offset],
+    queryKey: ['gestiones', q, estado, ministerio, categoria, tipoGestion, canalOrigen, departamento, localidad, offset, sortServer?.key, sortServer?.dir],
     queryFn: () => gestionesApi.list({
       q: q || undefined,
       estado: estado || undefined,
@@ -263,6 +274,8 @@ export function GestionesListPage() {
       canal_origen: canalOrigen || undefined,
       departamento: departamento || undefined,
       localidad: localidad || undefined,
+      sort: sortServer?.key,
+      sort_dir: sortServer?.dir,
       limit: PAGE_SIZE,
       offset,
     }),
@@ -337,7 +350,8 @@ export function GestionesListPage() {
   }, [ministerios, categorias, tiposGestion, canalesOrigen, nombreDe])
 
   const sortedItems = useMemo(() => {
-    if (!sort) return items
+    // orden server-side ya aplicado → no re-ordenar en el cliente
+    if (!sort || SORT_SERVER.has(sort.key)) return items
     const num = sort.key === 'costo_estimado' || sort.key === 'dias_transcurridos'
     const copy = [...items]
     copy.sort((a, b) => {
@@ -710,7 +724,9 @@ export function GestionesListPage() {
                       type="button"
                       onClick={() => toggleSort(c.key)}
                       className="inline-flex items-center gap-1 hover:text-white/80"
-                      title="Ordenar por esta columna (página actual)"
+                      title={SORT_SERVER.has(c.key)
+                        ? 'Ordenar por esta columna (todo el listado)'
+                        : 'Ordenar por esta columna (sólo la página visible)'}
                     >
                       {c.label}
                       <span className="text-[10px] opacity-70">

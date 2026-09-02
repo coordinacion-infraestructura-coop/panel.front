@@ -42,4 +42,8 @@ export const fichaLocalidadApi = {
     apiClient
       .get<DepartamentoInfo>('/api/v1/privada/departamentos-info', { params: { departamento } })
       .then((r) => r.data),
+  // Todas las fichas de una — para el export Excel / PDF / impresión del Resumen
+  // Territorial (evita el N+1 de `localidad()` de a una).
+  todas: () =>
+    apiClient.get<LocalidadInfo[]>('/api/v1/privada/localidades-info/all').then((r) => r.data),
 }

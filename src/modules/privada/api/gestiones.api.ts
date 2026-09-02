@@ -12,6 +12,8 @@ export interface GestionesParams {
   canal_origen?: string
   departamento?: string
   localidad?: string
+  sort?: string
+  sort_dir?: 'asc' | 'desc'
   limit?: number
   offset?: number
 }
