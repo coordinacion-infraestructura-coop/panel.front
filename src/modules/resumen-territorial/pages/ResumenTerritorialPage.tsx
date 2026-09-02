@@ -360,13 +360,13 @@ export function ResumenTerritorialPage() {
     staleTime: Infinity,
   })
 
-  // E5a / ADR-016: cuando la federación server-side está activa (svc-vivienda ya
-  // trae las líneas de Privada en el snapshot), NO se hace el merge en el browser
-  // para no duplicar. El código cliente se conserva un release detrás del flag (RE-7):
-  // poner VITE_PRIVADA_SERVER_FEDERATION=true al desplegar E5a.
-  const federacionServidor = import.meta.env.VITE_PRIVADA_SERVER_FEDERATION === 'true'
+  // E5a / ADR-016: la federación de Privada la hace el backend (svc-vivienda trae
+  // las líneas en el snapshot server-side). El merge client-side queda como
+  // FALLBACK y está apagado por default — sólo se enciende con
+  // VITE_PRIVADA_CLIENT_FEDERATION=true (RE-7: p. ej. si se hace rollback de E5a).
+  const federacionCliente = import.meta.env.VITE_PRIVADA_CLIENT_FEDERATION === 'true'
   const puedeVerPrivada =
-    !federacionServidor &&
+    federacionCliente &&
     (['Admin', 'Autoridad'].includes(portalUser?.rol ?? '') ||
       (portalUser?.secretarias ?? []).includes('privada'))
   const privadaQuery = useQuery({
