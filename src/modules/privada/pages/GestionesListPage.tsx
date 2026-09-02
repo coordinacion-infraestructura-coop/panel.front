@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
 import { GestionDetalleDrawer } from './GestionDetalleDrawer'
@@ -150,17 +151,19 @@ function FilterSelect({ id, label, value, onChange, options, nameKey = 'nombre',
 
 export function GestionesListPage() {
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
 
-  // Filtros
+  // Filtros — depto/localidad/estado se pueden precargar desde la URL
+  // (ej. link "Ver en el panel de Privada" del Resumen Territorial).
   const [q, setQ] = useState('')
   const [qInput, setQInput] = useState('')
-  const [estado, setEstado] = useState('')
+  const [estado, setEstado] = useState(() => searchParams.get('estado') ?? '')
   const [ministerio, setMinisterio] = useState('')
   const [categoria, setCategoria] = useState('')
   const [tipoGestion, setTipoGestion] = useState('')
   const [canalOrigen, setCanalOrigen] = useState('')
-  const [departamento, setDepartamento] = useState('')
-  const [localidad, setLocalidad] = useState('')
+  const [departamento, setDepartamento] = useState(() => searchParams.get('departamento') ?? '')
+  const [localidad, setLocalidad] = useState(() => searchParams.get('localidad') ?? '')
   const [okGob, setOkGob] = useState('')
   const [okMin, setOkMin] = useState('')
   const [offset, setOffset] = useState(0)
@@ -218,6 +221,18 @@ export function GestionesListPage() {
       if (resetLocalidad) setLocalidad('')
     }
   }
+
+  // Si cambian los query params sin remontar el componente (navegación en la misma ruta),
+  // reaplicar depto/localidad/estado desde la URL.
+  const spDep = searchParams.get('departamento')
+  const spLoc = searchParams.get('localidad')
+  const spEst = searchParams.get('estado')
+  useEffect(() => {
+    if (spDep !== null) setDepartamento(spDep)
+    if (spLoc !== null) setLocalidad(spLoc)
+    if (spEst !== null) setEstado(spEst)
+    if (spDep !== null || spLoc !== null || spEst !== null) setOffset(0)
+  }, [spDep, spLoc, spEst])
 
   // ── Catálogos ──────────────────────────────────────────────────────────────
   const { data: estados } = useQuery<CatalogoItem[]>({

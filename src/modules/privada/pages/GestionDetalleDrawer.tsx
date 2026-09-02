@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
 import { catalogosEditablesApi, type CatEditable, type CatalogoNombre } from '../api/catalogosEditables.api'
-import type { GestionDetalle, Evento } from '../types/gestiones.types'
+import type { GestionDetalle, Evento, CatalogoItem } from '../types/gestiones.types'
 
 interface Props {
   gestionId: string | null
@@ -128,6 +128,20 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
   const progMap = useCatMap('programas')
   const areaMap = useCatMap('areas')
 
+  // Catálogos de referencia (mismos queryKeys que la lista → cache compartida) para
+  // resolver los códigos legacy (MIN_GOBIERNO → "Ministerio de Gobierno", etc).
+  function useRefCat(qk: string, nombre: string) {
+    const { data } = useQuery<CatalogoItem[]>({
+      queryKey: [qk], queryFn: () => gestionesApi.catalogo(nombre), staleTime: Infinity,
+    })
+    return useMemo(() => new Map((data ?? []).map((c) => [c.id, c.nombre])), [data])
+  }
+  const minMap = useRefCat('privada-cat-ministerios', 'ministerios')
+  const catLegacyMap = useRefCat('privada-cat-categorias', 'categorias')
+  const tipoMap = useRefCat('privada-cat-tipos-gestion', 'tipos-gestion')
+  const canalMap = useRefCat('privada-cat-canales-origen', 'canales-origen')
+  const nombreDe = (m: Map<string, string>, id?: string | null) => (id ? (m.get(id) ?? id) : null)
+
   if (!gestionId) return null
 
   return (
@@ -201,10 +215,10 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
                   <KV label="Área" value={gestion.area_id != null ? (areaMap.get(gestion.area_id) ?? `#${gestion.area_id}`) : null} />
                   <KV label="Ok Gobernador" value={gestion.ok_gobernador} />
                   <KV label="Ok Ministro" value={gestion.ok_ministro} />
-                  <KV label="Ministerio" value={gestion.ministerio_nombre ?? gestion.ministerio_agencia_id} />
-                  <KV label="Clasif. informe (legacy)" value={gestion.categoria_nombre ?? gestion.categoria_general_id} />
-                  <KV label="Tipo de gestión" value={gestion.tipo_gestion} />
-                  <KV label="Canal origen" value={gestion.canal_origen} />
+                  <KV label="Ministerio" value={nombreDe(minMap, gestion.ministerio_agencia_id)} />
+                  <KV label="Clasif. informe (legacy)" value={nombreDe(catLegacyMap, gestion.categoria_general_id)} />
+                  <KV label="Tipo de gestión" value={nombreDe(tipoMap, gestion.tipo_gestion)} />
+                  <KV label="Canal origen" value={nombreDe(canalMap, gestion.canal_origen)} />
                   <KV label="Dirección" value={gestion.direccion} />
                   <KV label="Costo estimado" value={
                     gestion.costo_estimado
