@@ -5,6 +5,7 @@ import { gestionesApi } from '../api/gestiones.api'
 import { GestionDetalleDrawer } from './GestionDetalleDrawer'
 import { CambiarEstadoModal } from './CambiarEstadoModal'
 import { AgregarGestionModal } from './AgregarGestionModal'
+import { GestionarCatalogosModal } from './GestionarCatalogosModal'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type { Gestion, GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
 
@@ -173,6 +174,7 @@ export function GestionesListPage() {
   const [modal, setModal] = useState<{ id: string; estadoActual: string; nroExpediente?: string | null } | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showAgregar, setShowAgregar] = useState(false)
+  const [showCatalogos, setShowCatalogos] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -625,6 +627,15 @@ export function GestionesListPage() {
               )}
             </div>
 
+            {canDelete && (
+              <button
+                onClick={() => setShowCatalogos(true)}
+                className="border border-slate-300 text-slate-600 px-3 py-2 rounded text-sm hover:bg-slate-50 transition-colors"
+                title="Gestionar Campo de Trabajo / Programa / Área"
+              >
+                ⚙ Catálogos
+              </button>
+            )}
             {canModify && (
               <button
                 onClick={() => setShowAgregar(true)}
@@ -867,6 +878,9 @@ export function GestionesListPage() {
         onClose={() => setShowAgregar(false)}
         onCreated={(id) => setDrawerGestionId(id)}
       />
+
+      {/* ── Modal gestionar catálogos ── */}
+      {showCatalogos && <GestionarCatalogosModal onClose={() => setShowCatalogos(false)} />}
 
       {/* ── Modal cambiar estado ── */}
       {modal && (
