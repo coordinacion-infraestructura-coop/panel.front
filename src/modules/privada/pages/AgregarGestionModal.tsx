@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
-import type { CatalogoItem, GestionCreatePayload } from '../types/gestiones.types'
+import { CatalogoEditableSelect } from './CatalogoEditableSelect'
+import type { CatalogoItem, GestionCreatePayload, MeResponse, OkEstado } from '../types/gestiones.types'
 
 interface Props {
   open: boolean
@@ -10,6 +11,7 @@ interface Props {
 }
 
 const URGENCIAS = ['Alta', 'Media', 'Baja']
+const OK_OPCIONES: OkEstado[] = ['PENDIENTE', 'SI', 'NO']
 
 function extractError(err: unknown): string {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
@@ -46,11 +48,26 @@ export function AgregarGestionModal({ open, onClose, onCreated }: Props) {
   const qc = useQueryClient()
   const [form, setForm] = useState({ ...emptyForm })
   const [error, setError] = useState<string | null>(null)
+  // E1/E2 — catálogos editables + Ok Gob/Min (fuera de `form` por ser numéricos/enum)
+  const [catId, setCatId] = useState<number | null>(null)
+  const [progId, setProgId] = useState<number | null>(null)
+  const [areaId, setAreaId] = useState<number | null>(null)
+  const [okGob, setOkGob] = useState<OkEstado>('PENDIENTE')
+  const [okMin, setOkMin] = useState<OkEstado>('PENDIENTE')
+
+  const { data: me } = useQuery<MeResponse>({
+    queryKey: ['privada-me'],
+    queryFn: () => gestionesApi.me(),
+    staleTime: Infinity,
+  })
+  const puedeCrearCat = me?.rol === 'Admin' || me?.rol === 'Supervisor'
 
   useEffect(() => {
     if (open) {
       setForm({ ...emptyForm })
       setError(null)
+      setCatId(null); setProgId(null); setAreaId(null)
+      setOkGob('PENDIENTE'); setOkMin('PENDIENTE')
     }
   }, [open])
 
@@ -135,6 +152,11 @@ export function AgregarGestionModal({ open, onClose, onCreated }: Props) {
       costo_estimado: form.costo_estimado.trim() === '' ? undefined : Number(form.costo_estimado),
       costo_moneda: trimmed(form.costo_moneda),
       nro_expediente: trimmed(form.nro_expediente),
+      categoria_id: catId,
+      programa_id: progId,
+      area_id: areaId,
+      ok_gobernador: okGob,
+      ok_ministro: okMin,
     }
     mutation.mutate(payload)
   }
@@ -260,6 +282,29 @@ export function AgregarGestionModal({ open, onClose, onCreated }: Props) {
               <label className={labelCls} htmlFor="ng-obs">Observaciones</label>
               <textarea id="ng-obs" rows={2} className={`${inputCls} resize-none`} value={form.observaciones}
                 onChange={(e) => set('observaciones', e.target.value)} placeholder="Opcional" />
+            </div>
+
+            {/* E1 — Categoría / Programa asociado / Área (desplegables editables) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+              <CatalogoEditableSelect nombre="categorias" label="Categoría" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="programas" label="Programa asociado" value={progId} onChange={setProgId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="areas" label="Área" value={areaId} onChange={setAreaId} puedeCrear={puedeCrearCat} />
+            </div>
+
+            {/* E2 — Ok Gobernador / Ok Ministro */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Ok Gobernador</label>
+                <select className={inputCls} value={okGob} onChange={(e) => setOkGob(e.target.value as OkEstado)}>
+                  {OK_OPCIONES.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Ok Ministro</label>
+                <select className={inputCls} value={okMin} onChange={(e) => setOkMin(e.target.value as OkEstado)}>
+                  {OK_OPCIONES.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
             </div>
 
             <details className="border border-slate-200 rounded">

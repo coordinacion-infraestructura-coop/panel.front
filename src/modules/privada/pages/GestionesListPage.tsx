@@ -161,6 +161,8 @@ export function GestionesListPage() {
   const [canalOrigen, setCanalOrigen] = useState('')
   const [departamento, setDepartamento] = useState('')
   const [localidad, setLocalidad] = useState('')
+  const [okGob, setOkGob] = useState('')
+  const [okMin, setOkMin] = useState('')
   const [offset, setOffset] = useState(0)
 
   // UI
@@ -201,12 +203,12 @@ export function GestionesListPage() {
     setOffset(0)
   }
 
-  const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad)
+  const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad || okGob || okMin)
 
   function resetFilters() {
     setQ(''); setQInput(''); setEstado('')
     setMinisterio(''); setCategoria(''); setTipoGestion(''); setCanalOrigen('')
-    setDepartamento(''); setLocalidad(''); setOffset(0)
+    setDepartamento(''); setLocalidad(''); setOkGob(''); setOkMin(''); setOffset(0)
   }
 
   function handleFilterChange<T>(setter: (v: T) => void, resetLocalidad = false) {
@@ -264,7 +266,7 @@ export function GestionesListPage() {
 
   // ── Listado de gestiones ───────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery<GestionesResponse>({
-    queryKey: ['gestiones', q, estado, ministerio, categoria, tipoGestion, canalOrigen, departamento, localidad, offset, sortServer?.key, sortServer?.dir],
+    queryKey: ['gestiones', q, estado, ministerio, categoria, tipoGestion, canalOrigen, departamento, localidad, okGob, okMin, offset, sortServer?.key, sortServer?.dir],
     queryFn: () => gestionesApi.list({
       q: q || undefined,
       estado: estado || undefined,
@@ -274,6 +276,8 @@ export function GestionesListPage() {
       canal_origen: canalOrigen || undefined,
       departamento: departamento || undefined,
       localidad: localidad || undefined,
+      ok_gobernador: okGob || undefined,
+      ok_ministro: okMin || undefined,
       sort: sortServer?.key,
       sort_dir: sortServer?.dir,
       limit: PAGE_SIZE,
@@ -375,6 +379,8 @@ export function GestionesListPage() {
       canal_origen: canalOrigen || undefined,
       departamento: departamento || undefined,
       localidad: localidad || undefined,
+      ok_gobernador: okGob || undefined,
+      ok_ministro: okMin || undefined,
     }
     const LIMIT = 200
     const all: Gestion[] = []
@@ -702,6 +708,16 @@ export function GestionesListPage() {
             id="f-localidad" label="Localidad"
             value={localidad} onChange={handleFilterChange(setLocalidad)}
             options={(localidades ?? []).map((l) => ({ id: l, nombre: l }))}
+          />
+          <FilterSelect
+            id="f-okgob" label="Ok Gobernador"
+            value={okGob} onChange={handleFilterChange(setOkGob)}
+            options={['SI', 'NO', 'PENDIENTE']}
+          />
+          <FilterSelect
+            id="f-okmin" label="Ok Ministro"
+            value={okMin} onChange={handleFilterChange(setOkMin)}
+            options={['SI', 'NO', 'PENDIENTE']}
           />
         </div>
       </div>

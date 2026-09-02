@@ -19,6 +19,11 @@ export interface Gestion {
   costo_estimado?: number | null
   costo_moneda?: string | null
   dias_transcurridos?: number | null
+  categoria_id?: number | null
+  programa_id?: number | null
+  area_id?: number | null
+  ok_gobernador?: OkEstado
+  ok_ministro?: OkEstado
   created_at?: string
   created_by?: string
 }
@@ -34,6 +39,7 @@ export interface GestionDetalle extends Gestion {
   updated_at?: string
   updated_by?: string
   is_deleted?: boolean
+  acciones_implementadas?: string | null
 }
 
 export interface GestionesResponse {
@@ -85,6 +91,8 @@ export interface CambioEstadoPayload {
   acciones_implementadas?: string
 }
 
+export type OkEstado = 'SI' | 'NO' | 'PENDIENTE'
+
 export interface GestionCreatePayload {
   ministerio_agencia_id: string
   categoria_general_id: string
@@ -101,6 +109,13 @@ export interface GestionCreatePayload {
   costo_estimado?: number | null
   costo_moneda?: string | null
   nro_expediente?: string | null
+  // E1/E2 (aditivo)
+  categoria_id?: number | null
+  programa_id?: number | null
+  area_id?: number | null
+  ok_gobernador?: OkEstado
+  ok_ministro?: OkEstado
+  acciones_implementadas?: string | null
 }
 
 export interface MeResponse {
