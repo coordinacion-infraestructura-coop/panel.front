@@ -25,7 +25,7 @@ const COL_META: { key: ColKey; label: string; minimal: boolean }[] = [
   { key: 'departamento', label: 'Departamento', minimal: false },
   { key: 'localidad', label: 'Localidad', minimal: true },
   { key: 'ministerio', label: 'Ministerio', minimal: false },
-  { key: 'categoria', label: 'Categoría', minimal: false },
+  { key: 'categoria', label: 'Categoría Gral.', minimal: false },
   { key: 'tipo_gestion', label: 'Tipo', minimal: false },
   { key: 'canal_origen', label: 'Canal', minimal: false },
   { key: 'detalle', label: 'Detalle', minimal: true },
@@ -700,7 +700,7 @@ export function GestionesListPage() {
             options={ministerios ?? []}
           />
           <FilterSelect
-            id="f-categoria" label="Categoría"
+            id="f-categoria" label="Categoría General"
             value={categoria} onChange={handleFilterChange(setCategoria)}
             options={categorias ?? []}
           />

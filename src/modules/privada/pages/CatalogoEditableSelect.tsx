@@ -11,8 +11,19 @@ interface Props {
   puedeCrear: boolean
 }
 
-/** Desplegable de un catálogo editable (categorías / programas / áreas) con
- * "+ nueva opción" inline (E1 / ADR-010). */
+const NUEVA = '__nueva__'
+
+function extractMsg(e: unknown): string {
+  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof d === 'string') return d
+  if (d && typeof d === 'object' && typeof (d as { message?: unknown }).message === 'string') {
+    return (d as { message: string }).message
+  }
+  return 'No se pudo crear.'
+}
+
+/** Desplegable de un catálogo editable (categorías / programas / áreas). La última
+ * opción "+ Cargar nueva…" abre un input inline para crear al vuelo (E1 / ADR-010). */
 export function CatalogoEditableSelect({ nombre, label, value, onChange, puedeCrear }: Props) {
   const qc = useQueryClient()
   const key = ['privada-cat-edit', nombre]
@@ -27,60 +38,67 @@ export function CatalogoEditableSelect({ nombre, label, value, onChange, puedeCr
   const [err, setErr] = useState<string | null>(null)
 
   const crear = useMutation({
-    mutationFn: () => catalogosEditablesApi.crear(nombre, { label: nuevoLabel.trim(), orden: (items?.length ?? 0 + 1) * 10 }),
+    mutationFn: () => catalogosEditablesApi.crear(nombre, {
+      label: nuevoLabel.trim(),
+      orden: ((items?.length ?? 0) + 1) * 10,
+    }),
     onSuccess: (nuevo) => {
-      qc.setQueryData<CatEditable[]>(key, (prev) => [...(prev ?? []), nuevo].sort((a, b) => a.orden - b.orden || a.label.localeCompare(b.label)))
+      qc.setQueryData<CatEditable[]>(key, (prev) =>
+        [...(prev ?? []), nuevo].sort((a, b) => a.orden - b.orden || a.label.localeCompare(b.label)))
       onChange(nuevo.id)
       setCreando(false)
       setNuevoLabel('')
       setErr(null)
     },
-    onError: (e: unknown) => {
-      const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-      setErr(
-        typeof d === 'string' ? d
-          : (d && typeof d === 'object' && typeof (d as { message?: unknown }).message === 'string')
-            ? (d as { message: string }).message
-            : 'No se pudo crear.',
-      )
-    },
+    onError: (e: unknown) => setErr(extractMsg(e)),
   })
 
   const inputCls = 'w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan bg-white'
 
+  function cancelar() {
+    setCreando(false)
+    setNuevoLabel('')
+    setErr(null)
+  }
+
   return (
-    <div>
+    <div className="min-w-0">
       <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      <div className="flex gap-2">
+      {!creando ? (
         <select
           className={inputCls}
           value={value ?? ''}
-          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => {
+            if (e.target.value === NUEVA) { setCreando(true); setErr(null) }
+            else onChange(e.target.value ? Number(e.target.value) : null)
+          }}
         >
           <option value="">(Sin especificar)</option>
           {(items ?? []).map((it) => (
             <option key={it.id} value={it.id}>{it.label}</option>
           ))}
+          {puedeCrear && <option value={NUEVA}>＋ Cargar nueva opción…</option>}
         </select>
-        {puedeCrear && !creando && (
-          <button type="button" onClick={() => { setCreando(true); setErr(null) }}
-            className="shrink-0 text-xs border border-slate-300 text-slate-600 px-2 rounded hover:bg-slate-50">
-            + nueva
-          </button>
-        )}
-      </div>
-      {creando && (
-        <div className="mt-1.5 flex gap-2">
-          <input autoFocus value={nuevoLabel} onChange={(e) => setNuevoLabel(e.target.value)}
-            placeholder={`Nueva ${label.toLowerCase()}…`} className={`${inputCls} text-sm`}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (nuevoLabel.trim()) crear.mutate() } }} />
+      ) : (
+        <div className="flex gap-1.5">
+          <input
+            autoFocus
+            value={nuevoLabel}
+            onChange={(e) => setNuevoLabel(e.target.value)}
+            placeholder={`Nueva ${label.toLowerCase()}…`}
+            className={inputCls}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); if (nuevoLabel.trim()) crear.mutate() }
+              if (e.key === 'Escape') cancelar()
+            }}
+          />
           <button type="button" disabled={!nuevoLabel.trim() || crear.isPending}
             onClick={() => crear.mutate()}
             className="shrink-0 text-xs bg-gov-navy text-white px-3 rounded disabled:opacity-50">
-            {crear.isPending ? '…' : 'Crear'}
+            {crear.isPending ? '…' : 'Cargar'}
           </button>
-          <button type="button" onClick={() => { setCreando(false); setNuevoLabel(''); setErr(null) }}
-            className="shrink-0 text-xs text-slate-500 px-2">✕</button>
+          <button type="button" onClick={cancelar}
+            className="shrink-0 text-xs text-slate-500 px-1.5" aria-label="Cancelar">✕</button>
         </div>
       )}
       {err && <p className="text-xs text-red-600 mt-1">{err}</p>}

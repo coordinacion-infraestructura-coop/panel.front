@@ -220,9 +220,9 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
               </div>
             </div>
 
-            {/* E1 — Categoría / Programa / Área */}
+            {/* E1 — Campo de Trabajo / Programa asociado / Área */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
-              <CatalogoEditableSelect nombre="categorias" label="Categoría" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="categorias" label="Campo de Trabajo" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
               <CatalogoEditableSelect nombre="programas" label="Programa asociado" value={progId} onChange={setProgId} puedeCrear={puedeCrearCat} />
               <CatalogoEditableSelect nombre="areas" label="Área" value={areaId} onChange={setAreaId} puedeCrear={puedeCrearCat} />
             </div>

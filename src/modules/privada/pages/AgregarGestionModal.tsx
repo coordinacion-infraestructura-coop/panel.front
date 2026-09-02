@@ -284,9 +284,9 @@ export function AgregarGestionModal({ open, onClose, onCreated }: Props) {
                 onChange={(e) => set('observaciones', e.target.value)} placeholder="Opcional" />
             </div>
 
-            {/* E1 — Categoría / Programa asociado / Área (desplegables editables) */}
+            {/* E1 — Campo de Trabajo / Programa asociado / Área (desplegables editables) */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
-              <CatalogoEditableSelect nombre="categorias" label="Categoría" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="categorias" label="Campo de Trabajo" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
               <CatalogoEditableSelect nombre="programas" label="Programa asociado" value={progId} onChange={setProgId} puedeCrear={puedeCrearCat} />
               <CatalogoEditableSelect nombre="areas" label="Área" value={areaId} onChange={setAreaId} puedeCrear={puedeCrearCat} />
             </div>

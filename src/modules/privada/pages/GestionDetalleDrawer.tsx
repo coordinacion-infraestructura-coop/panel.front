@@ -210,13 +210,13 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
                 <dl className="grid grid-cols-2 gap-3">
                   <KV label="Fecha ingreso" value={formatFecha(gestion.fecha_ingreso)} />
                   <KV label="Nro expediente" value={gestion.nro_expediente} />
-                  <KV label="Categoría" value={gestion.categoria_id != null ? (catMap.get(gestion.categoria_id) ?? `#${gestion.categoria_id}`) : null} />
+                  <KV label="Campo de Trabajo" value={gestion.categoria_id != null ? (catMap.get(gestion.categoria_id) ?? `#${gestion.categoria_id}`) : null} />
                   <KV label="Programa" value={gestion.programa_id != null ? (progMap.get(gestion.programa_id) ?? `#${gestion.programa_id}`) : null} />
                   <KV label="Área" value={gestion.area_id != null ? (areaMap.get(gestion.area_id) ?? `#${gestion.area_id}`) : null} />
                   <KV label="Ok Gobernador" value={gestion.ok_gobernador} />
                   <KV label="Ok Ministro" value={gestion.ok_ministro} />
                   <KV label="Ministerio" value={nombreDe(minMap, gestion.ministerio_agencia_id)} />
-                  <KV label="Clasif. informe (legacy)" value={nombreDe(catLegacyMap, gestion.categoria_general_id)} />
+                  <KV label="Categoría General" value={nombreDe(catLegacyMap, gestion.categoria_general_id)} />
                   <KV label="Tipo de gestión" value={nombreDe(tipoMap, gestion.tipo_gestion)} />
                   <KV label="Canal origen" value={nombreDe(canalMap, gestion.canal_origen)} />
                   <KV label="Dirección" value={gestion.direccion} />
