@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
+import { catalogosEditablesApi, type CatEditable, type CatalogoNombre } from '../api/catalogosEditables.api'
 import type { GestionDetalle, Evento } from '../types/gestiones.types'
 
 interface Props {
@@ -115,6 +116,18 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
     enabled: !!gestionId,
   })
 
+  function useCatMap(nombre: CatalogoNombre) {
+    const { data } = useQuery<CatEditable[]>({
+      queryKey: ['privada-cat-edit', nombre],
+      queryFn: () => catalogosEditablesApi.list(nombre),
+      staleTime: 5 * 60 * 1000,
+    })
+    return useMemo(() => new Map((data ?? []).map((c) => [c.id, c.label])), [data])
+  }
+  const catMap = useCatMap('categorias')
+  const progMap = useCatMap('programas')
+  const areaMap = useCatMap('areas')
+
   if (!gestionId) return null
 
   return (
@@ -183,8 +196,13 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
                 <dl className="grid grid-cols-2 gap-3">
                   <KV label="Fecha ingreso" value={formatFecha(gestion.fecha_ingreso)} />
                   <KV label="Nro expediente" value={gestion.nro_expediente} />
+                  <KV label="Categoría" value={gestion.categoria_id != null ? (catMap.get(gestion.categoria_id) ?? `#${gestion.categoria_id}`) : null} />
+                  <KV label="Programa" value={gestion.programa_id != null ? (progMap.get(gestion.programa_id) ?? `#${gestion.programa_id}`) : null} />
+                  <KV label="Área" value={gestion.area_id != null ? (areaMap.get(gestion.area_id) ?? `#${gestion.area_id}`) : null} />
+                  <KV label="Ok Gobernador" value={gestion.ok_gobernador} />
+                  <KV label="Ok Ministro" value={gestion.ok_ministro} />
                   <KV label="Ministerio" value={gestion.ministerio_nombre ?? gestion.ministerio_agencia_id} />
-                  <KV label="Categoría" value={gestion.categoria_nombre ?? gestion.categoria_general_id} />
+                  <KV label="Clasif. informe (legacy)" value={gestion.categoria_nombre ?? gestion.categoria_general_id} />
                   <KV label="Tipo de gestión" value={gestion.tipo_gestion} />
                   <KV label="Canal origen" value={gestion.canal_origen} />
                   <KV label="Dirección" value={gestion.direccion} />
@@ -206,6 +224,12 @@ export function GestionDetalleDrawer({ gestionId, canModify, onClose, onCambiarE
                   <div className="mt-3">
                     <dt className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Observaciones</dt>
                     <dd className="text-sm text-slate-700 whitespace-pre-wrap">{gestion.observaciones}</dd>
+                  </div>
+                )}
+                {gestion.acciones_implementadas && (
+                  <div className="mt-3">
+                    <dt className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Acciones implementadas</dt>
+                    <dd className="text-sm text-slate-700 whitespace-pre-wrap">{gestion.acciones_implementadas}</dd>
                   </div>
                 )}
               </div>

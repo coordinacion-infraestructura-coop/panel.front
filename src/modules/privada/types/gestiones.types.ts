@@ -80,6 +80,8 @@ export type EstadoGestion =
   | 'NO REMITE SUAC'
   | 'ARCHIVADO'
 
+export type OkEstado = 'SI' | 'NO' | 'PENDIENTE'
+
 export interface CambioEstadoPayload {
   nuevo_estado: EstadoGestion
   comentario?: string
@@ -89,9 +91,13 @@ export interface CambioEstadoPayload {
   localidad?: string
   derivado_a?: string
   acciones_implementadas?: string
+  // E1/E2 (aditivo) — seteables al modificar
+  categoria_id?: number | null
+  programa_id?: number | null
+  area_id?: number | null
+  ok_gobernador?: OkEstado
+  ok_ministro?: OkEstado
 }
-
-export type OkEstado = 'SI' | 'NO' | 'PENDIENTE'
 
 export interface GestionCreatePayload {
   ministerio_agencia_id: string

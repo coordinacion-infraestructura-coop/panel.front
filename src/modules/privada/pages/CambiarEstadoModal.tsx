@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { gestionesApi } from '../api/gestiones.api'
-import type { EstadoGestion, CambioEstadoPayload, GestionDetalle } from '../types/gestiones.types'
+import { CatalogoEditableSelect } from './CatalogoEditableSelect'
+import type { EstadoGestion, CambioEstadoPayload, GestionDetalle, MeResponse, OkEstado } from '../types/gestiones.types'
 
 const ESTADOS: { value: EstadoGestion; label: string }[] = [
   { value: 'INGRESADO', label: 'Ingresado' },
@@ -32,8 +33,22 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
   const [acciones, setAcciones] = useState('')
   const [departamento, setDepartamento] = useState('')
   const [localidad, setLocalidad] = useState('')
-  // valores originales de depto/localidad para enviar sólo si cambian
-  const [origen, setOrigen] = useState<{ departamento: string; localidad: string }>({ departamento: '', localidad: '' })
+  // E1/E2 — catálogos + Ok Gob/Min (se envían sólo si cambian respecto del original)
+  const [catId, setCatId] = useState<number | null>(null)
+  const [progId, setProgId] = useState<number | null>(null)
+  const [areaId, setAreaId] = useState<number | null>(null)
+  const [okGob, setOkGob] = useState<OkEstado>('PENDIENTE')
+  const [okMin, setOkMin] = useState<OkEstado>('PENDIENTE')
+  const [origen, setOrigen] = useState<{
+    departamento: string; localidad: string
+    catId: number | null; progId: number | null; areaId: number | null
+    okGob: OkEstado; okMin: OkEstado
+  }>({ departamento: '', localidad: '', catId: null, progId: null, areaId: null, okGob: 'PENDIENTE', okMin: 'PENDIENTE' })
+
+  const { data: me } = useQuery<MeResponse>({
+    queryKey: ['privada-me'], queryFn: () => gestionesApi.me(), staleTime: Infinity,
+  })
+  const puedeCrearCat = me?.rol === 'Admin' || me?.rol === 'Supervisor'
 
   // Detalle de la gestión — para prefilar departamento / localidad actuales
   const { data: detalle } = useQuery<GestionDetalle>({
@@ -67,9 +82,14 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
     if (detalle) {
       const dep = detalle.departamento ?? ''
       const loc = detalle.localidad ?? ''
-      setDepartamento(dep)
-      setLocalidad(loc)
-      setOrigen({ departamento: dep, localidad: loc })
+      const cat = detalle.categoria_id ?? null
+      const prog = detalle.programa_id ?? null
+      const area = detalle.area_id ?? null
+      const og = (detalle.ok_gobernador ?? 'PENDIENTE') as OkEstado
+      const om = (detalle.ok_ministro ?? 'PENDIENTE') as OkEstado
+      setDepartamento(dep); setLocalidad(loc)
+      setCatId(cat); setProgId(prog); setAreaId(area); setOkGob(og); setOkMin(om)
+      setOrigen({ departamento: dep, localidad: loc, catId: cat, progId: prog, areaId: area, okGob: og, okMin: om })
     }
   }, [detalle])
 
@@ -107,6 +127,11 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
       ...(derivadoA.trim() && { derivado_a: derivadoA.trim() }),
       ...(acciones.trim() && { acciones_implementadas: acciones.trim() }),
       ...((deptoCambio || locCambio) && { departamento, localidad }),
+      ...(catId !== origen.catId && { categoria_id: catId }),
+      ...(progId !== origen.progId && { programa_id: progId }),
+      ...(areaId !== origen.areaId && { area_id: areaId }),
+      ...(okGob !== origen.okGob && { ok_gobernador: okGob }),
+      ...(okMin !== origen.okMin && { ok_ministro: okMin }),
     }
     mutation.mutate(payload)
   }
@@ -191,6 +216,29 @@ export function CambiarEstadoModal({ gestionId, estadoActual, nroExpedienteActua
                     <option value={localidad}>{localidad}</option>
                   )}
                   {(localidades ?? []).map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* E1 — Categoría / Programa / Área */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+              <CatalogoEditableSelect nombre="categorias" label="Categoría" value={catId} onChange={setCatId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="programas" label="Programa asociado" value={progId} onChange={setProgId} puedeCrear={puedeCrearCat} />
+              <CatalogoEditableSelect nombre="areas" label="Área" value={areaId} onChange={setAreaId} puedeCrear={puedeCrearCat} />
+            </div>
+
+            {/* E2 — Ok Gobernador / Ok Ministro */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Ok Gobernador</label>
+                <select className={inputCls} value={okGob} onChange={(e) => setOkGob(e.target.value as OkEstado)}>
+                  {(['PENDIENTE', 'SI', 'NO'] as OkEstado[]).map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Ok Ministro</label>
+                <select className={inputCls} value={okMin} onChange={(e) => setOkMin(e.target.value as OkEstado)}>
+                  {(['PENDIENTE', 'SI', 'NO'] as OkEstado[]).map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>
             </div>
