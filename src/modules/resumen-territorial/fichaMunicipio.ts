@@ -30,6 +30,8 @@ function avancePct(estadoId: number | null | undefined, estados: { id: number; o
 }
 const labelEstado = (id: number | null | undefined, estados: { id: number; label: string }[]) =>
   id == null ? '—' : (estados.find((e) => e.id === id)?.label ?? '—')
+const bgEstado = (id: number | null | undefined, estados: { id: number; bg?: string }[]) =>
+  (id == null ? null : (estados.find((e) => e.id === id)?.bg ?? null)) || null
 
 interface GestionFila {
   id_gestion: string
@@ -54,9 +56,9 @@ export interface FichaMunicipio {
     intendente: string
     partido: string
   }
-  cordobaHogar: null | { fecha_anuncio: string; monto: string; casas: string; ok_gob: string; estado_general: string; avance: string }
-  cordonCuneta: null | { monto: string; estado_general: string; updated_at: string; volumen: string; avance: string }
-  miLugar: { lotes: string; monto: string; etecnico: string; ejuridico: string; efinanciero: string; estado_general: string; avance: string; updated_at: string }[]
+  cordobaHogar: null | { fecha_anuncio: string; monto: string; casas: string; ok_gob: string; estado_general: string; estado_bg: string | null; avance: string }
+  cordonCuneta: null | { monto: string; estado_general: string; estado_bg: string | null; updated_at: string; volumen: string; avance: string }
+  miLugar: { lotes: string; monto: string; etecnico: string; ejuridico: string; efinanciero: string; estado_general: string; estado_bg: string | null; avance: string; updated_at: string }[]
   gestiones: { total: number; filas: GestionFila[] }
 }
 
@@ -115,11 +117,13 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
       casas: fmtNum(chRow.cantidad_casas),
       ok_gob: chRow.ok_gob || '—',
       estado_general: labelEstado(chRow.estado_general, chEstados),
+      estado_bg: bgEstado(chRow.estado_general, chEstados),
       avance: avancePct(chRow.estado_general, chEstados),
     } : null,
     cordonCuneta: ccRow ? {
       monto: fmtNum(ccRow.monto),
       estado_general: labelEstado(ccRow.estado_general, ccEstados),
+      estado_bg: bgEstado(ccRow.estado_general, ccEstados),
       updated_at: fmtFecha(ccRow.updated_at),
       volumen: [
         ccRow.cordon_cuneta_ml != null ? `${fmtNum(ccRow.cordon_cuneta_ml)} m (cordón cuneta)` : null,
@@ -134,6 +138,7 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
       ejuridico: labelEstado(p.ejuridico, mlEstados),
       efinanciero: labelEstado(p.efinanciero, mlEstados),
       estado_general: labelEstado(p.estado_general, mlEstados),
+      estado_bg: bgEstado(p.estado_general, mlEstados),
       avance: avancePct(p.estado_general, mlEstados),
       updated_at: fmtFecha(p.updated_at),
     })),
@@ -155,8 +160,16 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
 }
 
 // ── PDF ─────────────────────────────────────────────────────────────────────
+const RGB = (hex: string): [number, number, number] => {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex.trim())
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [148, 163, 184]
+}
+
 export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
-  const { jsPDF } = await import('jspdf')
+  const [{ jsPDF }, autoTableMod, { HERALDICO_PNG }] = await Promise.all([
+    import('jspdf'), import('jspdf-autotable'), import('./heraldico'),
+  ])
+  const autoTable = autoTableMod.default
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const PW = doc.internal.pageSize.getWidth()
   const PH = doc.internal.pageSize.getHeight()
@@ -185,12 +198,14 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     y += 15
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
   }
-  const kv = (k: string, v: string) => {
+  const kv = (k: string, v: string, chipHex?: string | null) => {
     ensure(16)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
     doc.setTextColor(...GRAY); doc.text(k, M, y)
+    let x = VALX
+    if (chipHex) { doc.setFillColor(...RGB(chipHex)); doc.circle(VALX + 4, y - 3, 4, 'F'); x = VALX + 14 }
     setInk(); doc.setFontSize(10)
-    doc.text(doc.splitTextToSize(v || '—', W - (VALX - M)) as string[], VALX, y)
+    doc.text(doc.splitTextToSize(v || '—', W - (x - M)) as string[], x, y)
     y += 15
   }
   const semaforoKv = (label: string) => {
@@ -203,16 +218,45 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   }
   const vacio = () => { ensure(16); doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(...GRAY); doc.text('Sin datos cargados', M, y); doc.setFont('helvetica', 'normal'); y += 15 }
 
-  // ── Encabezado ──
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...GRAY)
-  doc.text('FICHA DE MUNICIPIO', M, y); y += 22
-  doc.setFontSize(20); doc.setTextColor(...NAVY)
-  doc.text(f.localidad, M, y); y += 18
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...GRAY)
-  doc.text(`${f.departamento}${f.demografica.tipo_localidad !== '—' ? `  ·  Tipo ${f.demografica.tipo_localidad}` : ''}`, M, y)
+  const hoy = new Date().toLocaleDateString('es-AR')
+
+  // ── Encabezado con membrete ──
+  const logoH = 48, logoW = logoH * (186 / 218)
+  try { doc.addImage(HERALDICO_PNG, 'PNG', M, y, logoW, logoH) } catch { /* sin logo */ }
+  const hx = M + logoW + 14
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...GRAY)
+  doc.text('GOBIERNO DE LA PROVINCIA DE CÓRDOBA · SECRETARÍA GENERAL DE GOBIERNO', hx, y + 6)
+  doc.setFontSize(7); doc.text('FICHA DE MUNICIPIO', hx, y + 17)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(...NAVY)
+  doc.text(doc.splitTextToSize(f.localidad, W - (hx - M)) as string[], hx, y + 36)
+  y += Math.max(logoH, 40) + 4
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...GRAY)
+  doc.text(
+    `${f.departamento}${f.demografica.tipo_localidad !== '—' ? `  ·  Tipo ${f.demografica.tipo_localidad}` : ''}  ·  Datos al ${hoy}`,
+    M, y,
+  )
   y += 8
   doc.setDrawColor(...NAVY); doc.setLineWidth(1.4); doc.line(M, y, M + W, y)
-  y += 4
+  y += 14
+
+  // ── Franja de KPIs ──
+  const progDgv = (f.cordobaHogar ? 1 : 0) + (f.cordonCuneta ? 1 : 0) + f.miLugar.length
+  const kpis: [string, string][] = [
+    ['Habitantes', f.demografica.habitantes],
+    ['Electores', f.demografica.electores],
+    ['Gestiones', String(f.gestiones.total)],
+    ['Programas DGV', String(progDgv)],
+  ]
+  const kw = (W - 3 * 10) / 4, kh = 40
+  kpis.forEach(([lab, val], i) => {
+    const x = M + i * (kw + 10)
+    doc.setDrawColor(210); doc.setLineWidth(0.7); doc.roundedRect(x, y, kw, kh, 3, 3)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...NAVY)
+    doc.text(val, x + 8, y + 20)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY)
+    doc.text(lab.toUpperCase(), x + 8, y + 32)
+  })
+  y += kh
 
   // ── Ficha Demográfica ──
   heading('Ficha Demográfica')
@@ -228,14 +272,14 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     kv('Monto', f.cordobaHogar.monto)
     kv('Casas', f.cordobaHogar.casas)
     kv('Ok Ministro', f.cordobaHogar.ok_gob)
-    kv('Estado General', f.cordobaHogar.estado_general)
+    kv('Estado General', f.cordobaHogar.estado_general, f.cordobaHogar.estado_bg)
     kv('Porcentaje de avance', f.cordobaHogar.avance)
   } else vacio()
 
   heading('Cordón Cuneta · DGV')
   if (f.cordonCuneta) {
     kv('Monto', f.cordonCuneta.monto)
-    kv('Estado General', f.cordonCuneta.estado_general)
+    kv('Estado General', f.cordonCuneta.estado_general, f.cordonCuneta.estado_bg)
     kv('Última modificación', f.cordonCuneta.updated_at)
     kv('Volumen', f.cordonCuneta.volumen)
     kv('Porcentaje de avance', f.cordonCuneta.avance)
@@ -250,7 +294,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
       kv('Estado Técnico', m.etecnico)
       kv('Estado Jurídico', m.ejuridico)
       kv('Estado Presupuestario', m.efinanciero)
-      kv('Estado General', m.estado_general)
+      kv('Estado General', m.estado_general, m.estado_bg)
       kv('Porcentaje de avance', m.avance)
       kv('Última modificación', m.updated_at)
     })
@@ -258,20 +302,37 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
 
   // ── Gestiones ──
   heading(`Gestiones — Demandas Subsecretaría de Municipios   ·   Total: ${f.gestiones.total}`)
-  if (!f.gestiones.filas.length) vacio()
-  f.gestiones.filas.forEach((g, i) => {
-    ensure(96)  // que el bloque no se parta entre páginas
-    if (i) { doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y - 6, M + W, y - 6) }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
-    doc.text(doc.splitTextToSize(g.categoria_general_id || '—', W) as string[], M, y); y += 14
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
-    const lns = doc.splitTextToSize(`Detalle: ${g.detalle}`, W) as string[]
-    doc.text(lns, M, y); y += lns.length * 12
-    doc.setTextColor(...GRAY)
-    doc.text(`Ingreso: ${g.fecha_ingreso}   ·   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
-    doc.text(`Estado: ${g.estado}   ·   Urgencia: ${g.urgencia ?? '—'}`, M, y); y += 12
-    doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 16
-  })
+  if (!f.gestiones.filas.length) {
+    vacio()
+  } else if (f.gestiones.filas.length > 6) {
+    // muchas → tabla compacta
+    autoTable(doc, {
+      startY: y,
+      margin: { left: M, right: M },
+      styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak', textColor: INK },
+      headStyles: { fillColor: NAVY, fontSize: 7 },
+      columnStyles: { 1: { cellWidth: 150 }, 3: { halign: 'center' } },
+      head: [['Categoría', 'Detalle', 'Ingreso', 'Días', 'Estado', 'Urgencia', 'Últ. mov.', 'Expediente']],
+      body: f.gestiones.filas.map((g) => [
+        g.categoria_general_id || '—', g.detalle, g.fecha_ingreso, g.dias_transcurridos ?? '—',
+        g.estado, g.urgencia ?? '—', g.ultimo_mov || '—', g.nro_expediente || 'Sin Expediente',
+      ]),
+    })
+  } else {
+    f.gestiones.filas.forEach((g, i) => {
+      ensure(96)
+      if (i) { doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y - 6, M + W, y - 6) }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
+      doc.text(doc.splitTextToSize(g.categoria_general_id || '—', W) as string[], M, y); y += 14
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
+      const lns = doc.splitTextToSize(`Detalle: ${g.detalle}`, W) as string[]
+      doc.text(lns, M, y); y += lns.length * 12
+      doc.setTextColor(...GRAY)
+      doc.text(`Ingreso: ${g.fecha_ingreso}   ·   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
+      doc.text(`Estado: ${g.estado}   ·   Urgencia: ${g.urgencia ?? '—'}`, M, y); y += 12
+      doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 16
+    })
+  }
 
   // ── Pie de página en todas las hojas ──
   const total = doc.getNumberOfPages()
