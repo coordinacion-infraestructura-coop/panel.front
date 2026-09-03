@@ -7,6 +7,7 @@ import { CambiarEstadoModal } from './CambiarEstadoModal'
 import { AgregarGestionModal } from './AgregarGestionModal'
 import { GestionarCatalogosModal } from './GestionarCatalogosModal'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
+import { catalogosEditablesApi, type CatEditable } from '../api/catalogosEditables.api'
 import type { Gestion, GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
 
 const PAGE_SIZE = 50
@@ -15,7 +16,8 @@ const PAGE_SIZE = 50
 // `minimal` = set por defecto / botón "Min". Todas son toggleables y ordenables.
 type ColKey =
   | 'fecha_ingreso' | 'nro_expediente' | 'estado' | 'urgencia' | 'departamento'
-  | 'localidad' | 'ministerio' | 'categoria' | 'tipo_gestion' | 'canal_origen'
+  | 'localidad' | 'ministerio' | 'categoria' | 'campo_trabajo' | 'programa' | 'area'
+  | 'ok_gobernador' | 'ok_ministro' | 'tipo_gestion' | 'canal_origen'
   | 'detalle' | 'costo_estimado' | 'dias_transcurridos' | 'id_gestion'
 
 const COL_META: { key: ColKey; label: string; minimal: boolean }[] = [
@@ -23,6 +25,11 @@ const COL_META: { key: ColKey; label: string; minimal: boolean }[] = [
   { key: 'nro_expediente', label: 'Nro expediente', minimal: true },
   { key: 'estado', label: 'Estado', minimal: true },
   { key: 'urgencia', label: 'Urgencia', minimal: true },
+  { key: 'campo_trabajo', label: 'Campo de Trabajo', minimal: true },
+  { key: 'programa', label: 'Programa', minimal: false },
+  { key: 'area', label: 'Área', minimal: false },
+  { key: 'ok_gobernador', label: 'Ok Gob.', minimal: false },
+  { key: 'ok_ministro', label: 'Ok Min.', minimal: false },
   { key: 'departamento', label: 'Departamento', minimal: false },
   { key: 'localidad', label: 'Localidad', minimal: true },
   { key: 'ministerio', label: 'Ministerio', minimal: false },
@@ -161,6 +168,7 @@ export function GestionesListPage() {
   const [estado, setEstado] = useState(() => searchParams.get('estado') ?? '')
   const [ministerio, setMinisterio] = useState('')
   const [categoria, setCategoria] = useState('')
+  const [campoTrabajo, setCampoTrabajo] = useState('')
   const [tipoGestion, setTipoGestion] = useState('')
   const [canalOrigen, setCanalOrigen] = useState('')
   const [departamento, setDepartamento] = useState(() => searchParams.get('departamento') ?? '')
@@ -208,11 +216,11 @@ export function GestionesListPage() {
     setOffset(0)
   }
 
-  const hasFilters = !!(q || estado || ministerio || categoria || tipoGestion || canalOrigen || departamento || localidad || okGob || okMin)
+  const hasFilters = !!(q || estado || ministerio || categoria || campoTrabajo || tipoGestion || canalOrigen || departamento || localidad || okGob || okMin)
 
   function resetFilters() {
     setQ(''); setQInput(''); setEstado('')
-    setMinisterio(''); setCategoria(''); setTipoGestion(''); setCanalOrigen('')
+    setMinisterio(''); setCategoria(''); setCampoTrabajo(''); setTipoGestion(''); setCanalOrigen('')
     setDepartamento(''); setLocalidad(''); setOkGob(''); setOkMin(''); setOffset(0)
   }
 
@@ -262,6 +270,26 @@ export function GestionesListPage() {
     queryFn: () => gestionesApi.catalogo('canales-origen'),
     staleTime: Infinity,
   })
+  // Catálogos editables (E1) — para la columna/filtro "Campo de Trabajo" y Programa/Área.
+  const { data: camposTrabajo } = useQuery<CatEditable[]>({
+    queryKey: ['privada-cat-edit', 'categorias'],
+    queryFn: () => catalogosEditablesApi.list('categorias'),
+    staleTime: 5 * 60 * 1000,
+  })
+  const { data: programasPriv } = useQuery<CatEditable[]>({
+    queryKey: ['privada-cat-edit', 'programas'],
+    queryFn: () => catalogosEditablesApi.list('programas'),
+    staleTime: 5 * 60 * 1000,
+  })
+  const { data: areasPriv } = useQuery<CatEditable[]>({
+    queryKey: ['privada-cat-edit', 'areas'],
+    queryFn: () => catalogosEditablesApi.list('areas'),
+    staleTime: 5 * 60 * 1000,
+  })
+  const catEditMap = useMemo(() => {
+    const mk = (l?: CatEditable[]) => new Map((l ?? []).map((c) => [c.id, c.label]))
+    return { campo_trabajo: mk(camposTrabajo), programa: mk(programasPriv), area: mk(areasPriv) }
+  }, [camposTrabajo, programasPriv, areasPriv])
   const { data: departamentos } = useQuery<string[]>({
     queryKey: ['privada-cat-departamentos'],
     queryFn: () => gestionesApi.catalogo('departamentos'),
@@ -283,12 +311,13 @@ export function GestionesListPage() {
 
   // ── Listado de gestiones ───────────────────────────────────────────────────
   const { data, isLoading, isError } = useQuery<GestionesResponse>({
-    queryKey: ['gestiones', q, estado, ministerio, categoria, tipoGestion, canalOrigen, departamento, localidad, okGob, okMin, offset, sortServer?.key, sortServer?.dir],
+    queryKey: ['gestiones', q, estado, ministerio, categoria, campoTrabajo, tipoGestion, canalOrigen, departamento, localidad, okGob, okMin, offset, sortServer?.key, sortServer?.dir],
     queryFn: () => gestionesApi.list({
       q: q || undefined,
       estado: estado || undefined,
       ministerio: ministerio || undefined,
       categoria: categoria || undefined,
+      categoria_id: campoTrabajo ? Number(campoTrabajo) : undefined,
       tipo_gestion: tipoGestion || undefined,
       canal_origen: canalOrigen || undefined,
       departamento: departamento || undefined,
@@ -361,6 +390,11 @@ export function GestionesListPage() {
       case 'localidad': return g.localidad ?? ''
       case 'ministerio': return nombreDe(ministerios, g.ministerio_agencia_id)
       case 'categoria': return nombreDe(categorias, g.categoria_general_id)
+      case 'campo_trabajo': return g.categoria_id != null ? (catEditMap.campo_trabajo.get(g.categoria_id) ?? '') : ''
+      case 'programa': return g.programa_id != null ? (catEditMap.programa.get(g.programa_id) ?? '') : ''
+      case 'area': return g.area_id != null ? (catEditMap.area.get(g.area_id) ?? '') : ''
+      case 'ok_gobernador': return g.ok_gobernador ?? ''
+      case 'ok_ministro': return g.ok_ministro ?? ''
       case 'tipo_gestion': return nombreDe(tiposGestion, g.tipo_gestion)
       case 'canal_origen': return nombreDe(canalesOrigen, g.canal_origen)
       case 'detalle': return g.detalle ?? ''
@@ -368,7 +402,7 @@ export function GestionesListPage() {
       case 'dias_transcurridos': return g.dias_transcurridos != null ? String(g.dias_transcurridos) : ''
       case 'id_gestion': return g.id_gestion
     }
-  }, [ministerios, categorias, tiposGestion, canalesOrigen, nombreDe])
+  }, [ministerios, categorias, tiposGestion, canalesOrigen, nombreDe, catEditMap])
 
   const sortedItems = useMemo(() => {
     // orden server-side ya aplicado → no re-ordenar en el cliente
@@ -392,6 +426,7 @@ export function GestionesListPage() {
       estado: estado || undefined,
       ministerio: ministerio || undefined,
       categoria: categoria || undefined,
+      categoria_id: campoTrabajo ? Number(campoTrabajo) : undefined,
       tipo_gestion: tipoGestion || undefined,
       canal_origen: canalOrigen || undefined,
       departamento: departamento || undefined,
@@ -709,6 +744,11 @@ export function GestionesListPage() {
             id="f-ministerio" label="Ministerio"
             value={ministerio} onChange={handleFilterChange(setMinisterio)}
             options={ministerios ?? []}
+          />
+          <FilterSelect
+            id="f-campo-trabajo" label="Campo de Trabajo"
+            value={campoTrabajo} onChange={handleFilterChange(setCampoTrabajo)}
+            options={(camposTrabajo ?? []).map((c) => ({ id: String(c.id), nombre: c.label }))}
           />
           <FilterSelect
             id="f-categoria" label="Categoría General"

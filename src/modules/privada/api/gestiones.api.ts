@@ -14,6 +14,9 @@ export interface GestionesParams {
   localidad?: string
   ok_gobernador?: string
   ok_ministro?: string
+  categoria_id?: number
+  programa_id?: number
+  area_id?: number
   sort?: string
   sort_dir?: 'asc' | 'desc'
   limit?: number
