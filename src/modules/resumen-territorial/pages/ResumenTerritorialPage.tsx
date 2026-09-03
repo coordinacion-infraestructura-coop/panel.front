@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
@@ -390,6 +390,7 @@ export function ResumenTerritorialPage() {
   const [unidad, setUnidad] = useState<Unidad>('localidad')
   const [q, setQ] = useState('')
   const [fDep, setFDep] = useState('')
+  const [fLoc, setFLoc] = useState('')
   const [fArea, setFArea] = useState('')
   const [fProg, setFProg] = useState('')
   const [fEstado, setFEstado] = useState('')
@@ -458,6 +459,26 @@ export function ResumenTerritorialPage() {
     }
   }, [payload])
 
+  // Localidades para el combobox — si hay departamento elegido, sólo las de ese depto.
+  const opcionesLoc = useMemo(() => {
+    const set = new Set<string>()
+    for (const loc of payload?.localidades ?? []) {
+      if (!loc.localidad) continue
+      if (fDep && loc.departamento !== fDep) continue
+      set.add(loc.localidad)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [payload, fDep])
+
+  // El filtro de localidad sólo aplica si el texto coincide con una opción real
+  // (permite escribir parcial sin dejar la tabla vacía).
+  const fLocActivo = fLoc && opcionesLoc.includes(fLoc) ? fLoc : ''
+
+  // Si cambia el departamento y la localidad elegida ya no pertenece, se limpia.
+  useEffect(() => {
+    if (fLoc && !opcionesLoc.includes(fLoc)) setFLoc('')
+  }, [fDep])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     const nq = norm(q)
     return (payload?.localidades ?? [])
@@ -477,10 +498,11 @@ export function ResumenTerritorialPage() {
       })
       .filter((loc) => {
         if (fDep && loc.departamento !== fDep) return false
+        if (fLocActivo && loc.localidad !== fLocActivo) return false
         if (nq && !norm(`${loc.localidad} ${loc.departamento ?? ''}`).includes(nq)) return false
         return loc.programas.length > 0
       })
-  }, [payload, q, fDep, fArea, fProg, fEstado, fChecklist])
+  }, [payload, q, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist])
 
   const kpis = useMemo<Kpi[]>(() => {
     const progs = localidadesFiltradas.flatMap((l) => l.programas)
@@ -555,10 +577,11 @@ export function ResumenTerritorialPage() {
     }
   }
 
-  const hayFiltros = q || fDep || fArea || fProg || fEstado || fChecklist
+  const hayFiltros = q || fDep || fLocActivo || fArea || fProg || fEstado || fChecklist
   const limpiar = () => {
     setQ('')
     setFDep('')
+    setFLoc('')
     setFArea('')
     setFProg('')
     setFEstado('')
@@ -748,6 +771,16 @@ export function ResumenTerritorialPage() {
                   <option key={d}>{d}</option>
                 ))}
               </select>
+              <input
+                list="rt-loc-list"
+                value={fLoc}
+                onChange={(e) => setFLoc(e.target.value)}
+                placeholder={fDep ? `Localidad de ${fDep}…` : 'Localidad…'}
+                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5 min-w-[170px]"
+              />
+              <datalist id="rt-loc-list">
+                {opcionesLoc.map((l) => <option key={l} value={l} />)}
+              </datalist>
               {opciones.areas.length > 1 && (
                 <select value={fArea} onChange={(e) => setFArea(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
                   <option value="">Todas las áreas</option>
