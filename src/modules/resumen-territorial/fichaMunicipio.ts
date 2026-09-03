@@ -229,7 +229,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   doc.setFontSize(7); doc.text('FICHA DE MUNICIPIO', hx, y + 17)
   doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(...NAVY)
   doc.text(doc.splitTextToSize(f.localidad, W - (hx - M)) as string[], hx, y + 36)
-  y += Math.max(logoH, 40) + 4
+  y += Math.max(logoH, 40) + 20
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...GRAY)
   doc.text(
     `${f.departamento}${f.demografica.tipo_localidad !== '—' ? `  ·  Tipo ${f.demografica.tipo_localidad}` : ''}  ·  Datos al ${hoy}`,
