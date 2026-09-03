@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
 import { fichaLocalidadApi, type LocalidadInfo } from '../api/fichaLocalidad.api'
+import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -645,6 +646,28 @@ export function ResumenTerritorialPage() {
     }
   }
 
+  // ── Ficha de municipio (imprimible) ──────────────────────────────────────
+  const [fichaBusy, setFichaBusy] = useState<null | 'pdf' | 'xlsx'>(null)
+  const [fichaError, setFichaError] = useState<string | null>(null)
+  const municipioSel = fLocActivo
+    ? { localidad: fLocActivo, departamento: (payload?.localidades.find((l) => l.localidad === fLocActivo)?.departamento) ?? fDep }
+    : null
+
+  async function generarFicha(fmt: 'pdf' | 'xlsx') {
+    if (!municipioSel || fichaBusy) return
+    setFichaBusy(fmt)
+    setFichaError(null)
+    try {
+      const f = await armarFichaMunicipio(municipioSel.departamento ?? '', municipioSel.localidad)
+      if (fmt === 'pdf') await fichaMunicipioPdf(f)
+      else fichaMunicipioXlsx(f)
+    } catch {
+      setFichaError('No se pudo generar la ficha. Reintentá.')
+    } finally {
+      setFichaBusy(null)
+    }
+  }
+
   return (
     <div>
       {/* ── UI de pantalla ─────────────────────────────────────────────── */}
@@ -733,7 +756,23 @@ export function ResumenTerritorialPage() {
                   <span className="text-amber-600"> · Privada no disponible</span>
                 )}
               </span>
-              <div className="ml-auto flex gap-2">
+              <div className="ml-auto flex flex-wrap gap-2 items-center">
+                <button
+                  onClick={() => generarFicha('pdf')}
+                  disabled={!municipioSel || fichaBusy !== null}
+                  title={municipioSel ? `Ficha de ${municipioSel.localidad}` : 'Elegí una localidad para generar su ficha'}
+                  className="text-sm bg-gov-navy text-white rounded px-3 py-1.5 hover:bg-gov-blue disabled:opacity-40"
+                >
+                  {fichaBusy === 'pdf' ? 'Generando…' : '📄 Ficha de municipio (PDF)'}
+                </button>
+                <button
+                  onClick={() => generarFicha('xlsx')}
+                  disabled={!municipioSel || fichaBusy !== null}
+                  className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue disabled:opacity-40"
+                >
+                  {fichaBusy === 'xlsx' ? '…' : 'Ficha (Excel)'}
+                </button>
+                <span className="w-px h-5 bg-slate-200" />
                 <button
                   onClick={exportar}
                   className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue"
@@ -755,6 +794,7 @@ export function ResumenTerritorialPage() {
                 </button>
               </div>
             </div>
+            {fichaError && <p className="text-xs text-red-600">{fichaError}</p>}
 
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-lg p-3">
