@@ -158,29 +158,71 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
 export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  const M = 48
-  let y = 56
-  const W = doc.internal.pageSize.getWidth() - M * 2
+  const PW = doc.internal.pageSize.getWidth()
+  const PH = doc.internal.pageSize.getHeight()
+  const M = 56              // ~2 cm
+  const W = PW - M * 2
+  const VALX = M + 190      // columna de valores
+  const BOTTOM = PH - 64    // reserva para el pie
+  const NAVY: [number, number, number] = [23, 44, 63]
+  const GRAY: [number, number, number] = [110, 116, 122]
+  const INK: [number, number, number] = [33, 37, 41]
+  const SEM: Record<string, [number, number, number]> = {
+    verde: [46, 125, 50], amarillo: [249, 168, 37], rojo: [198, 40, 40],
+  }
+  let y = M
 
-  const nl = () => { y += 15; if (y > doc.internal.pageSize.getHeight() - 60) { doc.addPage(); y = 56 } }
-  const h = (t: string) => { nl(); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text(t, M, y); doc.setFont('helvetica', 'normal'); doc.setFontSize(10) }
-  const kv = (k: string, v: string) => { doc.text(`${k}: `, M + 12, y); doc.text(v || '—', M + 150, y); nl() }
-  const line = (t: string) => { doc.text(doc.splitTextToSize(t, W), M, y); nl() }
+  const ensure = (space: number) => { if (y + space > BOTTOM) { doc.addPage(); y = M } }
+  const setInk = () => doc.setTextColor(...INK)
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(15)
-  doc.text('Ficha de Municipio', M, y); nl()
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(11)
-  doc.text(`${f.localidad}  ·  ${f.departamento}  ·  Tipo: ${f.demografica.tipo_localidad}`, M, y); nl(); nl()
-  doc.setFontSize(10)
+  const heading = (t: string) => {
+    ensure(46)
+    y += 18
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(...NAVY)
+    doc.text(t.toUpperCase(), M, y)
+    y += 6
+    doc.setDrawColor(...NAVY); doc.setLineWidth(0.8); doc.line(M, y, M + W, y)
+    y += 15
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+  }
+  const kv = (k: string, v: string) => {
+    ensure(16)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
+    doc.setTextColor(...GRAY); doc.text(k, M, y)
+    setInk(); doc.setFontSize(10)
+    doc.text(doc.splitTextToSize(v || '—', W - (VALX - M)) as string[], VALX, y)
+    y += 15
+  }
+  const semaforoKv = (label: string) => {
+    ensure(16)
+    doc.setFontSize(9.5); doc.setTextColor(...GRAY); doc.text('Semáforo', M, y)
+    const c = SEM[label.toLowerCase()]
+    if (c) { doc.setFillColor(...c); doc.circle(VALX + 4, y - 3, 4, 'F') }
+    setInk(); doc.setFontSize(10); doc.text(label || '—', VALX + (c ? 14 : 0), y)
+    y += 15
+  }
+  const vacio = () => { ensure(16); doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(...GRAY); doc.text('Sin datos cargados', M, y); doc.setFont('helvetica', 'normal'); y += 15 }
 
-  h('Ficha Demográfica')
-  kv('Semáforo', f.demografica.color_semaforo)
+  // ── Encabezado ──
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...GRAY)
+  doc.text('FICHA DE MUNICIPIO', M, y); y += 22
+  doc.setFontSize(20); doc.setTextColor(...NAVY)
+  doc.text(f.localidad, M, y); y += 18
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...GRAY)
+  doc.text(`${f.departamento}${f.demografica.tipo_localidad !== '—' ? `  ·  Tipo ${f.demografica.tipo_localidad}` : ''}`, M, y)
+  y += 8
+  doc.setDrawColor(...NAVY); doc.setLineWidth(1.4); doc.line(M, y, M + W, y)
+  y += 4
+
+  // ── Ficha Demográfica ──
+  heading('Ficha Demográfica')
+  semaforoKv(f.demografica.color_semaforo)
   kv('Habitantes', f.demografica.habitantes)
   kv('Electores', f.demografica.electores)
   kv('Intendente / Jefe Comunal', f.demografica.intendente)
   kv('Partido Político', f.demografica.partido)
 
-  h('Córdoba Hogar DGV')
+  heading('Córdoba Hogar · DGV')
   if (f.cordobaHogar) {
     kv('Fecha de anuncio', f.cordobaHogar.fecha_anuncio)
     kv('Monto', f.cordobaHogar.monto)
@@ -188,21 +230,21 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     kv('Ok Ministro', f.cordobaHogar.ok_gob)
     kv('Estado General', f.cordobaHogar.estado_general)
     kv('Porcentaje de avance', f.cordobaHogar.avance)
-  } else line('—')
+  } else vacio()
 
-  h('Cordón Cuneta DGV')
+  heading('Cordón Cuneta · DGV')
   if (f.cordonCuneta) {
     kv('Monto', f.cordonCuneta.monto)
     kv('Estado General', f.cordonCuneta.estado_general)
     kv('Última modificación', f.cordonCuneta.updated_at)
     kv('Volumen', f.cordonCuneta.volumen)
     kv('Porcentaje de avance', f.cordonCuneta.avance)
-  } else line('—')
+  } else vacio()
 
-  h('Programa Mi Lugar DGV')
+  heading('Programa Mi Lugar · DGV')
   if (f.miLugar.length) {
     f.miLugar.forEach((m, i) => {
-      if (i) nl()
+      if (i) { ensure(10); y += 8 }
       kv('Lotes', m.lotes)
       kv('Monto', m.monto)
       kv('Estado Técnico', m.etecnico)
@@ -212,21 +254,35 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
       kv('Porcentaje de avance', m.avance)
       kv('Última modificación', m.updated_at)
     })
-  } else line('—')
+  } else vacio()
 
-  nl()
-  h(`Gestiones — Demandas Subsecretaría de Municipios  |  Total: ${f.gestiones.total}`)
-  nl()
+  // ── Gestiones ──
+  heading(`Gestiones — Demandas Subsecretaría de Municipios   ·   Total: ${f.gestiones.total}`)
+  if (!f.gestiones.filas.length) vacio()
   f.gestiones.filas.forEach((g, i) => {
-    if (i) { doc.setDrawColor(200); doc.line(M, y - 4, M + W, y - 4); nl() }
-    line(`Categoría: ${g.categoria_general_id}`)
-    line(`Detalle: ${g.detalle}`)
-    line(`Fecha de ingreso: ${g.fecha_ingreso}   Días transcurridos: ${g.dias_transcurridos ?? '—'}`)
-    line(`Estado: ${g.estado}`)
-    line(`Urgencia: ${g.urgencia ?? '—'}`)
-    line(`Último movimiento: ${g.ultimo_mov || ''}`)
-    line(`Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`)
+    ensure(96)  // que el bloque no se parta entre páginas
+    if (i) { doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y - 6, M + W, y - 6) }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
+    doc.text(doc.splitTextToSize(g.categoria_general_id || '—', W) as string[], M, y); y += 14
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
+    const lns = doc.splitTextToSize(`Detalle: ${g.detalle}`, W) as string[]
+    doc.text(lns, M, y); y += lns.length * 12
+    doc.setTextColor(...GRAY)
+    doc.text(`Ingreso: ${g.fecha_ingreso}   ·   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
+    doc.text(`Estado: ${g.estado}   ·   Urgencia: ${g.urgencia ?? '—'}`, M, y); y += 12
+    doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 16
   })
+
+  // ── Pie de página en todas las hojas ──
+  const total = doc.getNumberOfPages()
+  const gen = new Date().toLocaleString('es-AR')
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...GRAY)
+    doc.text(`Generado ${gen}`, M, PH - 36)
+    doc.text(`Página ${p} de ${total}`, PW - M, PH - 36, { align: 'right' })
+    doc.setDrawColor(220); doc.setLineWidth(0.5); doc.line(M, PH - 48, PW - M, PH - 48)
+  }
 
   doc.save(`ficha_${norm(f.localidad).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
