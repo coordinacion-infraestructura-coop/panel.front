@@ -320,8 +320,12 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     })
   } else {
     f.gestiones.filas.forEach((g, i) => {
-      ensure(96)
-      if (i) { doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y - 6, M + W, y - 6) }
+      ensure(104)
+      if (i) {
+        y += 8
+        doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y, M + W, y)
+        y += 16
+      }
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
       doc.text(doc.splitTextToSize(g.categoria_general_id || '—', W) as string[], M, y); y += 14
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
@@ -330,7 +334,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
       doc.setTextColor(...GRAY)
       doc.text(`Ingreso: ${g.fecha_ingreso}   ·   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
       doc.text(`Estado: ${g.estado}   ·   Urgencia: ${g.urgencia ?? '—'}`, M, y); y += 12
-      doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 16
+      doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 4
     })
   }
 
