@@ -20,7 +20,7 @@ export function LoginPage() {
           Provincia de Córdoba
         </p>
         <h1 className="text-white text-2xl font-semibold leading-snug">
-          Ministerio de Cooperativas<br />y Mutuales
+          Secretaría General<br />de Gobierno
         </h1>
       </div>
 
@@ -44,7 +44,7 @@ export function LoginPage() {
         </button>
 
         <p className="text-xs text-gray-400 mt-5 text-center">
-          Solo cuentas autorizadas por el Ministerio
+          Solo cuentas autorizadas por la Secretaría General de Gobierno
         </p>
       </div>
     </div>

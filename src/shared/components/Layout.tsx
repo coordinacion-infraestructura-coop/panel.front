@@ -73,7 +73,7 @@ export function Layout() {
                 Provincia de Córdoba
               </p>
               <h1 className="text-base font-semibold leading-tight">
-                Ministerio de Cooperativas y Mutuales
+                Secretaría General de Gobierno
               </h1>
             </div>
           </Link>
