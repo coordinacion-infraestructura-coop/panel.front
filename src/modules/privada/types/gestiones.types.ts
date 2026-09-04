@@ -26,6 +26,7 @@ export interface Gestion {
   ok_ministro?: OkEstado
   created_at?: string
   created_by?: string
+  updated_at?: string
 }
 
 export interface GestionDetalle extends Gestion {

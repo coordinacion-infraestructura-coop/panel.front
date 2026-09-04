@@ -186,6 +186,9 @@ export function GestionesListPage() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [editingDetalleId, setEditingDetalleId] = useState<string | null>(null)
+  const [detalleDraft, setDetalleDraft] = useState('')
+  const [detalleError, setDetalleError] = useState<string | null>(null)
   const [showCols, setShowCols] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [sort, setSort] = useState<{ key: ColKey; dir: 'asc' | 'desc' } | null>(null)
@@ -353,6 +356,47 @@ export function GestionesListPage() {
 
   const canDelete = me?.rol === 'Admin' || me?.rol === 'Supervisor'
   const canModify = me?.rol === 'Admin' || me?.rol === 'Supervisor' || me?.rol === 'Operador'
+
+  // ── Corrección de "detalle" (error de carga) — no es un cambio de gestión: no dispara
+  // ACTUALIZA_DATO ni aparece en el timeline de Movimientos (ver backend service.corregir_detalle).
+  const corregirDetalleMutation = useMutation({
+    mutationFn: ({ id, detalle, updated_at }: { id: string; detalle: string; updated_at?: string | null }) =>
+      gestionesApi.corregirDetalle(id, { detalle, updated_at }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gestiones'] })
+      setEditingDetalleId(null)
+      setDetalleError(null)
+    },
+    onError: (err: unknown) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 409) {
+        setDetalleError('Esta gestión fue modificada por otra persona. Cerrá la edición y volvé a intentar.')
+        return
+      }
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail
+        : (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string')
+          ? (detail as { message: string }).message
+          : 'No se pudo guardar la corrección.'
+      setDetalleError(msg)
+    },
+  })
+
+  function startEditDetalle(g: Gestion) {
+    setEditingDetalleId(g.id_gestion)
+    setDetalleDraft(g.detalle ?? '')
+    setDetalleError(null)
+  }
+  function cancelEditDetalle() {
+    setEditingDetalleId(null)
+    setDetalleError(null)
+  }
+  function saveEditDetalle(g: Gestion) {
+    const nuevo = detalleDraft.trim()
+    if (!nuevo) { setDetalleError('El detalle no puede quedar vacío.'); return }
+    if (nuevo === (g.detalle ?? '')) { setEditingDetalleId(null); setDetalleError(null); return }
+    corregirDetalleMutation.mutate({ id: g.id_gestion, detalle: nuevo, updated_at: g.updated_at })
+  }
 
   const total = data?.total ?? 0
   const items = data?.items ?? []
@@ -573,7 +617,58 @@ export function GestionesListPage() {
           </>
         )
       case 'detalle':
-        return <p className="truncate max-w-xs text-slate-700" title={g.detalle}>{g.detalle}</p>
+        if (editingDetalleId === g.id_gestion) {
+          return (
+            <div className="flex flex-col gap-1 w-64">
+              <textarea
+                autoFocus
+                rows={3}
+                value={detalleDraft}
+                onChange={(e) => setDetalleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { e.preventDefault(); cancelEditDetalle() }
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveEditDetalle(g) }
+                }}
+                className="border border-gov-cyan rounded px-2 py-1 text-sm w-full focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+              />
+              {detalleError && <p role="alert" className="text-[11px] text-red-600">{detalleError}</p>}
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => saveEditDetalle(g)}
+                  disabled={corregirDetalleMutation.isPending}
+                  className="text-xs bg-gov-navy text-white px-2 py-1 rounded hover:bg-gov-blue transition-colors disabled:opacity-50"
+                >
+                  {corregirDetalleMutation.isPending ? 'Guardando…' : 'Guardar corrección'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditDetalle}
+                  disabled={corregirDetalleMutation.isPending}
+                  className="text-xs border border-slate-200 text-slate-500 px-2 py-1 rounded hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )
+        }
+        return (
+          <div className="flex items-start gap-1.5">
+            <p className="truncate max-w-xs text-slate-700" title={g.detalle}>{g.detalle}</p>
+            {canModify && (
+              <button
+                type="button"
+                onClick={() => startEditDetalle(g)}
+                title="Corregir detalle por error de carga (no queda como cambio en el historial)"
+                aria-label="Corregir detalle"
+                className="text-slate-300 hover:text-gov-blue transition-colors shrink-0"
+              >
+                ✎
+              </button>
+            )}
+          </div>
+        )
       case 'id_gestion':
         return (
           <span className="inline-flex items-center gap-1.5">

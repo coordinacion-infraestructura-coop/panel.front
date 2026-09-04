@@ -39,6 +39,9 @@ export const gestionesApi = {
   cambiarEstado: (id: string, payload: CambioEstadoPayload) =>
     apiClient.post(`${BASE}/gestiones/${id}/cambiar-estado`, payload).then((r) => r.data),
 
+  corregirDetalle: (id: string, payload: { detalle: string; updated_at?: string | null }) =>
+    apiClient.patch(`${BASE}/gestiones/${id}/detalle`, payload).then((r) => r.data),
+
   eliminar: (id: string) =>
     apiClient.delete(`${BASE}/gestiones/${id}`).then((r) => r.data),
 
