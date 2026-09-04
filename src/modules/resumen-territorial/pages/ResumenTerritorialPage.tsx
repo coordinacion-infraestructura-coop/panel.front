@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
-import { fichaLocalidadApi, type LocalidadInfo } from '../api/fichaLocalidad.api'
+import { fichaLocalidadApi } from '../api/fichaLocalidad.api'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
+import { exportarResumenXlsx } from '../exportResumen'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -12,7 +13,6 @@ import type {
   ResumenTerritorialPayload,
 } from '../types/resumenTerritorial.types'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
-import { exportToXlsx } from '../../../shared/utils/exportTable'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -33,11 +33,6 @@ function fmtHaceTiempo(iso: string): string {
   const h = Math.round(min / 60)
   if (h < 24) return `hace ${h} h`
   return `hace ${Math.round(h / 24)} d`
-}
-
-function fmtMonto(n: number | null): string {
-  if (n === null || n === undefined) return ''
-  return `$${Math.round(n).toLocaleString('es-AR')}`
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -553,31 +548,6 @@ export function ResumenTerritorialPage() {
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
-  // Fichas demográficas de todas las localidades — para Excel / PDF / impresión.
-  const fichasQ = useQuery({
-    queryKey: ['fichas-localidad-all'],
-    queryFn: fichaLocalidadApi.todas,
-    staleTime: 10 * 60 * 1000,
-  })
-  const fichaMap = useMemo(() => {
-    const m = new Map<string, LocalidadInfo>()
-    for (const f of fichasQ.data ?? []) m.set(`${norm(f.departamento ?? '')}|${norm(f.localidad ?? '')}`, f)
-    return m
-  }, [fichasQ.data])
-  const semLabel = (c?: string | null) =>
-    c ? { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' }[c.toLowerCase()] ?? c : ''
-  function fichaCols(loc: ResumenLocalidad) {
-    const f = fichaMap.get(`${norm(loc.departamento ?? '')}|${norm(loc.localidad)}`)
-    return {
-      Habitantes: f?.habitantes ?? '',
-      Electores: f?.electores ?? '',
-      'Semáforo': semLabel(f?.color_semaforo),
-      Intendente: f?.intendente_jefe_comunal ?? '',
-      'Partido': f?.partido_politico ?? '',
-      'Tipo localidad': f?.tipo_localidad ?? '',
-    }
-  }
-
   const hayFiltros = q || fDep || fLocActivo || fArea || fProg || fEstado || fChecklist
   const limpiar = () => {
     setQ('')
@@ -589,60 +559,36 @@ export function ResumenTerritorialPage() {
     setFChecklist('')
   }
 
-  function exportRows() {
-    return localidadesFiltradas.flatMap((loc) =>
-      loc.programas.map((p) => ({
-        Localidad: loc.localidad,
-        Departamento: loc.departamento ?? '',
-        ...fichaCols(loc),
-        Área: AREA_LABEL[p.area] ?? p.area,
-        Programa: p.programa_label,
-        Detalle: p.detalle ?? '',
-        'Estado general': p.estado_general_label ?? '',
-        'Checklist faltantes': p.area === 'vivienda' ? (p.checklist_iniciado ? p.checklist_faltan : p.checklist_total) : '',
-        'Checklist total': p.area === 'vivienda' ? p.checklist_total : '',
-        'Última comunicación (fecha)': p.ultima_comunicacion?.fecha ?? '',
-        'Última comunicación (área)': p.ultima_comunicacion?.area ?? '',
-        Monto: p.area === 'vivienda' ? fmtMonto(p.monto) : '',
-        Expediente: p.expediente ?? '',
-      })),
-    )
-  }
+  // Un único export: .xlsx multi-hoja con los municipios que cumplen los filtros
+  // (Programas · Checklists · Gestiones · Movimientos). Ver exportResumen.ts.
+  const [exportando, setExportando] = useState(false)
+  const [exportAviso, setExportAviso] = useState<string | null>(null)
+  const filtrosTexto = [
+    q && `texto “${q}”`,
+    fDep && `departamento ${fDep}`,
+    fLocActivo && `localidad ${fLocActivo}`,
+    fArea && `área ${AREA_LABEL[fArea] ?? fArea}`,
+    fProg && `programa ${opciones.progs.find(([id]) => id === fProg)?.[1] ?? fProg}`,
+    fEstado && `estado ${fEstado}`,
+    fChecklist && `checklist ${fChecklist}`,
+  ].filter(Boolean).join(' · ')
+  const incluirPrivada = localidadesFiltradas.some((l) => l.programas.some((p) => p.area === 'privada'))
 
-  function exportar() {
-    exportToXlsx(exportRows(), 'Resumen territorial', `resumen_territorial_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  const [exportandoPdf, setExportandoPdf] = useState(false)
-  async function exportarPdf() {
-    if (exportandoPdf) return
-    setExportandoPdf(true)
+  async function exportarExcel() {
+    if (exportando) return
+    setExportando(true)
+    setExportAviso(null)
     try {
-      const rows = exportRows()
-      const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
-      const autoTable = autoTableMod.default
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
-      doc.setFontSize(13)
-      doc.text('Resumen Territorial', 40, 34)
-      doc.setFontSize(8)
-      doc.text(
-        `Alcance: ${alcance}  |  ${localidadesFiltradas.length} localidades  |  ${new Date().toLocaleString('es-AR')}${hayFiltros ? '  |  (con filtros)' : ''}`,
-        40, 48,
-      )
-      const cols = ['Localidad', 'Depto', 'Hab.', 'Elect.', 'Semáforo', 'Intendente', 'Área', 'Programa', 'Estado general', 'Últ. com.']
-      autoTable(doc, {
-        startY: 60,
-        styles: { fontSize: 6.5, cellPadding: 2, overflow: 'linebreak' },
-        headStyles: { fillColor: [23, 44, 63] },
-        head: [cols],
-        body: rows.map((r) => [
-          r.Localidad, r.Departamento, r.Habitantes, r.Electores, r['Semáforo'], r.Intendente,
-          r['Área'], r.Programa, r['Estado general'], r['Última comunicación (fecha)'],
-        ]),
+      const aviso = await exportarResumenXlsx(localidadesFiltradas, {
+        alcance,
+        filtros: filtrosTexto,
+        incluirPrivada,
       })
-      doc.save(`resumen_territorial_${new Date().toISOString().slice(0, 10)}.pdf`)
+      setExportAviso(aviso)
+    } catch {
+      setExportAviso('No se pudo generar el Excel. Reintentá.')
     } finally {
-      setExportandoPdf(false)
+      setExportando(false)
     }
   }
 
@@ -670,8 +616,7 @@ export function ResumenTerritorialPage() {
 
   return (
     <div>
-      {/* ── UI de pantalla ─────────────────────────────────────────────── */}
-      <div className="rt-screen-only">
+      <div>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold text-gov-navy">Resumen Territorial</h2>
@@ -732,6 +677,29 @@ export function ResumenTerritorialPage() {
           <div className="space-y-4">
             <KpiStrip items={kpis} />
 
+            {/* Búsqueda libre — separada de los filtros, es lo primero de la barra */}
+            <div className="relative max-w-xl">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                🔍
+              </span>
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por localidad o departamento…"
+                className="w-full text-sm bg-white border border-slate-300 rounded-lg pl-9 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-gov-cyan/40 focus:border-gov-cyan"
+              />
+              {q && (
+                <button
+                  onClick={() => setQ('')}
+                  aria-label="Limpiar búsqueda"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             {/* Toolbar */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
@@ -774,37 +742,23 @@ export function ResumenTerritorialPage() {
                 </button>
                 <span className="w-px h-5 bg-slate-200" />
                 <button
-                  onClick={exportar}
-                  className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue"
+                  onClick={exportarExcel}
+                  disabled={exportando}
+                  title="Exporta los municipios que cumplen los filtros: programas, checklists, gestiones y movimientos"
+                  className="text-sm bg-gov-cyan text-white rounded px-3 py-1.5 hover:brightness-105 disabled:opacity-50"
                 >
-                  ⤓ Excel
-                </button>
-                <button
-                  onClick={exportarPdf}
-                  disabled={exportandoPdf}
-                  className="text-sm border border-slate-300 rounded px-3 py-1.5 hover:border-gov-cyan hover:text-gov-blue disabled:opacity-50"
-                >
-                  {exportandoPdf ? '…' : '⤓ PDF'}
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="text-sm bg-gov-cyan text-white rounded px-3 py-1.5 hover:brightness-105"
-                >
-                  ⎙ Imprimir
+                  {exportando ? 'Generando…' : '⤓ Exportar Excel'}
                 </button>
               </div>
             </div>
             {fichaError && <p className="text-xs text-red-600">{fichaError}</p>}
+            {exportAviso && <p className="text-xs text-amber-600">{exportAviso}</p>}
 
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-lg p-3">
-              <input
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar localidad o departamento…"
-                className="text-sm bg-slate-50 border border-slate-300 rounded px-3 py-1.5 min-w-[200px] flex-1"
-              />
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mr-1">
+                Filtros
+              </span>
               <select value={fDep} onChange={(e) => setFDep(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
                 <option value="">Todos los departamentos</option>
                 {opciones.deps.map((d) => (
@@ -993,85 +947,6 @@ export function ResumenTerritorialPage() {
           </div>
         )}
       </div>
-
-      {/* ── Documento de impresión (oculto en pantalla) ─────────────────── */}
-      {payload && (
-        <div className="rt-print-doc hidden">
-          <div style={{ borderBottom: '2px solid #14212b', paddingBottom: 8, marginBottom: 4 }}>
-            <div style={{ fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#036aa1' }}>
-              Secretaría General de Gobierno · Provincia de Córdoba
-            </div>
-            <h1 style={{ fontSize: 16, margin: '3px 0 0' }}>
-              Resumen Territorial — {unidad === 'localidad' ? 'por localidad' : 'por departamento'}
-            </h1>
-          </div>
-          <div style={{ fontSize: 9, color: '#4a5b68', marginBottom: 12 }}>
-            Alcance: {alcance} &nbsp;|&nbsp; {localidadesFiltradas.length} localidades &nbsp;|&nbsp;
-            Generado: {new Date().toLocaleString('es-AR')}
-            {hayFiltros ? ' | (con filtros aplicados)' : ''}
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Localidad</th>
-                <th>Departamento</th>
-                <th>Hab.</th>
-                <th>Elect.</th>
-                <th>Semáforo</th>
-                <th>Intendente</th>
-                <th>Área</th>
-                <th>Programa</th>
-                <th>Estado general</th>
-                <th>Checklist</th>
-                <th>Última comunicación</th>
-              </tr>
-            </thead>
-            <tbody>
-              {localidadesFiltradas.flatMap((loc) => {
-                const fc = fichaCols(loc)
-                return loc.programas.map((p, j) => (
-                  <tr key={`${loc.localidad}-${j}`}>
-                    {j === 0 && (
-                      <td rowSpan={loc.programas.length}>
-                        <b>{loc.localidad}</b>
-                      </td>
-                    )}
-                    {j === 0 && (
-                      <td rowSpan={loc.programas.length}>{loc.departamento ?? 'Sin depto.'}</td>
-                    )}
-                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Habitantes}</td>}
-                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Electores}</td>}
-                    {j === 0 && <td rowSpan={loc.programas.length}>{fc['Semáforo']}</td>}
-                    {j === 0 && <td rowSpan={loc.programas.length}>{fc.Intendente}</td>}
-                    <td>{AREA_LABEL[p.area] ?? p.area}</td>
-                    <td>
-                      {p.programa_label}
-                      {p.detalle ? ` — ${p.detalle}` : ''}
-                    </td>
-                    <td>{p.estado_general_label ?? '—'}</td>
-                    <td>
-                      {p.area === 'privada'
-                        ? '—'
-                        : !p.checklist_iniciado
-                          ? 'No iniciado'
-                          : p.checklist_faltan === 0
-                            ? 'Completo'
-                            : `${p.checklist_faltan} / ${p.checklist_total} faltan`}
-                    </td>
-                    <td>
-                      {p.ultima_comunicacion
-                        ? `${fmtDate(p.ultima_comunicacion.fecha)}${
-                            p.ultima_comunicacion.area ? ` · ${p.ultima_comunicacion.area}` : ''
-                          }`
-                        : '—'}
-                    </td>
-                  </tr>
-                ))
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       <DetailDrawer localidad={detalleLoc} onClose={() => setDetalleLoc(null)} />
     </div>
