@@ -993,11 +993,17 @@ export function CordobaHogarPage() {
   const deptoId = useId()
   const okId = useId()
   const egId = useId()
+  const ejId = useId()
+  const etId = useId()
+  const efId = useId()
 
   const [search, setSearch] = useState('')
   const [deptoFilter, setDeptoFilter] = useState('')
   const [okFilter, setOkFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
+  const [ejFilter, setEjFilter] = useState('')
+  const [etFilter, setEtFilter] = useState('')
+  const [efFilter, setEfFilter] = useState('')
   const [editTarget, setEditTarget] = useState<LocalidadCH | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<LocalidadCH | null>(null)
@@ -1055,9 +1061,12 @@ export function CordobaHogarPage() {
       if (deptoFilter && l.departamento !== deptoFilter) return false
       if (okFilter && l.ok_gob !== okFilter) return false
       if (egFilter && String(l.estado_general) !== egFilter) return false
+      if (ejFilter && String(l.ejuridico) !== ejFilter) return false
+      if (etFilter && String(l.etecnico) !== etFilter) return false
+      if (efFilter && String(l.efinanciero) !== efFilter) return false
       return true
     })
-  }, [localidades, search, deptoFilter, okFilter, egFilter])
+  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter])
 
   const montoTotal = localidades.reduce((s, l) => s + (l.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
@@ -1067,7 +1076,7 @@ export function CordobaHogarPage() {
     const e = estados.find((s) => s.id === l.ejuridico)
     return e?.label === 'Convenio Firmado'
   }).length
-  const hasFilters = !!(search || deptoFilter || okFilter || egFilter)
+  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter)
 
   const [sortCol, setSortCol] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1221,8 +1230,29 @@ export function CordobaHogarPage() {
             {estados.map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={ejId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Jurídico</label>
+          <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={etId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Técnico</label>
+          <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.filter((e) => e.aplica_tecnico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={efId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Presup.</label>
+          <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}

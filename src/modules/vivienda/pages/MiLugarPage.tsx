@@ -1245,11 +1245,17 @@ export function MiLugarPage() {
   const searchId = useId()
   const deptoId = useId()
   const egId = useId()
+  const ejId = useId()
+  const etId = useId()
+  const efId = useId()
 
   const [tab, setTab] = useState<TipoProyectoML>('exp')
   const [search, setSearch] = useState('')
   const [deptoFilter, setDeptoFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
+  const [ejFilter, setEjFilter] = useState('')
+  const [etFilter, setEtFilter] = useState('')
+  const [efFilter, setEfFilter] = useState('')
   const [editTarget, setEditTarget] = useState<ProyectoML | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<ProyectoML | null>(null)
@@ -1315,9 +1321,12 @@ export function MiLugarPage() {
       if (q && !`${p.nombre} ${p.expediente ?? ''} ${p.obs ?? ''}`.toLowerCase().includes(q)) return false
       if (deptoFilter && p.departamento !== deptoFilter) return false
       if (egFilter && String(p.estado_general) !== egFilter) return false
+      if (ejFilter && String(p.ejuridico) !== ejFilter) return false
+      if (etFilter && String(p.etecnico) !== etFilter) return false
+      if (efFilter && String(p.efinanciero) !== efFilter) return false
       return true
     })
-  }, [proyectos, search, deptoFilter, egFilter])
+  }, [proyectos, search, deptoFilter, egFilter, ejFilter, etFilter, efFilter])
 
   const handleSort = (key: string) => {
     setSortDir((prev) => (sortCol === key && prev === 'asc' ? 'desc' : 'asc'))
@@ -1342,7 +1351,7 @@ export function MiLugarPage() {
     })
   }, [filtered, sortCol, sortDir, estados])
 
-  const hasFilters = !!(search || deptoFilter || egFilter)
+  const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter)
   const tieneFinanciero = tab === 'exp' || tab === 'prov'
   const { label: tabLabel } = TIPO_CONFIG[tab]
 
@@ -1378,7 +1387,7 @@ export function MiLugarPage() {
       {/* Tabs por tipo */}
       <div className="flex gap-0 mb-0 border-b border-slate-200">
         {(['exp', 'muni', 'prov'] as TipoProyectoML[]).map((t) => (
-          <button key={t} type="button" onClick={() => { setTab(t); setSortCol(''); setSearch(''); setDeptoFilter(''); setEgFilter('') }}
+          <button key={t} type="button" onClick={() => { setTab(t); setSortCol(''); setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }}
             className={`px-5 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${tab === t ? 'border-current' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
             style={tab === t ? { color: TIPO_CONFIG[t].color, borderColor: TIPO_CONFIG[t].color } : undefined}>
             {TIPO_CONFIG[t].label}
@@ -1438,8 +1447,34 @@ export function MiLugarPage() {
             {estados.map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={ejId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Jurídico</label>
+          <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)}
+            className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={etId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Técnico</label>
+          <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)}
+            className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            {estados.filter((e) => e.aplica_tecnico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+          </select>
+        </div>
+        {tieneFinanciero && (
+          <div className="flex items-center gap-2">
+            <label htmlFor={efId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Presup.</label>
+            <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)}
+              className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+              <option value="">— Todos —</option>
+              {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            </select>
+          </div>
+        )}
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter('') }}
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }}
             className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
