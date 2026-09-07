@@ -459,7 +459,10 @@ function StatusPill({
   const opciones = itemEstados.filter((e) => e.activo || e.id === estadoId)
   if (!canEdit) {
     return (
-      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: bg, color: fg }}>
+      <span
+        className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0"
+        style={{ background: bg, color: fg }}
+      >
         {label}
       </span>
     )
@@ -468,7 +471,7 @@ function StatusPill({
     <div className="relative flex-shrink-0">
       <button
         type="button"
-        className="text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 hover:brightness-95"
+        className="text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 hover:brightness-95 whitespace-nowrap"
         style={{ background: bg, color: fg }}
         onClick={() => setOpen((o) => !o)}
       >
@@ -531,7 +534,7 @@ function ChecklistCard({
           return (
             <div key={def.item_num}>
               <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-slate-50 first:border-t-0">
-                <span className="text-sm text-gray-700">{def.item_num}. {def.label}</span>
+                <span className="text-sm text-gray-700 min-w-0 flex-1 break-words">{def.item_num}. {def.label}</span>
                 {item && (
                   <StatusPill
                     estadoId={item.item_estado_id}
@@ -555,7 +558,7 @@ function ChecklistCard({
                     const subItem = findItem(checklist.items, def.item_num, sub.sub_item_num)
                     return (
                       <div key={sub.sub_item_num} className="flex items-center justify-between gap-3 pl-8 pr-4 py-2 border-t border-slate-50">
-                        <span className="text-sm text-gray-600">{sub.label}</span>
+                        <span className="text-sm text-gray-600 min-w-0 flex-1 break-words">{sub.label}</span>
                         {subItem && (
                           <StatusPill
                             estadoId={subItem.item_estado_id}
