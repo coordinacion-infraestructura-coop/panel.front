@@ -624,7 +624,6 @@ export interface InformeSnapshot {
 // ── Checklist Técnico DGV ────────────────────────────────────────────────────
 
 export type ProgramaChecklist = 'cc' | 'ch' | 'ml'
-export type ValorItemChecklist = 'sin_presentar' | 'eval_tecnica' | 'a_corregir' | 'eval_juridica' | 'completo'
 export type TipoHitoChecklist = 'anticipo' | '40' | '70' | '100'
 
 /** Fila del selector localidad/programa — endpoint propio del módulo, accesible a TecnicoDGV. */
@@ -686,6 +685,34 @@ export interface CatalogoReparticionUpdate {
   activo?: boolean
 }
 
+export interface CatalogoItemEstado {
+  id: number
+  label: string
+  orden: number
+  activo: boolean
+  bg: string
+  text_color: string
+  es_completo: boolean
+}
+
+export interface CatalogoItemEstadoCreate {
+  label: string
+  orden: number
+  activo?: boolean
+  bg?: string
+  text_color?: string
+  es_completo?: boolean
+}
+
+export interface CatalogoItemEstadoUpdate {
+  label?: string
+  orden?: number
+  activo?: boolean
+  bg?: string
+  text_color?: string
+  es_completo?: boolean
+}
+
 export interface ItemSubDefinicion {
   sub_item_num: number
   label: string
@@ -700,6 +727,7 @@ export interface ItemDefinicion {
 export interface CatalogosChecklist {
   estados_expediente: CatalogoEstadoExpediente[]
   reparticiones: CatalogoReparticion[]
+  items_estado: CatalogoItemEstado[]
   items_por_programa: Record<ProgramaChecklist, ItemDefinicion[]>
 }
 
@@ -716,11 +744,14 @@ export interface ChecklistItemDetalle {
   item_num: number
   sub_item_num: number | null
   label: string
-  valor: ValorItemChecklist
+  item_estado_id: number
+  item_estado_label: string
+  bg: string
+  text_color: string
 }
 
 export interface ChecklistItemUpdate {
-  valor: ValorItemChecklist
+  item_estado_id: number
   sub_item_num?: number | null
 }
 
@@ -744,6 +775,7 @@ export interface ChecklistTecnico {
   fecha_radicacion: string | null
   reparticion_id: number | null
   reparticion_label: string | null
+  obs_obra: string | null
   items: ChecklistItemDetalle[]
   hitos: HitoChecklist[] | null
   updated_at: string
@@ -754,4 +786,5 @@ export interface ChecklistTecnicoUpdate {
   estado_expediente_id?: number | null
   fecha_radicacion?: string | null
   reparticion_id?: number | null
+  obs_obra?: string | null
 }

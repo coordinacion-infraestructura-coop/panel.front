@@ -31,6 +31,7 @@ export function AdminCatalogosChecklistPage() {
       {catalogos && (
         <>
           <EstadoExpedienteTable estados={catalogos.estados_expediente} onSaved={invalidate} />
+          <ItemEstadoTable itemsEstado={catalogos.items_estado} onSaved={invalidate} />
           <ReparticionTable reparticiones={catalogos.reparticiones} onSaved={invalidate} />
         </>
       )}
@@ -79,6 +80,93 @@ function EstadoExpedienteTable({
                   defaultValue={e.label}
                   className="w-full border border-transparent hover:border-gray-200 focus:border-gov-cyan rounded px-1.5 py-1 text-sm"
                   onBlur={(ev) => { if (ev.target.value !== e.label) updateMut.mutate({ id: e.id, label: ev.target.value }) }}
+                />
+              </td>
+              <td className="px-4 py-2">
+                <input type="checkbox" checked={e.activo} onChange={(ev) => updateMut.mutate({ id: e.id, activo: ev.target.checked })} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="p-3 border-t border-slate-100 flex gap-2">
+        <input
+          placeholder="Nuevo estado…"
+          value={nuevoLabel}
+          onChange={(e) => setNuevoLabel(e.target.value)}
+          className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm"
+        />
+        <button
+          type="button"
+          disabled={!nuevoLabel.trim() || createMut.isPending}
+          onClick={() => createMut.mutate()}
+          className="text-sm font-semibold bg-gov-navy text-white rounded px-3 py-1.5 disabled:opacity-50"
+        >
+          + Agregar
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function ItemEstadoTable({
+  itemsEstado, onSaved,
+}: {
+  itemsEstado: { id: number; label: string; orden: number; activo: boolean; bg: string; text_color: string; es_completo: boolean }[]
+  onSaved: () => void
+}) {
+  const [nuevoLabel, setNuevoLabel] = useState('')
+
+  const createMut = useMutation({
+    mutationFn: () => checklistTecnicoApi.createItemEstado({ label: nuevoLabel, orden: itemsEstado.length }),
+    onSuccess: () => { setNuevoLabel(''); onSaved() },
+  })
+  const updateMut = useMutation({
+    mutationFn: (vars: { id: number; activo?: boolean; label?: string; es_completo?: boolean }) =>
+      checklistTecnicoApi.updateItemEstado(vars.id, { activo: vars.activo, label: vars.label, es_completo: vars.es_completo }),
+    onSuccess: onSaved,
+  })
+
+  return (
+    <section className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100">
+        <h3 className="text-sm font-semibold text-gov-navy">Estado de la documentación</h3>
+        <p className="text-xs text-gray-400">
+          Valor de cada ítem del checklist "Documentación a presentar". "Terminado" marca el estado que
+          cuenta como documentación completa en el Resumen Territorial y el Tablero.
+        </p>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-[11px] uppercase text-gray-400">
+          <tr>
+            <th className="px-4 py-2 font-semibold">Orden</th>
+            <th className="px-4 py-2 font-semibold">Label</th>
+            <th className="px-4 py-2 font-semibold">Terminado</th>
+            <th className="px-4 py-2 font-semibold">Activo</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {[...itemsEstado].sort((a, b) => a.orden - b.orden).map((e) => (
+            <tr key={e.id}>
+              <td className="px-4 py-2 text-gray-400 font-mono">{e.orden}</td>
+              <td className="px-4 py-2">
+                <span
+                  className="inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-semibold"
+                  style={{ background: e.bg, color: e.text_color }}
+                >
+                  <input
+                    defaultValue={e.label}
+                    className="bg-transparent border border-transparent hover:border-black/10 focus:border-black/20 rounded px-1 text-xs font-semibold"
+                    style={{ color: e.text_color }}
+                    onBlur={(ev) => { if (ev.target.value !== e.label) updateMut.mutate({ id: e.id, label: ev.target.value }) }}
+                  />
+                </span>
+              </td>
+              <td className="px-4 py-2">
+                <input
+                  type="checkbox"
+                  checked={e.es_completo}
+                  onChange={(ev) => updateMut.mutate({ id: e.id, es_completo: ev.target.checked })}
                 />
               </td>
               <td className="px-4 py-2">

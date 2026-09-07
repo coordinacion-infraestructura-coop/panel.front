@@ -55,6 +55,9 @@ import type {
   CatalogoReparticion,
   CatalogoReparticionCreate,
   CatalogoReparticionUpdate,
+  CatalogoItemEstado,
+  CatalogoItemEstadoCreate,
+  CatalogoItemEstadoUpdate,
 } from '../types/vivienda.types'
 
 const BASE = '/api/v1/vivienda'
@@ -339,5 +342,15 @@ export const checklistTecnicoApi = {
   updateReparticion: (id: number, data: CatalogoReparticionUpdate) =>
     apiClient
       .patch<CatalogoReparticion>(`${BASE}/checklist-tecnico/admin/reparticion/${id}`, data)
+      .then((r) => r.data),
+
+  createItemEstado: (data: CatalogoItemEstadoCreate) =>
+    apiClient
+      .post<CatalogoItemEstado>(`${BASE}/checklist-tecnico/admin/item-estado`, data)
+      .then((r) => r.data),
+
+  updateItemEstado: (id: number, data: CatalogoItemEstadoUpdate) =>
+    apiClient
+      .patch<CatalogoItemEstado>(`${BASE}/checklist-tecnico/admin/item-estado/${id}`, data)
       .then((r) => r.data),
 }

@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import type {
+  CatalogoItemEstado,
   ChecklistItemDetalle,
   ChecklistTecnico,
   ItemDefinicion,
   ProgramaChecklist,
   TipoHitoChecklist,
-  ValorItemChecklist,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -41,15 +41,6 @@ function extractErrorMessage(err: unknown, fallback: string) {
   }
   return fallback
 }
-
-const STATUS_META: Record<ValorItemChecklist, { label: string; bg: string; fg: string }> = {
-  sin_presentar: { label: 'Sin Presentar', bg: '#f1f5f9', fg: '#64748b' },
-  eval_tecnica: { label: 'En Evaluación Técnica', bg: '#dbeafe', fg: '#1e40af' },
-  a_corregir: { label: 'A corregir por M/C', bg: '#fef3c7', fg: '#92400e' },
-  eval_juridica: { label: 'En Evaluación Jurídico', bg: '#e0e7ff', fg: '#4338ca' },
-  completo: { label: 'Completo OK', bg: '#dcfce7', fg: '#166534' },
-}
-const STATUS_ORDER: ValorItemChecklist[] = ['sin_presentar', 'eval_tecnica', 'a_corregir', 'eval_juridica', 'completo']
 
 const PROGRAMA_LABEL: Record<ProgramaChecklist, string> = {
   cc: 'Cordón Cuneta y Adoquinado',
@@ -154,14 +145,21 @@ export function ChecklistTecnicoPage() {
   const onMutationError = (err: unknown) => setMutationError(extractErrorMessage(err, 'No se pudo guardar el cambio.'))
 
   const updateChecklistMut = useMutation({
-    mutationFn: (data: { estado_expediente_id?: number | null; fecha_radicacion?: string | null; reparticion_id?: number | null }) =>
-      checklistTecnicoApi.updateChecklist(programa, entidad!.id, data),
+    mutationFn: (data: {
+      estado_expediente_id?: number | null
+      fecha_radicacion?: string | null
+      reparticion_id?: number | null
+      obs_obra?: string | null
+    }) => checklistTecnicoApi.updateChecklist(programa, entidad!.id, data),
     onSuccess: onMutationSuccess,
     onError: onMutationError,
   })
   const updateItemMut = useMutation({
-    mutationFn: (vars: { itemNum: number; subItemNum: number | null; valor: ValorItemChecklist }) =>
-      checklistTecnicoApi.updateItem(programa, entidad!.id, vars.itemNum, { valor: vars.valor, sub_item_num: vars.subItemNum }),
+    mutationFn: (vars: { itemNum: number; subItemNum: number | null; itemEstadoId: number }) =>
+      checklistTecnicoApi.updateItem(programa, entidad!.id, vars.itemNum, {
+        item_estado_id: vars.itemEstadoId,
+        sub_item_num: vars.subItemNum,
+      }),
     onSuccess: onMutationSuccess,
     onError: onMutationError,
   })
@@ -324,14 +322,20 @@ export function ChecklistTecnicoPage() {
                 <ChecklistCard
                   checklist={checklist}
                   itemsDef={itemsDef}
+                  itemEstados={catalogos?.items_estado ?? []}
                   canEdit={canEdit}
-                  onChangeItem={(itemNum, subItemNum, valor) => updateItemMut.mutate({ itemNum, subItemNum, valor })}
+                  onChangeItem={(itemNum, subItemNum, itemEstadoId) =>
+                    updateItemMut.mutate({ itemNum, subItemNum, itemEstadoId })
+                  }
                 />
                 {checklist.hitos && (
                   <HitosCard
+                    key={`${programa}-${entidad.id}`}
                     hitos={checklist.hitos}
+                    obsObra={checklist.obs_obra}
                     canEdit={canEdit}
                     onChangeFecha={(tipo, fecha) => updateHitoMut.mutate({ tipo, fecha })}
+                    onSaveObsObra={(obs_obra) => updateChecklistMut.mutate({ obs_obra })}
                   />
                 )}
               </div>
@@ -440,18 +444,23 @@ function StatTile({ label, value, mono }: { label: string; value: string | null;
 }
 
 function StatusPill({
-  valor, canEdit, onChange,
+  estadoId, itemEstados, canEdit, onChange,
 }: {
-  valor: ValorItemChecklist
+  estadoId: number
+  itemEstados: CatalogoItemEstado[]
   canEdit: boolean
-  onChange: (v: ValorItemChecklist) => void
+  onChange: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
-  const meta = STATUS_META[valor]
+  const meta = itemEstados.find((e) => e.id === estadoId)
+  const label = meta?.label ?? '—'
+  const bg = meta?.bg ?? '#f1f5f9'
+  const fg = meta?.text_color ?? '#64748b'
+  const opciones = itemEstados.filter((e) => e.activo || e.id === estadoId)
   if (!canEdit) {
     return (
-      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: meta.bg, color: meta.fg }}>
-        {meta.label}
+      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: bg, color: fg }}>
+        {label}
       </span>
     )
   }
@@ -460,25 +469,25 @@ function StatusPill({
       <button
         type="button"
         className="text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 hover:brightness-95"
-        style={{ background: meta.bg, color: meta.fg }}
+        style={{ background: bg, color: fg }}
         onClick={() => setOpen((o) => !o)}
       >
-        {meta.label}
+        {label}
         <span className="opacity-60">▾</span>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 min-w-[13rem] z-40">
-            {STATUS_ORDER.map((k) => (
+            {opciones.map((e) => (
               <button
-                key={k}
+                key={e.id}
                 type="button"
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm text-gray-700 hover:bg-slate-50 text-left"
-                onClick={() => { onChange(k); setOpen(false) }}
+                onClick={() => { onChange(e.id); setOpen(false) }}
               >
-                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: STATUS_META[k].fg }} />
-                {STATUS_META[k].label}
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: e.text_color }} />
+                {e.label}
               </button>
             ))}
           </div>
@@ -493,24 +502,26 @@ function findItem(items: ChecklistItemDetalle[], itemNum: number, subItemNum: nu
 }
 
 function ChecklistCard({
-  checklist, itemsDef, canEdit, onChangeItem,
+  checklist, itemsDef, itemEstados, canEdit, onChangeItem,
 }: {
   checklist: ChecklistTecnico
   itemsDef: ItemDefinicion[]
+  itemEstados: CatalogoItemEstado[]
   canEdit: boolean
-  onChangeItem: (itemNum: number, subItemNum: number | null, valor: ValorItemChecklist) => void
+  onChangeItem: (itemNum: number, subItemNum: number | null, itemEstadoId: number) => void
 }) {
   const [openDisclosure, setOpenDisclosure] = useState(false)
+  const leyenda = itemEstados.filter((e) => e.activo)
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Documentación a presentar</h3>
       </div>
       <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap">
-        {STATUS_ORDER.map((k) => (
-          <span key={k} className="flex items-center gap-1.5 text-[11px] text-gray-500">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS_META[k].fg }} />
-            {STATUS_META[k].label}
+        {leyenda.map((e) => (
+          <span key={e.id} className="flex items-center gap-1.5 text-[11px] text-gray-500">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: e.text_color }} />
+            {e.label}
           </span>
         ))}
       </div>
@@ -522,7 +533,12 @@ function ChecklistCard({
               <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-slate-50 first:border-t-0">
                 <span className="text-sm text-gray-700">{def.item_num}. {def.label}</span>
                 {item && (
-                  <StatusPill valor={item.valor} canEdit={canEdit} onChange={(v) => onChangeItem(def.item_num, null, v)} />
+                  <StatusPill
+                    estadoId={item.item_estado_id}
+                    itemEstados={itemEstados}
+                    canEdit={canEdit}
+                    onChange={(id) => onChangeItem(def.item_num, null, id)}
+                  />
                 )}
               </div>
               {def.sub_items && (
@@ -542,9 +558,10 @@ function ChecklistCard({
                         <span className="text-sm text-gray-600">{sub.label}</span>
                         {subItem && (
                           <StatusPill
-                            valor={subItem.valor}
+                            estadoId={subItem.item_estado_id}
+                            itemEstados={itemEstados}
                             canEdit={canEdit}
-                            onChange={(v) => onChangeItem(def.item_num, sub.sub_item_num, v)}
+                            onChange={(id) => onChangeItem(def.item_num, sub.sub_item_num, id)}
                           />
                         )}
                       </div>
@@ -561,17 +578,19 @@ function ChecklistCard({
 }
 
 function HitosCard({
-  hitos, canEdit, onChangeFecha,
+  hitos, obsObra, canEdit, onChangeFecha, onSaveObsObra,
 }: {
   hitos: NonNullable<ChecklistTecnico['hitos']>
+  obsObra: string | null
   canEdit: boolean
   onChangeFecha: (tipo: TipoHitoChecklist, fecha: string | null) => void
+  onSaveObsObra: (obsObra: string | null) => void
 }) {
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Ejecución de obra</h3>
-        <span className="text-[11px] text-gray-400">montos calculados sobre el convenio</span>
+        <span className="text-[11px] text-gray-400">las fechas se cargan tras la visita de obra</span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
         {hitos.map((h) => {
@@ -598,6 +617,22 @@ function HitosCard({
             </div>
           )
         })}
+      </div>
+      <div className="px-4 py-3 border-t border-slate-100">
+        <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1">
+          Observaciones de obra
+          <span className="ml-1 normal-case font-normal text-gray-400">— aparte de las del expediente</span>
+        </label>
+        <textarea
+          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm min-h-[3.5rem] disabled:opacity-60 focus:ring-2 focus:ring-gov-cyan focus:border-gov-cyan"
+          placeholder="Notas de la etapa de obra (certificados, visitas, avances)…"
+          defaultValue={obsObra ?? ''}
+          disabled={!canEdit}
+          onBlur={(e) => {
+            const val = e.target.value.trim() || null
+            if (val !== (obsObra ?? null)) onSaveObsObra(val)
+          }}
+        />
       </div>
     </div>
   )
