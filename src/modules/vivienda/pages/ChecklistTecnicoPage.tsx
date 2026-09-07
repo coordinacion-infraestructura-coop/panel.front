@@ -312,7 +312,7 @@ export function ChecklistTecnicoPage() {
 
           {entidad && checklist && (
             <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4 items-start">
-              <div className="space-y-4">
+              <div className="space-y-4 min-w-0">
                 <ProgramaCard
                   checklist={checklist}
                   canEdit={canEdit}
@@ -339,7 +339,7 @@ export function ChecklistTecnicoPage() {
                   />
                 )}
               </div>
-              <div className="space-y-4">
+              <div className="space-y-4 min-w-0">
                 <RadicadoCard
                   checklist={checklist}
                   canEdit={canEdit}
@@ -384,7 +384,7 @@ function ProgramaCard({
       </p>
 
       {estados.length > 0 && (
-        <div className="px-4 pb-2 overflow-x-auto">
+        <div className="px-4 pb-2 overflow-x-auto min-w-0">
           <div className="flex items-start min-w-max">
             {estados.map((e, i) => {
               const done = i < currentIdx
@@ -636,6 +636,9 @@ function HitosCard({
             if (val !== (obsObra ?? null)) onSaveObsObra(val)
           }}
         />
+        {canEdit && (
+          <p className="text-[11px] text-gray-400 mt-1">Se guarda automáticamente al salir del campo.</p>
+        )}
       </div>
     </div>
   )
