@@ -48,6 +48,8 @@ import type {
   HitoChecklistUpdate,
   EntidadChecklistItem,
   PedidoChecklist,
+  ObraObsChecklist,
+  ObraObsChecklistCreate,
   CatalogosChecklist,
   CatalogoEstadoExpediente,
   CatalogoEstadoExpedienteCreate,
@@ -306,6 +308,17 @@ export const checklistTecnicoApi = {
   ) =>
     apiClient
       .post<PedidoChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/pedidos`, data)
+      .then((r) => r.data),
+
+  // Observaciones de obra — bitácora propia del módulo (distinta de las del expediente).
+  getObsObra: (programa: ProgramaChecklist, entidadId: string) =>
+    apiClient
+      .get<ObraObsChecklist[]>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/obs-obra`)
+      .then((r) => r.data),
+
+  createObsObra: (programa: ProgramaChecklist, entidadId: string, data: ObraObsChecklistCreate) =>
+    apiClient
+      .post<ObraObsChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/obs-obra`, data)
       .then((r) => r.data),
 
   updateChecklist: (programa: ProgramaChecklist, entidadId: string, data: ChecklistTecnicoUpdate) =>

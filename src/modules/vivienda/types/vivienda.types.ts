@@ -644,6 +644,20 @@ export interface PedidoChecklist {
   secretaria: string | null
 }
 
+export interface ObraObsChecklist {
+  id: string
+  descripcion: string
+  fecha: string
+  created_at: string
+  created_by: string | null
+  created_by_nombre: string | null
+}
+
+export interface ObraObsChecklistCreate {
+  descripcion: string
+  fecha: string
+}
+
 export interface CatalogoEstadoExpediente {
   id: number
   label: string
@@ -775,7 +789,6 @@ export interface ChecklistTecnico {
   fecha_radicacion: string | null
   reparticion_id: number | null
   reparticion_label: string | null
-  obs_obra: string | null
   items: ChecklistItemDetalle[]
   hitos: HitoChecklist[] | null
   updated_at: string
@@ -786,5 +799,4 @@ export interface ChecklistTecnicoUpdate {
   estado_expediente_id?: number | null
   fecha_radicacion?: string | null
   reparticion_id?: number | null
-  obs_obra?: string | null
 }

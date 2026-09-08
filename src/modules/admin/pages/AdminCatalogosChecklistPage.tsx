@@ -10,29 +10,54 @@ const PROGRAMA_OPTS: { value: ProgramaChecklist | ''; label: string }[] = [
   { value: 'ml', label: 'Mi Lugar' },
 ]
 
+function errMsg(err: unknown): string {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  if (status === 403) return 'No tenés permisos para administrar los catálogos.'
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && 'message' in (detail as Record<string, unknown>)) {
+    return String((detail as Record<string, unknown>).message)
+  }
+  return 'No se pudo guardar el cambio.'
+}
+
+/** Siguiente `orden` libre (evita colisiones con seeds que tienen huecos). */
+function nextOrden(rows: { orden: number }[]): number {
+  return rows.length ? Math.max(...rows.map((r) => r.orden)) + 1 : 0
+}
+
 export function AdminCatalogosChecklistPage() {
   const qc = useQueryClient()
   const { data: catalogos, isLoading } = useQuery({ queryKey: ['checklist-catalogos'], queryFn: checklistTecnicoApi.getCatalogos })
+  const [error, setError] = useState<string | null>(null)
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['checklist-catalogos'] })
+  const onError = (err: unknown) => setError(errMsg(err))
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gov-navy">Catálogos — Checklist Técnico DGV</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          "Estado del expediente" y "Repartición" — el área técnica los edita hoy a mano en la solapa
-          "Validaciones" de la planilla; acá pasan a administrarse desde el sistema.
+          "Estado del expediente", "Estado de la documentación" y "Repartición" — el área técnica los
+          edita hoy a mano en la solapa "Validaciones" de la planilla; acá pasan a administrarse desde el sistema.
         </p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 flex items-center justify-between">
+          {error}
+          <button className="text-red-400 hover:text-red-600" onClick={() => setError(null)}>✕</button>
+        </div>
+      )}
 
       {isLoading && <p className="text-sm text-gray-400">Cargando…</p>}
 
       {catalogos && (
         <>
-          <EstadoExpedienteTable estados={catalogos.estados_expediente} onSaved={invalidate} />
-          <ItemEstadoTable itemsEstado={catalogos.items_estado} onSaved={invalidate} />
-          <ReparticionTable reparticiones={catalogos.reparticiones} onSaved={invalidate} />
+          <EstadoExpedienteTable estados={catalogos.estados_expediente} onSaved={invalidate} onError={onError} />
+          <ItemEstadoTable itemsEstado={catalogos.items_estado} onSaved={invalidate} onError={onError} />
+          <ReparticionTable reparticiones={catalogos.reparticiones} onSaved={invalidate} onError={onError} />
         </>
       )}
     </div>
@@ -40,21 +65,24 @@ export function AdminCatalogosChecklistPage() {
 }
 
 function EstadoExpedienteTable({
-  estados, onSaved,
+  estados, onSaved, onError,
 }: {
   estados: { id: number; label: string; orden: number; activo: boolean }[]
   onSaved: () => void
+  onError: (err: unknown) => void
 }) {
   const [nuevoLabel, setNuevoLabel] = useState('')
 
   const createMut = useMutation({
-    mutationFn: () => checklistTecnicoApi.createEstadoExpediente({ label: nuevoLabel, orden: estados.length }),
+    mutationFn: () => checklistTecnicoApi.createEstadoExpediente({ label: nuevoLabel, orden: nextOrden(estados) }),
     onSuccess: () => { setNuevoLabel(''); onSaved() },
+    onError,
   })
   const updateMut = useMutation({
     mutationFn: (vars: { id: number; activo?: boolean; label?: string }) =>
       checklistTecnicoApi.updateEstadoExpediente(vars.id, { activo: vars.activo, label: vars.label }),
     onSuccess: onSaved,
+    onError,
   })
 
   return (
@@ -73,7 +101,7 @@ function EstadoExpedienteTable({
         </thead>
         <tbody className="divide-y divide-slate-50">
           {[...estados].sort((a, b) => a.orden - b.orden).map((e) => (
-            <tr key={e.id}>
+            <tr key={`${e.id}:${e.label}`}>
               <td className="px-4 py-2 text-gray-400 font-mono">{e.orden}</td>
               <td className="px-4 py-2">
                 <input
@@ -110,21 +138,24 @@ function EstadoExpedienteTable({
 }
 
 function ItemEstadoTable({
-  itemsEstado, onSaved,
+  itemsEstado, onSaved, onError,
 }: {
   itemsEstado: { id: number; label: string; orden: number; activo: boolean; bg: string; text_color: string; es_completo: boolean }[]
   onSaved: () => void
+  onError: (err: unknown) => void
 }) {
   const [nuevoLabel, setNuevoLabel] = useState('')
 
   const createMut = useMutation({
-    mutationFn: () => checklistTecnicoApi.createItemEstado({ label: nuevoLabel, orden: itemsEstado.length }),
+    mutationFn: () => checklistTecnicoApi.createItemEstado({ label: nuevoLabel, orden: nextOrden(itemsEstado) }),
     onSuccess: () => { setNuevoLabel(''); onSaved() },
+    onError,
   })
   const updateMut = useMutation({
     mutationFn: (vars: { id: number; activo?: boolean; label?: string; es_completo?: boolean }) =>
       checklistTecnicoApi.updateItemEstado(vars.id, { activo: vars.activo, label: vars.label, es_completo: vars.es_completo }),
     onSuccess: onSaved,
+    onError,
   })
 
   return (
@@ -147,7 +178,7 @@ function ItemEstadoTable({
         </thead>
         <tbody className="divide-y divide-slate-50">
           {[...itemsEstado].sort((a, b) => a.orden - b.orden).map((e) => (
-            <tr key={e.id}>
+            <tr key={`${e.id}:${e.label}`}>
               <td className="px-4 py-2 text-gray-400 font-mono">{e.orden}</td>
               <td className="px-4 py-2">
                 <span
@@ -197,23 +228,26 @@ function ItemEstadoTable({
 }
 
 function ReparticionTable({
-  reparticiones, onSaved,
+  reparticiones, onSaved, onError,
 }: {
   reparticiones: { id: number; programa: ProgramaChecklist | null; label: string; orden: number; activo: boolean }[]
   onSaved: () => void
+  onError: (err: unknown) => void
 }) {
   const [nuevoLabel, setNuevoLabel] = useState('')
   const [nuevoPrograma, setNuevoPrograma] = useState<ProgramaChecklist | ''>('')
 
   const createMut = useMutation({
     mutationFn: () =>
-      checklistTecnicoApi.createReparticion({ label: nuevoLabel, orden: reparticiones.length, programa: nuevoPrograma || null }),
+      checklistTecnicoApi.createReparticion({ label: nuevoLabel, orden: nextOrden(reparticiones), programa: nuevoPrograma || null }),
     onSuccess: () => { setNuevoLabel(''); setNuevoPrograma(''); onSaved() },
+    onError,
   })
   const updateMut = useMutation({
     mutationFn: (vars: { id: number; activo?: boolean; label?: string; programa?: ProgramaChecklist | null }) =>
       checklistTecnicoApi.updateReparticion(vars.id, { activo: vars.activo, label: vars.label, programa: vars.programa }),
     onSuccess: onSaved,
+    onError,
   })
 
   return (
@@ -232,7 +266,7 @@ function ReparticionTable({
         </thead>
         <tbody className="divide-y divide-slate-50">
           {reparticiones.map((r) => (
-            <tr key={r.id}>
+            <tr key={`${r.id}:${r.label}:${r.programa ?? ''}`}>
               <td className="px-4 py-2">
                 <select
                   value={r.programa ?? ''}

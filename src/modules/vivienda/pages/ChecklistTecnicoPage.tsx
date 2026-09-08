@@ -1,4 +1,4 @@
-import { useMemo, useState, useId } from 'react'
+import { useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
@@ -29,7 +29,9 @@ function fmtFecha(iso: string | null) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  // Fecha calendario LOCAL (no UTC): `toISOString()` post-datea las cargas de la tarde en AR.
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function extractErrorMessage(err: unknown, fallback: string) {
   const status = (err as { response?: { status?: number } })?.response?.status
@@ -40,6 +42,37 @@ function extractErrorMessage(err: unknown, fallback: string) {
     return String((detail as Record<string, unknown>).message)
   }
   return fallback
+}
+
+// Bitácora: forma común para "observaciones del expediente" (pedidos, campo `fecha_pedido`)
+// y "observaciones de obra" (campo `fecha`).
+interface BitacoraEntry {
+  id: string
+  descripcion: string
+  fecha: string
+  created_at: string
+  created_by: string | null
+  created_by_nombre: string | null
+}
+function toBitacora(
+  rows: Array<{
+    id: string
+    descripcion: string
+    fecha?: string
+    fecha_pedido?: string
+    created_at: string
+    created_by: string | null
+    created_by_nombre: string | null
+  }>,
+): BitacoraEntry[] {
+  return rows.map((r) => ({
+    id: r.id,
+    descripcion: r.descripcion,
+    fecha: r.fecha ?? r.fecha_pedido ?? '',
+    created_at: r.created_at,
+    created_by: r.created_by,
+    created_by_nombre: r.created_by_nombre,
+  }))
 }
 
 const PROGRAMA_LABEL: Record<ProgramaChecklist, string> = {
@@ -69,7 +102,9 @@ interface LocalidadGroup {
 
 export function ChecklistTecnicoPage() {
   const { data: portalUser } = usePortalUser()
-  const canEdit = portalUser?.rol !== 'Consulta'
+  // Allow-list explícito: 'Autoridad' es lectura consolidada cross-área (como 'Consulta'/'invitado',
+  // el backend igual 403ea la escritura), no debe ver los campos habilitados.
+  const canEdit = ['Admin', 'Supervisor', 'Operador', 'TecnicoDGV'].includes(portalUser?.rol ?? '')
   const qc = useQueryClient()
   const searchId = useId()
 
@@ -137,8 +172,10 @@ export function ChecklistTecnicoPage() {
   const { data: catalogos } = useQuery({ queryKey: ['checklist-catalogos'], queryFn: checklistTecnicoApi.getCatalogos })
 
   const onMutationSuccess = (data: ChecklistTecnico) => {
-    qc.setQueryData(checklistKey, data)
-    flashSaved()
+    // El usuario pudo cambiar de programa/localidad mientras el PATCH viajaba: escribir la
+    // respuesta bajo SU propia identidad, nunca bajo la key vigente (que ya cambió).
+    qc.setQueryData(['checklist-tecnico', data.programa, data.entidad_id], data)
+    if (data.programa === programa && data.entidad_id === entidad?.id) flashSaved()
   }
 
   const [mutationError, setMutationError] = useState<string | null>(null)
@@ -149,7 +186,6 @@ export function ChecklistTecnicoPage() {
       estado_expediente_id?: number | null
       fecha_radicacion?: string | null
       reparticion_id?: number | null
-      obs_obra?: string | null
     }) => checklistTecnicoApi.updateChecklist(programa, entidad!.id, data),
     onSuccess: onMutationSuccess,
     onError: onMutationError,
@@ -330,23 +366,38 @@ export function ChecklistTecnicoPage() {
                 />
                 {checklist.hitos && (
                   <HitosCard
-                    key={`${programa}-${entidad.id}`}
                     hitos={checklist.hitos}
-                    obsObra={checklist.obs_obra}
                     canEdit={canEdit}
                     onChangeFecha={(tipo, fecha) => updateHitoMut.mutate({ tipo, fecha })}
-                    onSaveObsObra={(obs_obra) => updateChecklistMut.mutate({ obs_obra })}
                   />
                 )}
+                <BitacoraCard
+                  key={`obra-${programa}-${entidad.id}`}
+                  titulo="Observaciones de obra"
+                  subtitulo="etapa de obra — aparte de las del expediente"
+                  canEdit={canEdit}
+                  queryKey={['checklist-tecnico-obs-obra', programa, entidad.id]}
+                  fetchFn={() => checklistTecnicoApi.getObsObra(programa, entidad.id).then(toBitacora)}
+                  createFn={(descripcion, fecha) => checklistTecnicoApi.createObsObra(programa, entidad.id, { descripcion, fecha })}
+                />
               </div>
               <div className="space-y-4 min-w-0">
                 <RadicadoCard
                   checklist={checklist}
                   canEdit={canEdit}
-                  reparticiones={(catalogos?.reparticiones ?? []).filter((r) => !r.programa || r.programa === programa)}
+                  reparticiones={(catalogos?.reparticiones ?? []).filter(
+                    (r) => !r.programa || r.programa === programa || r.id === checklist.reparticion_id,
+                  )}
                   onUpdate={(data) => updateChecklistMut.mutate(data)}
                 />
-                <ObservacionesCard programa={programa} entidadId={entidad.id} canEdit={canEdit} />
+                <BitacoraCard
+                  key={`exp-${programa}-${entidad.id}`}
+                  titulo="Observaciones del expediente"
+                  canEdit={canEdit}
+                  queryKey={['checklist-tecnico-pedidos', programa, entidad.id]}
+                  fetchFn={() => checklistTecnicoApi.getPedidos(programa, entidad.id).then(toBitacora)}
+                  createFn={(descripcion, fecha) => checklistTecnicoApi.createPedido(programa, entidad.id, { descripcion, fecha_pedido: fecha })}
+                />
               </div>
             </div>
           )}
@@ -363,10 +414,11 @@ function ProgramaCard({
 }: {
   checklist: ChecklistTecnico
   canEdit: boolean
-  estados: { id: number; label: string }[]
+  estados: { id: number; label: string; activo?: boolean }[]
   onUpdateEstado: (id: number) => void
 }) {
   const currentIdx = estados.findIndex((e) => e.id === checklist.estado_expediente_id)
+  const opcionesEstado = estados.filter((e) => e.activo !== false || e.id === checklist.estado_expediente_id)
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -425,7 +477,7 @@ function ProgramaCard({
           onChange={(e) => onUpdateEstado(Number(e.target.value))}
         >
           <option value="" disabled>Sin definir</option>
-          {estados.map((e) => (
+          {opcionesEstado.map((e) => (
             <option key={e.id} value={e.id}>{e.label}</option>
           ))}
         </select>
@@ -452,11 +504,26 @@ function StatusPill({
   onChange: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number }>({ left: 0 })
   const meta = itemEstados.find((e) => e.id === estadoId)
   const label = meta?.label ?? '—'
   const bg = meta?.bg ?? '#f1f5f9'
   const fg = meta?.text_color ?? '#64748b'
   const opciones = itemEstados.filter((e) => e.activo || e.id === estadoId)
+
+  // Menú en position:fixed anclado al botón — así no lo recorta el `overflow-hidden` de la
+  // tarjeta ni lo tapa la tarjeta siguiente, y se abre hacia arriba si no hay lugar abajo.
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return
+    const r = btnRef.current.getBoundingClientRect()
+    const menuH = Math.min(opciones.length * 40 + 12, 280)
+    const abajo = window.innerHeight - r.bottom
+    const width = 224
+    const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))
+    setPos(abajo < menuH + 8 ? { left, bottom: window.innerHeight - r.top + 4 } : { left, top: r.bottom + 4 })
+  }, [open, opciones.length])
+
   if (!canEdit) {
     return (
       <span
@@ -468,8 +535,9 @@ function StatusPill({
     )
   }
   return (
-    <div className="relative flex-shrink-0">
+    <div className="flex-shrink-0">
       <button
+        ref={btnRef}
         type="button"
         className="text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 hover:brightness-95 whitespace-nowrap"
         style={{ background: bg, color: fg }}
@@ -480,8 +548,16 @@ function StatusPill({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 min-w-[13rem] z-40">
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed bg-white border border-gray-200 rounded-lg shadow-lg p-1 w-56 z-50 max-h-[280px] overflow-y-auto"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              bottom: pos.bottom,
+              visibility: pos.top === undefined && pos.bottom === undefined ? 'hidden' : 'visible',
+            }}
+          >
             {opciones.map((e) => (
               <button
                 key={e.id}
@@ -513,7 +589,7 @@ function ChecklistCard({
   canEdit: boolean
   onChangeItem: (itemNum: number, subItemNum: number | null, itemEstadoId: number) => void
 }) {
-  const [openDisclosure, setOpenDisclosure] = useState(false)
+  const [openDisclosure, setOpenDisclosure] = useState<Record<number, boolean>>({})
   const leyenda = itemEstados.filter((e) => e.activo)
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
@@ -549,12 +625,12 @@ function ChecklistCard({
                   <button
                     type="button"
                     className="w-full flex items-center gap-1.5 px-4 py-2 border-t border-slate-50 text-xs font-semibold text-gov-blue text-left"
-                    onClick={() => setOpenDisclosure((o) => !o)}
+                    onClick={() => setOpenDisclosure((o) => ({ ...o, [def.item_num]: !o[def.item_num] }))}
                   >
-                    <span className={`inline-block transition-transform ${openDisclosure ? 'rotate-90' : ''}`}>▸</span>
+                    <span className={`inline-block transition-transform ${openDisclosure[def.item_num] ? 'rotate-90' : ''}`}>▸</span>
                     Detalle técnico ({def.sub_items.length} ítems{def.sub_items.length ? ', cada uno independiente' : ''})
                   </button>
-                  {openDisclosure && def.sub_items.map((sub) => {
+                  {openDisclosure[def.item_num] && def.sub_items.map((sub) => {
                     const subItem = findItem(checklist.items, def.item_num, sub.sub_item_num)
                     return (
                       <div key={sub.sub_item_num} className="flex items-center justify-between gap-3 pl-8 pr-4 py-2 border-t border-slate-50">
@@ -581,13 +657,11 @@ function ChecklistCard({
 }
 
 function HitosCard({
-  hitos, obsObra, canEdit, onChangeFecha, onSaveObsObra,
+  hitos, canEdit, onChangeFecha,
 }: {
   hitos: NonNullable<ChecklistTecnico['hitos']>
-  obsObra: string | null
   canEdit: boolean
   onChangeFecha: (tipo: TipoHitoChecklist, fecha: string | null) => void
-  onSaveObsObra: (obsObra: string | null) => void
 }) {
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
@@ -621,25 +695,6 @@ function HitosCard({
           )
         })}
       </div>
-      <div className="px-4 py-3 border-t border-slate-100">
-        <label className="block text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-1">
-          Observaciones de obra
-          <span className="ml-1 normal-case font-normal text-gray-400">— aparte de las del expediente</span>
-        </label>
-        <textarea
-          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm min-h-[3.5rem] disabled:opacity-60 focus:ring-2 focus:ring-gov-cyan focus:border-gov-cyan"
-          placeholder="Notas de la etapa de obra (certificados, visitas, avances)…"
-          defaultValue={obsObra ?? ''}
-          disabled={!canEdit}
-          onBlur={(e) => {
-            const val = e.target.value.trim() || null
-            if (val !== (obsObra ?? null)) onSaveObsObra(val)
-          }}
-        />
-        {canEdit && (
-          <p className="text-[11px] text-gray-400 mt-1">Se guarda automáticamente al salir del campo.</p>
-        )}
-      </div>
     </div>
   )
 }
@@ -653,74 +708,133 @@ function RadicadoCard({
   onUpdate: (data: { fecha_radicacion?: string | null; reparticion_id?: number | null }) => void
 }) {
   return (
-    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Expediente radicado en</h3>
-        <span className="text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5" title="Catálogo administrable por un usuario Admin — puede variar por programa">⚙ admin</span>
+    <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy min-w-0">Expediente radicado en</h3>
+        <span className="text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap" title="Catálogo administrable por un usuario Admin — puede variar por programa">⚙ admin</span>
       </div>
       <div className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <label className="text-[11px] font-bold uppercase text-gray-400 w-24 flex-shrink-0">Fecha</label>
+        <div className="flex items-start gap-2">
+          <label className="text-[11px] font-bold uppercase text-gray-400 w-24 flex-shrink-0 pt-2">Fecha</label>
           <input
             type="date"
-            className="flex-1 border border-gray-200 rounded-md px-2 py-1.5 text-sm disabled:opacity-60"
+            className="flex-1 min-w-0 border border-gray-200 rounded-md px-2 py-1.5 text-sm disabled:opacity-60"
             value={checklist.fecha_radicacion ?? ''}
             disabled={!canEdit}
             onChange={(e) => onUpdate({ fecha_radicacion: e.target.value || null })}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-[11px] font-bold uppercase text-gray-400 w-24 flex-shrink-0">Repartición</label>
-          <select
-            className="flex-1 border border-gray-200 rounded-md px-2 py-1.5 text-sm disabled:opacity-60"
-            value={checklist.reparticion_id ?? ''}
-            disabled={!canEdit}
-            onChange={(e) => onUpdate({ reparticion_id: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">Sin radicar</option>
-            {reparticiones.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
-            ))}
-          </select>
+        <div className="flex items-start gap-2">
+          <label className="text-[11px] font-bold uppercase text-gray-400 w-24 flex-shrink-0 pt-2">Repartición</label>
+          <div className="flex-1 min-w-0">
+            <ReparticionSelect
+              value={checklist.reparticion_id}
+              options={reparticiones}
+              disabled={!canEdit}
+              onChange={(id) => onUpdate({ reparticion_id: id })}
+            />
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function ObservacionesCard({
-  programa, entidadId, canEdit,
+/** Select custom: muestra la opción elegida completa, con salto de línea si es larga. */
+function ReparticionSelect({
+  value, options, disabled, onChange,
 }: {
-  programa: ProgramaChecklist
-  entidadId: string
+  value: number | null
+  options: { id: number; label: string }[]
+  disabled: boolean
+  onChange: (id: number | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const current = options.find((o) => o.id === value)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm text-left flex items-start justify-between gap-1 disabled:opacity-60 hover:border-gray-300"
+      >
+        <span className={`min-w-0 break-words ${current ? 'text-gov-navy' : 'text-gray-400'}`}>
+          {current?.label ?? 'Sin radicar'}
+        </span>
+        <span className="opacity-50 flex-shrink-0 mt-0.5">▾</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto p-1">
+            <button
+              type="button"
+              className="w-full text-left px-2.5 py-1.5 rounded-md text-sm text-gray-500 hover:bg-slate-50"
+              onClick={() => { onChange(null); setOpen(false) }}
+            >
+              Sin radicar
+            </button>
+            {options.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm break-words hover:bg-slate-50 ${o.id === value ? 'bg-sky-50 text-gov-navy font-semibold' : 'text-gray-700'}`}
+                onClick={() => { onChange(o.id); setOpen(false) }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Bitácora de observaciones: entradas fechadas con el usuario que las cargó y botón
+ * "Guardar" explícito. Sirve tanto para las observaciones del expediente (pedidos) como
+ * para las de obra — se parametriza con `fetchFn` / `createFn`.
+ */
+function BitacoraCard({
+  titulo, subtitulo, canEdit, queryKey, fetchFn, createFn,
+}: {
+  titulo: string
+  subtitulo?: string
   canEdit: boolean
+  queryKey: unknown[]
+  fetchFn: () => Promise<BitacoraEntry[]>
+  createFn: (descripcion: string, fecha: string) => Promise<unknown>
 }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [texto, setTexto] = useState('')
-  const [fecha, setFecha] = useState(todayISO())
-  const queryKey = ['checklist-tecnico-pedidos', programa, entidadId]
+  const [fecha, setFecha] = useState(todayISO)
+  const [error, setError] = useState<string | null>(null)
 
-  const { data: pedidos } = useQuery({
-    queryKey,
-    queryFn: () => checklistTecnicoApi.getPedidos(programa, entidadId),
-  })
+  const { data: entradas } = useQuery({ queryKey, queryFn: fetchFn })
 
   const createMut = useMutation({
-    mutationFn: () => checklistTecnicoApi.createPedido(programa, entidadId, { descripcion: texto, fecha_pedido: fecha }),
+    mutationFn: () => createFn(texto.trim(), fecha),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey })
       setTexto('')
       setFecha(todayISO())
       setOpen(false)
+      setError(null)
     },
+    onError: (err) => setError(extractErrorMessage(err, 'No se pudo guardar la observación.')),
   })
 
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Observaciones</h3>
-        <span className="text-[11px] text-gray-400">{pedidos?.length ?? 0}</span>
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy min-w-0">
+          {titulo}
+          {subtitulo && <span className="ml-1 normal-case font-normal text-gray-400">— {subtitulo}</span>}
+        </h3>
+        <span className="text-[11px] text-gray-400 flex-shrink-0">{entradas?.length ?? 0}</span>
       </div>
 
       {canEdit && (
@@ -728,10 +842,10 @@ function ObservacionesCard({
           {!open ? (
             <button
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={() => { setOpen(true); setError(null) }}
               className="w-full border-2 border-dashed border-sky-200 rounded-lg py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
             >
-              + Nueva actualización
+              + Nueva observación
             </button>
           ) : (
             <div className="space-y-2">
@@ -745,8 +859,9 @@ function ObservacionesCard({
                 <label className="text-xs font-bold text-gray-500">Fecha</label>
                 <input type="date" className="border border-sky-200 rounded-md px-2 py-1 text-xs" value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
               <div className="flex justify-end gap-2">
-                <button type="button" className="text-xs border border-gray-200 rounded-md px-3 py-1.5 text-gray-600" onClick={() => { setOpen(false); setTexto('') }}>
+                <button type="button" className="text-xs border border-gray-200 rounded-md px-3 py-1.5 text-gray-600" onClick={() => { setOpen(false); setTexto(''); setError(null) }}>
                   Cancelar
                 </button>
                 <button
@@ -764,15 +879,15 @@ function ObservacionesCard({
       )}
 
       <ul className="max-h-96 overflow-y-auto p-4 space-y-3">
-        {(!pedidos || pedidos.length === 0) && <li className="text-center text-sm text-gray-400 py-4">Sin observaciones registradas aún.</li>}
-        {pedidos?.map((p) => (
-          <li key={p.id} className="flex gap-2.5">
+        {(!entradas || entradas.length === 0) && <li className="text-center text-sm text-gray-400 py-4">Sin observaciones registradas aún.</li>}
+        {entradas?.map((e) => (
+          <li key={e.id} className="flex gap-2.5">
             <span className="w-1.5 h-1.5 rounded-full bg-gov-cyan mt-1.5 flex-shrink-0" />
-            <div>
-              <div className="text-xs font-bold text-gov-navy">{fmtFecha(p.fecha_pedido)}</div>
-              <p className="text-sm text-gray-700 mt-0.5">{p.descripcion}</p>
-              {(p.created_by_nombre || p.created_by) && (
-                <p className="text-[11px] text-gray-400 mt-0.5">{p.created_by_nombre || p.created_by}</p>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-gov-navy">{fmtFecha(e.fecha)}</div>
+              <p className="text-sm text-gray-700 mt-0.5 break-words">{e.descripcion}</p>
+              {(e.created_by_nombre || e.created_by) && (
+                <p className="text-[11px] text-gray-400 mt-0.5">{e.created_by_nombre || e.created_by}</p>
               )}
             </div>
           </li>
