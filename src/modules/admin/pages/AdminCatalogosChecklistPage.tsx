@@ -67,7 +67,7 @@ export function AdminCatalogosChecklistPage() {
 function EstadoExpedienteTable({
   estados, onSaved, onError,
 }: {
-  estados: { id: number; label: string; orden: number; activo: boolean }[]
+  estados: { id: number; label: string; orden: number; activo: boolean; en_ruta: boolean }[]
   onSaved: () => void
   onError: (err: unknown) => void
 }) {
@@ -79,8 +79,8 @@ function EstadoExpedienteTable({
     onError,
   })
   const updateMut = useMutation({
-    mutationFn: (vars: { id: number; activo?: boolean; label?: string }) =>
-      checklistTecnicoApi.updateEstadoExpediente(vars.id, { activo: vars.activo, label: vars.label }),
+    mutationFn: (vars: { id: number; activo?: boolean; label?: string; en_ruta?: boolean }) =>
+      checklistTecnicoApi.updateEstadoExpediente(vars.id, { activo: vars.activo, label: vars.label, en_ruta: vars.en_ruta }),
     onSuccess: onSaved,
     onError,
   })
@@ -89,13 +89,17 @@ function EstadoExpedienteTable({
     <section className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100">
         <h3 className="text-sm font-semibold text-gov-navy">Estado del expediente</h3>
-        <p className="text-xs text-gray-400">Compartido entre Cordón Cuneta, Córdoba Hogar y Mi Lugar. El orden define el paso del stepper.</p>
+        <p className="text-xs text-gray-400">
+          Compartido entre Cordón Cuneta, Córdoba Hogar y Mi Lugar. El orden define el paso del stepper.
+          "En ruta" destildado = estado de excepción (fuera del camino regular; se marca solo si el expediente lo transitó).
+        </p>
       </div>
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-[11px] uppercase text-gray-400">
           <tr>
             <th className="px-4 py-2 font-semibold">Orden</th>
             <th className="px-4 py-2 font-semibold">Label</th>
+            <th className="px-4 py-2 font-semibold">En ruta</th>
             <th className="px-4 py-2 font-semibold">Activo</th>
           </tr>
         </thead>
@@ -109,6 +113,9 @@ function EstadoExpedienteTable({
                   className="w-full border border-transparent hover:border-gray-200 focus:border-gov-cyan rounded px-1.5 py-1 text-sm"
                   onBlur={(ev) => { if (ev.target.value !== e.label) updateMut.mutate({ id: e.id, label: ev.target.value }) }}
                 />
+              </td>
+              <td className="px-4 py-2">
+                <input type="checkbox" checked={e.en_ruta} onChange={(ev) => updateMut.mutate({ id: e.id, en_ruta: ev.target.checked })} />
               </td>
               <td className="px-4 py-2">
                 <input type="checkbox" checked={e.activo} onChange={(ev) => updateMut.mutate({ id: e.id, activo: ev.target.checked })} />

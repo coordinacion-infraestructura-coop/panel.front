@@ -663,18 +663,21 @@ export interface CatalogoEstadoExpediente {
   label: string
   orden: number
   activo: boolean
+  en_ruta: boolean
 }
 
 export interface CatalogoEstadoExpedienteCreate {
   label: string
   orden: number
   activo?: boolean
+  en_ruta?: boolean
 }
 
 export interface CatalogoEstadoExpedienteUpdate {
   label?: string
   orden?: number
   activo?: boolean
+  en_ruta?: boolean
 }
 
 export interface CatalogoReparticion {
@@ -789,6 +792,7 @@ export interface ChecklistTecnico {
   fecha_radicacion: string | null
   reparticion_id: number | null
   reparticion_label: string | null
+  estados_visitados: number[]
   items: ChecklistItemDetalle[]
   hitos: HitoChecklist[] | null
   updated_at: string

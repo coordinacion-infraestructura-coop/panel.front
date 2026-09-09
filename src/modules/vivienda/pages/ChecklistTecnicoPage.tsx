@@ -414,11 +414,15 @@ function ProgramaCard({
 }: {
   checklist: ChecklistTecnico
   canEdit: boolean
-  estados: { id: number; label: string; activo?: boolean }[]
+  estados: { id: number; label: string; activo?: boolean; en_ruta?: boolean }[]
   onUpdateEstado: (id: number) => void
 }) {
-  const currentIdx = estados.findIndex((e) => e.id === checklist.estado_expediente_id)
-  const opcionesEstado = estados.filter((e) => e.activo !== false || e.id === checklist.estado_expediente_id)
+  const currentId = checklist.estado_expediente_id
+  const visitados = new Set(checklist.estados_visitados ?? [])
+  const ruta = estados.filter((e) => e.en_ruta !== false)
+  const excepcion = estados.filter((e) => e.en_ruta === false)
+  const rutaCurrentIdx = ruta.findIndex((e) => e.id === currentId)
+  const opcionesEstado = estados.filter((e) => e.activo !== false || e.id === currentId)
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -437,31 +441,65 @@ function ProgramaCard({
 
       {estados.length > 0 && (
         <div className="px-4 pb-2 overflow-x-auto min-w-0">
-          <div className="flex items-start min-w-max">
-            {estados.map((e, i) => {
-              const done = i < currentIdx
-              const current = i === currentIdx
-              return (
-                <div key={e.id} className="flex-1 min-w-[5.5rem] flex flex-col items-center relative">
-                  {i > 0 && (
-                    <span
-                      className={`absolute top-[0.7rem] right-1/2 w-full h-0.5 ${done || current ? 'bg-gov-cyan' : 'bg-gray-200'}`}
-                      style={{ zIndex: 0 }}
-                    />
-                  )}
-                  <span
-                    className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
-                      done ? 'bg-gov-cyan border-gov-cyan text-white' : current ? 'bg-gov-navy border-gov-navy text-white' : 'bg-white border-gray-200 text-gray-400'
-                    }`}
-                  >
-                    {done ? '✓' : i + 1}
-                  </span>
-                  <span className={`text-[10px] text-center mt-1 leading-tight max-w-[5rem] ${current ? 'text-gov-navy font-bold' : 'text-gray-500'}`}>
-                    {e.label}
-                  </span>
+          <div className="flex items-start gap-3 min-w-max">
+            {/* Estados de excepción — sueltos, sin conectores; ✓ solo si se transitaron */}
+            {excepcion.length > 0 && (
+              <>
+                <div className="flex items-start gap-3 pt-0.5">
+                  {excepcion.map((e) => {
+                    const current = e.id === currentId
+                    const done = visitados.has(e.id) && !current
+                    return (
+                      <div key={e.id} className="w-[5.5rem] flex flex-col items-center">
+                        <span
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                            current
+                              ? 'bg-gov-navy border-gov-navy text-white'
+                              : done
+                                ? 'bg-gov-cyan border-gov-cyan text-white'
+                                : 'bg-white border-gray-200 text-gray-300'
+                          }`}
+                        >
+                          {done ? '✓' : current ? '•' : '–'}
+                        </span>
+                        <span className={`text-[10px] text-center mt-1 leading-tight ${current ? 'text-gov-navy font-bold' : done ? 'text-gray-500' : 'text-gray-300'}`}>
+                          {e.label}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+                <div className="w-px self-stretch bg-gray-200 mx-1" aria-hidden />
+              </>
+            )}
+
+            {/* Camino regular */}
+            <div className="flex items-start">
+              {ruta.map((e, i) => {
+                const current = e.id === currentId
+                const done = rutaCurrentIdx >= 0 ? i < rutaCurrentIdx : visitados.has(e.id)
+                return (
+                  <div key={e.id} className="flex-1 min-w-[5.5rem] flex flex-col items-center relative">
+                    {i > 0 && (
+                      <span
+                        className={`absolute top-[0.7rem] right-1/2 w-full h-0.5 ${done || current ? 'bg-gov-cyan' : 'bg-gray-200'}`}
+                        style={{ zIndex: 0 }}
+                      />
+                    )}
+                    <span
+                      className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                        done ? 'bg-gov-cyan border-gov-cyan text-white' : current ? 'bg-gov-navy border-gov-navy text-white' : 'bg-white border-gray-200 text-gray-400'
+                      }`}
+                    >
+                      {done ? '✓' : i + 1}
+                    </span>
+                    <span className={`text-[10px] text-center mt-1 leading-tight max-w-[5rem] ${current ? 'text-gov-navy font-bold' : 'text-gray-500'}`}>
+                      {e.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
       )}
