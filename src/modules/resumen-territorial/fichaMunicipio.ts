@@ -33,9 +33,18 @@ const labelEstado = (id: number | null | undefined, estados: { id: number; label
 const bgEstado = (id: number | null | undefined, estados: { id: number; bg?: string }[]) =>
   (id == null ? null : (estados.find((e) => e.id === id)?.bg ?? null)) || null
 
+// Fila de gestión ya procesada para la ficha. `categoria_general_id`,
+// `campo_trabajo`, `ministerio_agencia` y `tipo_gestion` ya vienen resueltos a
+// nombre. `estado`/`urgencia` se conservan aunque el PDF ya no los muestre —
+// los sigue usando `fichaMunicipioXlsx`.
 interface GestionFila {
   id_gestion: string
-  categoria_general_id?: string
+  categoria_general_id?: string   // "Categoría General" (catálogo)
+  campo_trabajo?: string          // "Categoría" = Campo de Trabajo (categoria_id, catálogo editable)
+  ministerio_agencia?: string     // "Ministerio / Agencia" (catálogo)
+  tipo_gestion?: string           // "Tipo de Gestión" (catálogo, con fallback al valor crudo)
+  derivado_a?: string             // del evento más reciente con metadata_json.derivado_a
+  costo_estimado?: number | null  // "Monto"
   detalle: string
   fecha_ingreso: string
   dias_transcurridos?: number | null
@@ -43,6 +52,22 @@ interface GestionFila {
   urgencia?: string
   nro_expediente?: string | null
   ultimo_mov: string
+}
+
+// Forma cruda de un item de GET /api/v1/privada/gestiones (subset que usa la ficha).
+interface GestionApiItem {
+  id_gestion: string
+  categoria_general_id?: string | null
+  categoria_id?: number | null
+  ministerio_agencia_id?: string | null
+  tipo_gestion?: string | null
+  costo_estimado?: number | null
+  detalle?: string | null
+  fecha_ingreso?: string | null
+  dias_transcurridos?: number | null
+  estado?: string | null
+  urgencia?: string | null
+  nro_expediente?: string | null
 }
 
 export interface FichaMunicipio {
@@ -57,8 +82,8 @@ export interface FichaMunicipio {
     partido: string
   }
   cordobaHogar: null | { fecha_anuncio: string; monto: string; casas: string; ok_gob: string; estado_general: string; estado_bg: string | null; avance: string }
-  cordonCuneta: null | { monto: string; estado_general: string; estado_bg: string | null; updated_at: string; volumen: string; avance: string }
-  miLugar: { lotes: string; monto: string; etecnico: string; ejuridico: string; efinanciero: string; estado_general: string; estado_bg: string | null; avance: string; updated_at: string }[]
+  cordonCuneta: null | { monto: string; estado_general: string; estado_bg: string | null; updated_at: string; volumen: string; avance: string; ok_gob: string }
+  miLugar: { lotes: string; monto: string; etecnico: string; ejuridico: string; efinanciero: string; estado_general: string; estado_bg: string | null; avance: string; updated_at: string; ok_gob: string }[]
   gestiones: { total: number; filas: GestionFila[] }
 }
 
@@ -67,19 +92,56 @@ async function catCategoriasMap(): Promise<Map<string, string>> {
   return new Map((data ?? []).map((c) => [c.id, c.nombre]))
 }
 
+/** Mapa id→nombre de un catálogo simple de Privada (`ministerios`, `tipos-gestion`, …). */
+async function catalogoNombreMap(nombre: string): Promise<Map<string, string>> {
+  const data = await apiClient.get<{ id: string; nombre: string }[]>(`/api/v1/privada/catalogos/${nombre}`).then((r) => r.data)
+  return new Map((data ?? []).map((c) => [c.id, c.nombre]))
+}
+
+/** Mapa id→label del catálogo editable "categorias" (E1) = Campo de Trabajo. */
+async function campoTrabajoMap(): Promise<Map<number, string>> {
+  const data = await apiClient.get<{ id: number; label: string }[]>('/api/v1/privada/categorias').then((r) => r.data)
+  return new Map((data ?? []).map((c) => [c.id, c.label]))
+}
+
+/** Del registro de eventos de una gestión: última fecha de evento + `derivado_a`
+ *  (metadata_json del evento más reciente que lo tenga). */
+async function movimientosDeGestion(idGestion: string): Promise<{ ultimo_mov: string; derivado_a: string }> {
+  try {
+    const data = await apiClient
+      .get<{ fecha_evento?: string | null; metadata_json?: unknown }[]>(`/api/v1/privada/gestiones/${idGestion}/eventos`)
+      .then((r) => r.data)
+    const evs = [...(data ?? [])].sort((a, b) => (b.fecha_evento ?? '').localeCompare(a.fecha_evento ?? ''))
+    const ultimo_mov = evs.length ? (evs[0].fecha_evento ?? '').slice(0, 10) : ''
+    let derivado_a = ''
+    for (const ev of evs) {
+      let meta: unknown = ev.metadata_json
+      if (typeof meta === 'string') { try { meta = JSON.parse(meta) } catch { meta = null } }
+      const d = (meta as { derivado_a?: unknown } | null)?.derivado_a
+      if (typeof d === 'string' && d.trim()) { derivado_a = d.trim(); break }
+    }
+    return { ultimo_mov, derivado_a }
+  } catch {
+    return { ultimo_mov: '', derivado_a: '' }
+  }
+}
+
 /** Junta toda la ficha para (departamento, localidad). */
 export async function armarFichaMunicipio(departamento: string, localidad: string): Promise<FichaMunicipio> {
   const nl = norm(localidad)
-  const [li, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap] = await Promise.all([
+  const [li, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
     cordobaHogarApi.getPanel().catch(() => null),
     cordonCunetaApi.getPanel().catch(() => null),
     miLugarApi.getProyectos({ localidad_nombre: localidad }).catch(() => [] as Awaited<ReturnType<typeof miLugarApi.getProyectos>>),
     miLugarApi.getEstados().catch(() => [] as EstadoML[]),
-    apiClient.get<{ items: GestionFila[]; total: number }>('/api/v1/privada/gestiones', {
+    apiClient.get<{ items: GestionApiItem[]; total: number }>('/api/v1/privada/gestiones', {
       params: { departamento, localidad, limit: 200 },
-    }).then((r) => r.data).catch(() => ({ items: [] as GestionFila[], total: 0 })),
+    }).then((r) => r.data).catch(() => ({ items: [] as GestionApiItem[], total: 0 })),
     catCategoriasMap().catch(() => new Map<string, string>()),
+    catalogoNombreMap('ministerios').catch(() => new Map<string, string>()),
+    catalogoNombreMap('tipos-gestion').catch(() => new Map<string, string>()),
+    campoTrabajoMap().catch(() => new Map<number, string>()),
   ])
 
   const chEstados: EstadoCH[] = chPanel?.estados ?? []
@@ -89,16 +151,10 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
   const ccRow = (ccPanel?.municipios ?? []).find((x) => norm(x.municipio) === nl)
   const mlRows = (mlProyectos ?? []).filter((p) => norm(p.localidad_nombre) === nl)
 
-  // Último movimiento por gestión (último evento por fecha_evento, o vacío).
+  // Por gestión: último movimiento (join por id_gestión, evento más reciente por
+  // fecha_evento) + "Derivado A" (metadata_json.derivado_a del último evento que lo tenga).
   const items = gestResp.items ?? []
-  const movs = await Promise.all(items.map((g) =>
-    apiClient.get<{ fecha_evento: string }[]>(`/api/v1/privada/gestiones/${g.id_gestion}/eventos`)
-      .then((r) => {
-        const evs = [...(r.data ?? [])].sort((a, b) => (b.fecha_evento ?? '').localeCompare(a.fecha_evento ?? ''))
-        return evs.length ? (evs[0].fecha_evento ?? '').slice(0, 10) : ''
-      })
-      .catch(() => ''),
-  ))
+  const movs = await Promise.all(items.map((g) => movimientosDeGestion(g.id_gestion)))
 
   return {
     departamento,
@@ -130,6 +186,7 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
         ccRow.adoquinado_m2 != null ? `${fmtNum(ccRow.adoquinado_m2)} m² (adoquinado)` : null,
       ].filter(Boolean).join(' · ') || '—',
       avance: avancePct(ccRow.estado_general, ccEstados),
+      ok_gob: ccRow.ok_gob || '—',
     } : null,
     miLugar: mlRows.map((p) => ({
       lotes: fmtNum(p.lotes),
@@ -141,19 +198,25 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
       estado_bg: bgEstado(p.estado_general, mlEstados),
       avance: avancePct(p.estado_general, mlEstados),
       updated_at: fmtFecha(p.updated_at),
+      ok_gob: p.ok_gob || '—',
     })),
     gestiones: {
       total: gestResp.total ?? items.length,
       filas: items.map((g, i) => ({
         id_gestion: g.id_gestion,
         categoria_general_id: catMap.get(g.categoria_general_id ?? '') ?? g.categoria_general_id ?? '—',
-        detalle: g.detalle,
+        campo_trabajo: g.categoria_id != null ? (campoMap.get(g.categoria_id) ?? '—') : '—',
+        ministerio_agencia: minMap.get(g.ministerio_agencia_id ?? '') ?? g.ministerio_agencia_id ?? '—',
+        tipo_gestion: tipoMap.get(g.tipo_gestion ?? '') ?? g.tipo_gestion ?? '—',
+        derivado_a: movs[i].derivado_a,
+        costo_estimado: g.costo_estimado ?? null,
+        detalle: g.detalle ?? '',
         fecha_ingreso: (g.fecha_ingreso ?? '').slice(0, 10),
         dias_transcurridos: g.dias_transcurridos,
-        estado: g.estado,
-        urgencia: g.urgencia,
+        estado: g.estado ?? '',
+        urgencia: g.urgencia ?? undefined,
         nro_expediente: g.nro_expediente,
-        ultimo_mov: movs[i],
+        ultimo_mov: movs[i].ultimo_mov,
       })),
     },
   }
@@ -166,10 +229,9 @@ const RGB = (hex: string): [number, number, number] => {
 }
 
 export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
-  const [{ jsPDF }, autoTableMod, { HERALDICO_PNG }] = await Promise.all([
-    import('jspdf'), import('jspdf-autotable'), import('./heraldico'),
+  const [{ jsPDF }, { HERALDICO_PNG }] = await Promise.all([
+    import('jspdf'), import('./heraldico'),
   ])
-  const autoTable = autoTableMod.default
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const PW = doc.internal.pageSize.getWidth()
   const PH = doc.internal.pageSize.getHeight()
@@ -283,6 +345,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     kv('Última modificación', f.cordonCuneta.updated_at)
     kv('Volumen', f.cordonCuneta.volumen)
     kv('Porcentaje de avance', f.cordonCuneta.avance)
+    kv('Ok Gobernador', f.cordonCuneta.ok_gob)
   } else vacio()
 
   heading('Programa Mi Lugar · DGV')
@@ -297,44 +360,39 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
       kv('Estado General', m.estado_general, m.estado_bg)
       kv('Porcentaje de avance', m.avance)
       kv('Última modificación', m.updated_at)
+      kv('Ok Gobernador', m.ok_gob)
     })
   } else vacio()
 
   // ── Gestiones ──
-  heading(`Gestiones — Demandas Subsecretaría de Municipios   ·   Total: ${f.gestiones.total}`)
+  // Siempre en bloque vertical (etiqueta / valor), una gestión tras otra.
+  heading(`Gestiones — Demandas Subsecretaría de Municipios  |  Total ${f.gestiones.total}`)
   if (!f.gestiones.filas.length) {
     vacio()
-  } else if (f.gestiones.filas.length > 6) {
-    // muchas → tabla compacta
-    autoTable(doc, {
-      startY: y,
-      margin: { left: M, right: M },
-      styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak', textColor: INK },
-      headStyles: { fillColor: NAVY, fontSize: 7 },
-      columnStyles: { 1: { cellWidth: 150 }, 3: { halign: 'center' } },
-      head: [['Categoría', 'Detalle', 'Ingreso', 'Días', 'Estado', 'Urgencia', 'Últ. mov.', 'Expediente']],
-      body: f.gestiones.filas.map((g) => [
-        g.categoria_general_id || '—', g.detalle, g.fecha_ingreso, g.dias_transcurridos ?? '—',
-        g.estado, g.urgencia ?? '—', g.ultimo_mov || '—', g.nro_expediente || 'Sin Expediente',
-      ]),
-    })
   } else {
     f.gestiones.filas.forEach((g, i) => {
-      ensure(104)
-      if (i) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
+      const detLns = doc.splitTextToSize(`Detalle: ${g.detalle || '—'}`, W) as string[]
+      ensure(120 + detLns.length * 12 + (i ? 24 : 0))
+      if (i && y > M) {
         y += 8
         doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y, M + W, y)
         y += 16
       }
+      // Campo de Trabajo (categoria_id, catálogo editable) — encabeza el bloque
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
-      doc.text(doc.splitTextToSize(g.categoria_general_id || '—', W) as string[], M, y); y += 14
+      doc.text(doc.splitTextToSize(`Campo de Trabajo: ${g.campo_trabajo || '—'}`, W) as string[], M, y); y += 14
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
-      const lns = doc.splitTextToSize(`Detalle: ${g.detalle}`, W) as string[]
-      doc.text(lns, M, y); y += lns.length * 12
+      doc.text(detLns, M, y); y += detLns.length * 12
       doc.setTextColor(...GRAY)
-      doc.text(`Ingreso: ${g.fecha_ingreso}   ·   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
-      doc.text(`Estado: ${g.estado}   ·   Urgencia: ${g.urgencia ?? '—'}`, M, y); y += 12
-      doc.text(`Último movimiento: ${g.ultimo_mov || '—'}   ·   Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 4
+      doc.text(`Fecha de ingreso: ${g.fecha_ingreso || '—'}   |   Días transcurridos: ${g.dias_transcurridos ?? '—'}`, M, y); y += 12
+      doc.text(`Ministerio / Agencia: ${g.ministerio_agencia || '—'}`, M, y); y += 12
+      doc.text(`Categoría General: ${g.categoria_general_id || '—'}`, M, y); y += 12
+      doc.text(`Tipo de Gestión: ${g.tipo_gestion || '—'}`, M, y); y += 12
+      doc.text(`Último movimiento: ${g.ultimo_mov || '—'}`, M, y); y += 12
+      doc.text(`Derivado A: ${g.derivado_a || '—'}`, M, y); y += 12
+      doc.text(`Monto: ${g.costo_estimado != null ? fmtNum(g.costo_estimado) : '—'}`, M, y); y += 12
+      doc.text(`Nro expediente: ${g.nro_expediente || 'Sin Expediente'}`, M, y); y += 4
     })
   }
 

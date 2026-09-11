@@ -8,7 +8,7 @@ import { AgregarGestionModal } from './AgregarGestionModal'
 import { GestionarCatalogosModal } from './GestionarCatalogosModal'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import { catalogosEditablesApi, type CatEditable } from '../api/catalogosEditables.api'
-import type { Gestion, GestionesResponse, CatalogoItem, MeResponse } from '../types/gestiones.types'
+import type { Gestion, GestionesResponse, CatalogoItem, MeResponse, Evento } from '../types/gestiones.types'
 
 const PAGE_SIZE = 50
 
@@ -78,6 +78,37 @@ function formatFecha(fecha?: string) {
   try {
     return new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   } catch { return fecha }
+}
+
+// Corre `fn` sobre `items` con como máximo `limite` promesas en vuelo. Devuelve
+// los resultados en el mismo orden que `items`.
+async function mapConLimite<T, R>(items: T[], limite: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let cursor = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limite, items.length) }, async () => {
+      while (cursor < items.length) {
+        const i = cursor++
+        out[i] = await fn(items[i], i)
+      }
+    }),
+  )
+  return out
+}
+
+// "Derivado a" sale del registro de eventos: el `metadata_json.derivado_a` del
+// evento más reciente que lo tenga (el backend devuelve los eventos de más nuevo
+// a más viejo). `metadata_json` puede venir como objeto o como string JSON.
+function derivadoADeEventos(eventos: Evento[]): string {
+  for (const ev of eventos) {
+    let meta: unknown = ev.metadata_json
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta) } catch { meta = null }
+    }
+    const d = (meta as { derivado_a?: unknown } | null)?.derivado_a
+    if (typeof d === 'string' && d.trim()) return d.trim()
+  }
+  return ''
 }
 
 // ─── Componente de confirmación de eliminación ────────────────────────────────
@@ -548,11 +579,19 @@ export function GestionesListPage() {
       if (q) partes.push(`Búsqueda: "${q}"`)
       const filtroTexto = partes.length ? partes.join('  |  ') : 'Sin filtros (todos los registros)'
 
+      // "Derivado a" no viene en el listado → se trae del registro de eventos de
+      // cada gestión (metadata_json.derivado_a). N+1 acotado con concurrencia.
+      const derivadoMap = new Map<string, string>()
+      const eventosPorGestion = await mapConLimite(all, 10, (g) =>
+        gestionesApi.getEventos(g.id_gestion).then((r) => r as Evento[]).catch(() => [] as Evento[]),
+      )
+      all.forEach((g, i) => derivadoMap.set(g.id_gestion, derivadoADeEventos(eventosPorGestion[i])))
+
       const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
       const autoTable = autoTableMod.default
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
       doc.setFontSize(13)
-      doc.text('Gestiones del Ministro', 40, 36)
+      doc.text('Gestiones de la Subsecretaría de Municipios', 40, 36)
       doc.setFontSize(9)
       doc.text(`Exportado: ${new Date().toLocaleString('es-AR')}`, 40, 52)
       doc.text(`Filtros: ${filtroTexto}`, 40, 65)
@@ -562,20 +601,24 @@ export function GestionesListPage() {
         startY: 90,
         styles: { fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
         headStyles: { fillColor: [23, 44, 63] },
-        columnStyles: { 9: { cellWidth: 200 } },
-        head: [['Fecha', 'Nro exp.', 'Estado', 'Urgencia', 'Departamento', 'Localidad', 'Ministerio', 'Categoría', 'Tipo', 'Detalle', 'Días']],
+        columnStyles: { 8: { cellWidth: 190 }, 10: { halign: 'right' } },
+        head: [[
+          'Fecha de Ingreso', 'Nro de expediente/sticker', 'Departamento', 'Localidad',
+          'Ministerio/ Agencia', 'Categoría General', 'Tipo de Gestión', 'Campo de Trabajo',
+          'Detalle', 'Derivado A:', 'Monto',
+        ]],
         body: all.map((g) => [
-          g.fecha_ingreso ?? '',
+          formatFecha(g.fecha_ingreso),
           g.nro_expediente ?? '',
-          g.estado_nombre ?? g.estado ?? '',
-          g.urgencia ?? '',
           g.departamento ?? '',
           g.localidad ?? '',
           nombreDe(ministerios, g.ministerio_agencia_id),
           nombreDe(categorias, g.categoria_general_id),
           nombreDe(tiposGestion, g.tipo_gestion),
+          g.categoria_id != null ? (catEditMap.campo_trabajo.get(g.categoria_id) ?? '') : '',
           g.detalle ?? '',
-          g.dias_transcurridos != null ? String(g.dias_transcurridos) : '',
+          derivadoMap.get(g.id_gestion) ?? '',
+          g.costo_estimado != null ? Number(g.costo_estimado).toLocaleString('es-AR') : '',
         ]),
       })
       doc.save(`${baseFilename()}.pdf`)

@@ -17,6 +17,7 @@ import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaIn
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
+import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
 
@@ -52,6 +53,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="notificaciones" element={<NotificacionesPage />} />
               <Route path="vivienda/programas" element={<ProgramasPage />} />
               <Route path="vivienda/beneficiarios" element={<BeneficiariosListPage />} />
               <Route path="vivienda/beneficiarios/nuevo" element={<BeneficiarioFormPage />} />

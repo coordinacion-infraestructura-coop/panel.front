@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { usePortalUser } from '../hooks/usePortalUser'
+import { NotificacionesCampana } from './NotificacionesCampana'
 
 interface NavItem {
   to: string
@@ -78,6 +79,7 @@ export function Layout() {
             </div>
           </Link>
           <div className="flex items-center gap-3">
+            {portalUser && <NotificacionesCampana />}
             {portalUser ? (
               <span className="hidden sm:flex items-center gap-2">
                 <span className="text-xs text-white/60 truncate max-w-[160px]">
@@ -130,6 +132,21 @@ export function Layout() {
                 }`}
               >
                 Resumen Territorial
+              </Link>
+            )}
+
+            {/* Notificaciones — transversal, para cualquier usuario con perfil de portal */}
+            {portalUser && (
+              <Link
+                to="/notificaciones"
+                aria-current={location.pathname.startsWith('/notificaciones') ? 'page' : undefined}
+                className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan ${
+                  location.pathname.startsWith('/notificaciones')
+                    ? 'border-gov-cyan text-white'
+                    : 'border-transparent text-white/65 hover:text-white hover:border-white/30'
+                }`}
+              >
+                Notificaciones
               </Link>
             )}
 
