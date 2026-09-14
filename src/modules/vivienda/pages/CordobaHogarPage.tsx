@@ -216,18 +216,22 @@ function EditModal({
                 type="number"
                 className={inp}
                 value={form.cantidad_casas ?? ''}
-                onChange={(e) => {
-                  const casas = e.target.value ? Number(e.target.value) : null
-                  setForm((p) => ({
-                    ...p,
-                    cantidad_casas: casas,
-                    monto: casas ? casas * montoPorCasa : p.monto,
-                  }))
-                }}
+                onChange={(e) => set('cantidad_casas', e.target.value ? Number(e.target.value) : null)}
               />
             </div>
             <div>
-              <label htmlFor={`${uid}-monto`} className={lbl}>Monto ($)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor={`${uid}-monto`} className={lbl.replace(' mb-1', '')}>Monto ($)</label>
+                <button
+                  type="button"
+                  onClick={() => form.cantidad_casas && set('monto', form.cantidad_casas * montoPorCasa)}
+                  disabled={!form.cantidad_casas}
+                  title="Recalcula el monto = cantidad de casas × parámetro vigente. No se aplica solo — el monto ya cargado se mantiene hasta que lo pidas."
+                  className="text-[11px] font-semibold text-gov-cyan hover:text-gov-blue disabled:text-gray-300 disabled:cursor-not-allowed"
+                >
+                  ↻ Recalcular
+                </button>
+              </div>
               <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value ? Number(e.target.value) : null)} />
               {form.cantidad_casas && form.monto === form.cantidad_casas * montoPorCasa && (
                 <p className="text-[11px] text-cyan-600 mt-0.5 font-medium">
