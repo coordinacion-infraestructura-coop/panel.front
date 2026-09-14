@@ -1189,8 +1189,8 @@ export function CordonCunetaPage() {
           onClick={() => {
             const rows = sorted.map((m) => ({
               '#': m.orden,
-              'Municipio': m.municipio,
-              'Departamento': m.departamento ?? '',
+              'Municipio': (m.municipio ?? '').toUpperCase(),
+              'Departamento': (m.departamento ?? '').toUpperCase(),
               'Expediente N°': m.expediente ?? '',
               'Monto ($)': m.monto ?? '',
               'CC (ml)': m.cordon_cuneta_ml ?? '',

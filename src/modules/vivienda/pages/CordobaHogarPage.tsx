@@ -1164,8 +1164,8 @@ export function CordobaHogarPage() {
           onClick={() => {
             const rows = sorted.map((l) => ({
               '#': l.orden,
-              'Localidad': l.localidad,
-              'Departamento': l.departamento ?? '',
+              'Localidad': (l.localidad ?? '').toUpperCase(),
+              'Departamento': (l.departamento ?? '').toUpperCase(),
               'Fecha anuncio': l.fecha_anuncio ?? '',
               'Expediente N°': l.expediente ?? '',
               'Casas': l.cantidad_casas ?? '',

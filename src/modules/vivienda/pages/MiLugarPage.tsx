@@ -92,8 +92,8 @@ function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProy
   const rows = proyectos.map((p, i) => ({
     '#': i + 1,
     'Nombre': p.nombre,
-    'Localidad': p.localidad_nombre,
-    'Departamento': p.departamento ?? '',
+    'Localidad': (p.localidad_nombre ?? '').toUpperCase(),
+    'Departamento': (p.departamento ?? '').toUpperCase(),
     'Expediente': p.expediente ?? '',
     'Responsable': p.responsable ?? '',
     'Superficie (Ha)': p.superficie ?? '',
