@@ -62,7 +62,7 @@ const CH_COLS: Array<{ label: string | [string, string]; sort: string | null }> 
   { label: 'Departamento', sort: 'departamento' },
   { label: ['Fecha', 'anuncio'], sort: 'fecha_anuncio' },
   { label: 'Expediente N°', sort: 'expediente' },
-  { label: 'Casas', sort: 'cantidad_casas' },
+  { label: 'Viviendas', sort: 'cantidad_casas' },
   { label: 'Monto', sort: 'monto' },
   { label: ['OK', 'Ministro'], sort: 'ok_gob' },
   { label: ['Última', 'obs.'], sort: 'doc_exp' },
@@ -210,7 +210,7 @@ function EditModal({
               <input id={`${uid}-exp`} className={`${inp} font-mono`} value={form.expediente ?? ''} onChange={(e) => set('expediente', e.target.value)} />
             </div>
             <div>
-              <label htmlFor={`${uid}-casas`} className={lbl}>Cantidad de casas</label>
+              <label htmlFor={`${uid}-casas`} className={lbl}>Cantidad de viviendas</label>
               <input
                 id={`${uid}-casas`}
                 type="number"
@@ -226,7 +226,7 @@ function EditModal({
                   type="button"
                   onClick={() => form.cantidad_casas && set('monto', form.cantidad_casas * montoPorCasa)}
                   disabled={!form.cantidad_casas}
-                  title="Recalcula el monto = cantidad de casas × parámetro vigente. No se aplica solo — el monto ya cargado se mantiene hasta que lo pidas."
+                  title="Recalcula el monto = cantidad de viviendas × parámetro vigente. No se aplica solo — el monto ya cargado se mantiene hasta que lo pidas."
                   className="text-[11px] font-semibold text-gov-cyan hover:text-gov-blue disabled:text-gray-300 disabled:cursor-not-allowed"
                 >
                   ↻ Recalcular
@@ -235,7 +235,7 @@ function EditModal({
               <input id={`${uid}-monto`} type="number" className={inp} value={form.monto ?? ''} onChange={(e) => set('monto', e.target.value ? Number(e.target.value) : null)} />
               {form.cantidad_casas && form.monto === form.cantidad_casas * montoPorCasa && (
                 <p className="text-[11px] text-cyan-600 mt-0.5 font-medium">
-                  = {form.cantidad_casas} casas × ${montoPorCasa.toLocaleString('es-AR')}
+                  = {form.cantidad_casas} viviendas × ${montoPorCasa.toLocaleString('es-AR')}
                 </p>
               )}
             </div>
@@ -622,7 +622,7 @@ function GestionarParametrosModal({
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1">Monto por casa</p>
               <p className="text-xs text-gray-500 mb-3">
-                Valor base para calcular el monto de cada localidad: <strong>cantidad de casas × monto por casa</strong>.
+                Valor base para calcular el monto de cada localidad: <strong>cantidad de viviendas × monto por vivienda</strong>.
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500 font-semibold">$</span>
@@ -895,7 +895,7 @@ function AgregarLocalidadModal({
               <input id={`${uid}-exp`} className={`${inp} font-mono`} value={form.expediente ?? ''} onChange={(e) => setForm((p) => ({ ...p, expediente: e.target.value }))} />
             </div>
             <div>
-              <label htmlFor={`${uid}-casas`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Cant. casas</label>
+              <label htmlFor={`${uid}-casas`} className="block text-xs font-bold text-gray-500 uppercase mb-1">Cant. viviendas</label>
               <input
                 id={`${uid}-casas`}
                 type="number"
@@ -919,11 +919,11 @@ function AgregarLocalidadModal({
                 className={`${inp} bg-slate-50`}
                 readOnly
                 value={form.monto ?? ''}
-                title="Se calcula automáticamente a partir de la cantidad de casas"
+                title="Se calcula automáticamente a partir de la cantidad de viviendas"
               />
               {form.cantidad_casas && form.monto ? (
                 <p className="text-[11px] text-cyan-600 mt-0.5 font-medium">
-                  = {form.cantidad_casas} casas × ${montoPorCasa.toLocaleString('es-AR')}
+                  = {form.cantidad_casas} viviendas × ${montoPorCasa.toLocaleString('es-AR')}
                 </p>
               ) : null}
             </div>
@@ -1168,7 +1168,7 @@ export function CordobaHogarPage() {
               'Departamento': (l.departamento ?? '').toUpperCase(),
               'Fecha anuncio': l.fecha_anuncio ?? '',
               'Expediente N°': l.expediente ?? '',
-              'Casas': l.cantidad_casas ?? '',
+              'Viviendas': l.cantidad_casas ?? '',
               'Monto ($)': l.monto ?? '',
               'OK Ministro': l.ok_gob,
               'Última obs.': l.doc_exp ?? '',
