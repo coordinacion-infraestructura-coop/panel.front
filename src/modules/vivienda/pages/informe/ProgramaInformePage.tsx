@@ -68,8 +68,8 @@ const CONFIG: Record<ProgramaInforme, ProgramaConfig> = {
     paletaCorop: 'greens',
     api: cordobaHogarApi,
     extraKpis: (p) => [
-      { value: fmtNum(p.metricas_extra.cantidad_casas_total ?? 0), label: 'Casas', accent: 'cyan' },
-      { value: fmtMonto(p.metricas_extra.monto_por_casa ?? 0), label: 'Monto por casa', accent: 'orange' },
+      { value: fmtNum(p.metricas_extra.cantidad_casas_total ?? 0), label: 'Viviendas', accent: 'cyan' },
+      { value: fmtMonto(p.metricas_extra.monto_por_casa ?? 0), label: 'Monto por vivienda', accent: 'orange' },
     ],
   },
 }

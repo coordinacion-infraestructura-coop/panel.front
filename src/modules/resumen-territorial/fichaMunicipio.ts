@@ -54,6 +54,21 @@ interface GestionFila {
   ultimo_mov: string
 }
 
+/** Orden de la tabla de gestiones: primero las que tienen Nro. de expediente,
+ *  y dentro de cada grupo las más nuevas primero (fecha de ingreso desc,
+ *  con días transcurridos asc como desempate si la fecha falta o empata). */
+function compararGestionFila(a: GestionFila, b: GestionFila): number {
+  const aExp = a.nro_expediente?.trim() ? 1 : 0
+  const bExp = b.nro_expediente?.trim() ? 1 : 0
+  if (aExp !== bExp) return bExp - aExp
+  const af = a.fecha_ingreso || ''
+  const bf = b.fecha_ingreso || ''
+  if (af !== bf) return bf.localeCompare(af)
+  const ad = a.dias_transcurridos ?? Number.POSITIVE_INFINITY
+  const bd = b.dias_transcurridos ?? Number.POSITIVE_INFINITY
+  return ad - bd
+}
+
 // Forma cruda de un item de GET /api/v1/privada/gestiones (subset que usa la ficha).
 interface GestionApiItem {
   id_gestion: string
@@ -217,7 +232,7 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
         urgencia: g.urgencia ?? undefined,
         nro_expediente: g.nro_expediente,
         ultimo_mov: movs[i].ultimo_mov,
-      })),
+      })).sort(compararGestionFila),
     },
   }
 }
@@ -332,7 +347,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   if (f.cordobaHogar) {
     kv('Fecha de anuncio', f.cordobaHogar.fecha_anuncio)
     kv('Monto', f.cordobaHogar.monto)
-    kv('Casas', f.cordobaHogar.casas)
+    kv('Viviendas', f.cordobaHogar.casas)
     kv('Ok Ministro', f.cordobaHogar.ok_gob)
     kv('Estado General', f.cordobaHogar.estado_general, f.cordobaHogar.estado_bg)
     kv('Porcentaje de avance', f.cordobaHogar.avance)
@@ -426,7 +441,7 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     ...(f.cordobaHogar ? [
       { Campo: '  Fecha de anuncio', Valor: f.cordobaHogar.fecha_anuncio },
       { Campo: '  Monto', Valor: f.cordobaHogar.monto },
-      { Campo: '  Casas', Valor: f.cordobaHogar.casas },
+      { Campo: '  Viviendas', Valor: f.cordobaHogar.casas },
       { Campo: '  Ok Ministro', Valor: f.cordobaHogar.ok_gob },
       { Campo: '  Estado General', Valor: f.cordobaHogar.estado_general },
       { Campo: '  Avance', Valor: f.cordobaHogar.avance },
