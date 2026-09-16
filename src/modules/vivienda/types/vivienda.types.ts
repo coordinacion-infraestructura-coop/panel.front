@@ -554,6 +554,17 @@ export interface GeoLocalidad {
   activo: boolean
 }
 
+/** Fila del informe "Localidades por Departamento" (spec-informe-localidades-departamento.md). */
+export interface LocalidadInformeRow {
+  departamento: string
+  localidad: string
+  cant_habitantes: number | null
+  tiene_cordon_cuneta: boolean
+  ml_cordon_cuneta: number | null
+  tiene_viviendas: boolean
+  cantidad_viviendas: number | null
+}
+
 // ── Shared ───────────────────────────────────────────────────────────────────────
 
 export interface PaginatedResponse<T> {

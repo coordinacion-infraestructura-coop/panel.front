@@ -29,6 +29,7 @@ import type {
   EstadoCHUpdate,
   EstadoHistorialCH,
   GeoLocalidad,
+  LocalidadInformeRow,
   InformeSnapshot,
   ProyectoML,
   ProyectoMLCreate,
@@ -71,6 +72,13 @@ export const programasApi = {
   // asi que TecnicoDGV puede verlo (spec-checklist-tecnico-dgv §8/§9).
   getTablero: () =>
     apiClient.get<TableroVivienda>(`${BASE}/programas-tablero`).then((r) => r.data),
+}
+
+export const informeLocalidadesApi = {
+  // Informe "Localidades por Departamento" (spec-informe-localidades-departamento.md).
+  // Mismos roles que el Tablero — se calcula on-the-fly, sin snapshot.
+  get: () =>
+    apiClient.get<LocalidadInformeRow[]>(`${BASE}/informe-localidades`).then((r) => r.data),
 }
 
 export const beneficiariosApi = {

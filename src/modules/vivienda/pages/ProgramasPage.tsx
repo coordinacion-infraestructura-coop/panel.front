@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { programasApi } from '../api/vivienda.api'
+import { informeLocalidadesApi, programasApi } from '../api/vivienda.api'
+import { exportToXlsx } from '../../../shared/utils/exportTable'
 
 function fmtMonto(n: number) {
   if (!n) return '—'
@@ -69,6 +71,36 @@ export function ProgramasPage() {
     queryFn: programasApi.getTablero,
   })
 
+  const [descargando, setDescargando] = useState(false)
+  const [descargaError, setDescargaError] = useState<string | null>(null)
+
+  async function descargarInformeLocalidades() {
+    if (descargando) return
+    setDescargando(true)
+    setDescargaError(null)
+    try {
+      const filas = await informeLocalidadesApi.get()
+      const rows = filas.map((f) => ({
+        Departamento: f.departamento,
+        Localidad: f.localidad,
+        'Cant. Habitantes': f.cant_habitantes ?? '',
+        'Tiene Cordón Cuneta (SI/NO)': f.tiene_cordon_cuneta ? 'SI' : 'NO',
+        'Metros Lineales Cordón Cuneta': f.ml_cordon_cuneta ?? '',
+        'Tiene Viviendas (SI/NO)': f.tiene_viviendas ? 'SI' : 'NO',
+        'Cantidad de Viviendas': f.cantidad_viviendas ?? '',
+      }))
+      exportToXlsx(
+        rows,
+        'Localidades',
+        `informe_localidades_${new Date().toISOString().split('T')[0]}.xlsx`,
+      )
+    } catch {
+      setDescargaError('No se pudo generar el informe. Reintentá.')
+    } finally {
+      setDescargando(false)
+    }
+  }
+
   const cc = tablero?.cordon_cuneta
   const ch = tablero?.cordoba_hogar
   const ml = tablero?.mi_lugar
@@ -100,7 +132,7 @@ export function ProgramasPage() {
         {
           label: 'Viviendas anunciadas',
           value: (ch?.total_casas ?? 0).toLocaleString('es-AR'),
-          sub: 'casas',
+          sub: 'viviendas',
         },
         {
           label: 'OK Gobernación',
@@ -138,11 +170,24 @@ export function ProgramasPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gov-navy">Tablero de Programas</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Estado general de los programas activos de la Secretaría de Vivienda.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-gov-navy">Tablero de Programas</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Estado general de los programas activos de la Secretaría de Vivienda.
+          </p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <button
+            onClick={descargarInformeLocalidades}
+            disabled={descargando}
+            className="px-3 py-1.5 text-xs font-semibold rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            title="Descargar informe de localidades por departamento (Cordón Cuneta, Córdoba Hogar y habitantes)"
+          >
+            {descargando ? 'Generando…' : '↓ Descargar informe por localidad'}
+          </button>
+          {descargaError && <p className="text-xs text-red-600 mt-1">{descargaError}</p>}
+        </div>
       </div>
       <div className="flex flex-col gap-4">
         {cards.map((card) =>
