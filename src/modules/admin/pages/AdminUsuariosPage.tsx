@@ -27,6 +27,7 @@ const SECRETARIAS = [
   { id: 'infraestructura', label: 'Gestión e Infraestructura' },
   { id: 'territorial', label: 'Planificación Territorial' },
   { id: 'gasifera', label: 'Infraestructura Gasífera' },
+  { id: 'gralgob', label: 'General de Gobierno' },
   { id: 'desarrollo', label: 'Desarrollo' },
   { id: 'supervision', label: 'Supervisión' },
 ]

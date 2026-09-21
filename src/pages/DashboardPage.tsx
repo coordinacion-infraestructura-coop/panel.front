@@ -57,6 +57,14 @@ const SECRETARIAS: Secretaria[] = [
     itemsEnDesarrollo: ['Conexión de Gas en Escuelas', 'Asesoramiento Legal y Contable', 'Créditos para Infraestructura'],
   },
   {
+    id: 'gralgob',
+    nombre: 'Secretaría General de Gobierno',
+    activa: true,
+    modulos: [
+      { label: 'ATP', desc: 'Compromisos del Aporte del Tesoro Provincial (solo lectura, preliminar)', to: '/gralgob/atp' },
+    ],
+  },
+  {
     id: 'desarrollo',
     nombre: 'Secretaría de Desarrollo',
     responsable: 'Domingo Benso',
