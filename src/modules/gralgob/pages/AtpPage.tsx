@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { atpApi, type Compromiso, type CronogramaPago } from '../api/atp.api'
+import { atpApi, type Compromiso, type CronogramaPago, type GeoLocalidad } from '../api/atp.api'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
+import { normalizeName } from '../../../shared/utils/normalizeName'
 
 // Panel preliminar de solo lectura (spec-sync-atp-compromiso-gobernador.md
 // §12) — espeja atp_compromisos tal cual está sincronizado desde la hoja
@@ -44,9 +45,62 @@ function pendiente(c: Compromiso): number | null {
   return c.monto - entregado(c)
 }
 
+// ── Cruce Departamento/Localidad contra el padrón geográfico canónico ────────
+// (viv_geo_localidades) — el Sheet trae texto libre tipeado a mano por el
+// área, así que puede haber variantes de tildes/mayúsculas o localidades que
+// directamente no están en el padrón. Match best-effort por nombre
+// normalizado (mismo criterio que shared/utils/normalizeName.ts, que a su
+// vez espeja app/geo/matching.py del backend) — no resuelve alias entre
+// paréntesis como sí hace candidatos_localidad() en el backend, es un primer
+// cruce para detectar problemas de calidad de dato, no una normalización
+// exhaustiva.
+type GeoMatch = 'ok' | 'depto-distinto' | 'sin-match' | 'sin-dato'
+
+function buildGeoIndex(geo: GeoLocalidad[]): Map<string, GeoLocalidad[]> {
+  const index = new Map<string, GeoLocalidad[]>()
+  for (const g of geo) {
+    if (!g.activo) continue
+    const key = normalizeName(g.localidad)
+    const arr = index.get(key)
+    if (arr) arr.push(g)
+    else index.set(key, [g])
+  }
+  return index
+}
+
+function matchGeo(c: Compromiso, geoIndex: Map<string, GeoLocalidad[]>): GeoMatch {
+  if (!c.localidad) return 'sin-dato'
+  const candidatos = geoIndex.get(normalizeName(c.localidad))
+  if (!candidatos || candidatos.length === 0) return 'sin-match'
+  if (c.departamento && candidatos.some((g) => normalizeName(g.departamento) === normalizeName(c.departamento))) {
+    return 'ok'
+  }
+  return c.departamento ? 'depto-distinto' : 'ok'
+}
+
+function GeoMatchBadge({ estado }: { estado: GeoMatch }) {
+  if (estado === 'ok' || estado === 'sin-dato') return null
+  const texto = estado === 'sin-match'
+    ? 'Esta localidad no se encontró en el padrón geográfico (viv_geo_localidades) — puede ser un error de tipeo en el Sheet.'
+    : 'Esta localidad existe en el padrón, pero en un departamento distinto al cargado en el Sheet.'
+  return (
+    <span
+      title={texto}
+      aria-label={texto}
+      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[9px] font-bold flex-shrink-0 cursor-help bg-red-100 text-red-600"
+    >
+      !
+    </span>
+  )
+}
+
 // ── Panel de detalle: cronograma de pagos de un compromiso ────────────────────
 
-function DetailPanel({ compromiso, onClose }: { compromiso: Compromiso; onClose: () => void }) {
+function DetailPanel({
+  compromiso, geoMatch, onClose,
+}: {
+  compromiso: Compromiso; geoMatch: GeoMatch; onClose: () => void
+}) {
   const uid = useId()
   const { data: cronograma = [], isLoading } = useQuery({
     queryKey: ['gralgob-atp-cronograma', compromiso.id],
@@ -107,6 +161,13 @@ function DetailPanel({ compromiso, onClose }: { compromiso: Compromiso; onClose:
               Este compromiso fue derivado a otra área para su ejecución.
             </p>
           )}
+          {geoMatch !== 'ok' && geoMatch !== 'sin-dato' && (
+            <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2.5 py-1.5">
+              {geoMatch === 'sin-match'
+                ? 'Localidad no encontrada en el padrón geográfico (viv_geo_localidades) — revisar cómo está tipeada en el Sheet.'
+                : 'Localidad encontrada en el padrón, pero en otro departamento al cargado acá.'}
+            </p>
+          )}
         </div>
 
         <div className="px-5 pt-3 pb-1">
@@ -148,8 +209,14 @@ export function AtpPage() {
     queryFn: atpApi.syncEstado,
     staleTime: 60 * 1000,
   })
+  const geoQ = useQuery({
+    queryKey: ['gralgob-atp-geo-localidades'],
+    queryFn: atpApi.geoLocalidades,
+    staleTime: 30 * 60 * 1000, // padrón geográfico, cambia poquísimo
+  })
 
   const compromisos = compromisosQ.data?.items ?? []
+  const geoIndex = useMemo(() => buildGeoIndex(geoQ.data ?? []), [geoQ.data])
 
   const deptoId = useId()
   const localidadId = useId()
@@ -158,6 +225,7 @@ export function AtpPage() {
   const [deptoFilter, setDeptoFilter] = useState('')
   const [localidadFilter, setLocalidadFilter] = useState('')
   const [ministerioFilter, setMinisterioFilter] = useState('')
+  const [soloSinPadron, setSoloSinPadron] = useState(false)
   const [detailTarget, setDetailTarget] = useState<Compromiso | null>(null)
 
   const departamentos = useMemo(
@@ -189,24 +257,27 @@ export function AtpPage() {
       if (deptoFilter && c.departamento !== deptoFilter) return false
       if (localidadFilter && c.localidad !== localidadFilter) return false
       if (ministerioFilter && c.ministerio_destino !== ministerioFilter) return false
+      if (soloSinPadron && matchGeo(c, geoIndex) === 'ok') return false
       return true
     })
-  }, [compromisos, deptoFilter, localidadFilter, ministerioFilter])
+  }, [compromisos, deptoFilter, localidadFilter, ministerioFilter, soloSinPadron, geoIndex])
 
-  const hasFilters = !!(deptoFilter || localidadFilter || ministerioFilter)
+  const hasFilters = !!(deptoFilter || localidadFilter || ministerioFilter || soloSinPadron)
 
   const kpis: Kpi[] = useMemo(() => {
     const montoTotal = compromisos.reduce((acc, c) => acc + (c.monto ?? 0), 0)
     const entregadoTotal = compromisos.reduce((acc, c) => acc + entregado(c), 0)
     const derivados = compromisos.filter((c) => c.derivado).length
+    const sinPadron = compromisos.filter((c) => matchGeo(c, geoIndex) !== 'ok' && matchGeo(c, geoIndex) !== 'sin-dato').length
     return [
       { value: compromisos.length, label: 'Compromisos ATP', accent: 'navy' },
       { value: fmtMonto(montoTotal), label: 'Monto total anunciado', accent: 'cyan' },
       { value: fmtMonto(entregadoTotal), label: 'Entregado a la fecha', accent: 'green' },
       { value: fmtMonto(montoTotal - entregadoTotal), label: 'Pendiente de entrega', accent: 'orange' },
       { value: derivados, label: 'Derivados a otra área', accent: 'navy' },
+      { value: sinPadron, label: 'Sin coincidencia en el padrón geo', accent: 'red' },
     ]
-  }, [compromisos])
+  }, [compromisos, geoIndex])
 
   const isLoading = compromisosQ.isLoading
   const isError = compromisosQ.isError
@@ -258,9 +329,18 @@ export function AtpPage() {
                   {ministerios.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
+              <label className="flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={soloSinPadron}
+                  onChange={(e) => setSoloSinPadron(e.target.checked)}
+                  className="rounded border-slate-300 text-gov-cyan focus:ring-gov-cyan"
+                />
+                Solo sin coincidencia en el padrón geo
+              </label>
               {hasFilters && (
                 <button
-                  onClick={() => { setDeptoFilter(''); setLocalidadFilter(''); setMinisterioFilter('') }}
+                  onClick={() => { setDeptoFilter(''); setLocalidadFilter(''); setMinisterioFilter(''); setSoloSinPadron(false) }}
                   className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors"
                 >
                   ✕ Limpiar filtros
@@ -308,11 +388,14 @@ export function AtpPage() {
                           <td className="p-0 font-bold">
                             <button
                               onClick={() => setDetailTarget(c)}
-                              className="w-full h-full px-2.5 py-1.5 text-left font-bold text-gov-navy hover:text-gov-cyan transition-colors group"
+                              className="w-full h-full px-2.5 py-1.5 text-left font-bold text-gov-navy hover:text-gov-cyan transition-colors group flex items-center gap-1.5"
                               title="Ver entregas de dinero"
                             >
-                              {c.localidad ?? '—'}
-                              <span className="block text-[9px] font-normal text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity leading-none">Ver entregas</span>
+                              <span>
+                                {c.localidad ?? '—'}
+                                <span className="block text-[9px] font-normal text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity leading-none">Ver entregas</span>
+                              </span>
+                              <GeoMatchBadge estado={matchGeo(c, geoIndex)} />
                             </button>
                           </td>
                           <td className="px-2.5 py-1.5 font-mono text-gray-500 whitespace-nowrap" style={{ fontSize: '11px' }}>{c.nro_expediente || '—'}</td>
@@ -346,7 +429,13 @@ export function AtpPage() {
         </div>
       )}
 
-      {detailTarget && <DetailPanel compromiso={detailTarget} onClose={() => setDetailTarget(null)} />}
+      {detailTarget && (
+        <DetailPanel
+          compromiso={detailTarget}
+          geoMatch={matchGeo(detailTarget, geoIndex)}
+          onClose={() => setDetailTarget(null)}
+        />
+      )}
     </div>
   )
 }

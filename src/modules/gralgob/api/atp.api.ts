@@ -37,6 +37,22 @@ export interface CronogramaPago {
   monto: number
 }
 
+// Padrón geográfico canónico (viv_geo_localidades, propiedad de svc-vivienda,
+// ADR-001 database-per-service). Se lee acá vía su endpoint público existente
+// (GET /api/v1/vivienda/cordon-cuneta/geo, ya gateado solo por rol — no por
+// secretaría — así que un usuario con secretaría "gralgob" también puede
+// llamarlo). No se duplica el catálogo en svc-gralgob ni se agrega un
+// endpoint nuevo: mismo criterio de "leer read-only, nunca via cross-DB
+// join" que usa resumen_territorial con priv_localidades_info (ADR-012),
+// aplicado acá del lado del cliente porque no hay ningún endpoint interno
+// IAM-only que lo exponga todavía.
+export interface GeoLocalidad {
+  id_geo: string
+  departamento: string
+  localidad: string
+  activo: boolean
+}
+
 export const atpApi = {
   compromisos: () =>
     apiClient
@@ -46,4 +62,6 @@ export const atpApi = {
     apiClient.get<CronogramaPago[]>(`${BASE}/compromisos/${compromisoId}/cronograma`).then((r) => r.data),
   syncEstado: () =>
     apiClient.get<SyncEstado | null>(`${BASE}/sync-estado`).then((r) => r.data),
+  geoLocalidades: () =>
+    apiClient.get<GeoLocalidad[]>('/api/v1/vivienda/cordon-cuneta/geo').then((r) => r.data),
 }
