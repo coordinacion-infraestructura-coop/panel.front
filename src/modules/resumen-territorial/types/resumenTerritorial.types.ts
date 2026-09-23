@@ -1,7 +1,7 @@
 // Espejo de app/resumen_territorial/schemas.py (svc-vivienda).
 // Spec: docs/files/spec-resumen-territorial.md §5.2
 
-export type AreaResumen = 'vivienda' | 'privada'
+export type AreaResumen = 'vivienda' | 'privada' | 'gasifera'
 
 export interface ResumenComunicacion {
   fecha: string // YYYY-MM-DD

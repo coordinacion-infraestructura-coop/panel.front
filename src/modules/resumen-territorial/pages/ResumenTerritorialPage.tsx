@@ -49,7 +49,8 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 const norm = (s: string) =>
   s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
-const AREA_LABEL: Record<string, string> = { vivienda: 'Vivienda', privada: 'Sec. Privada' }
+const AREA_LABEL: Record<string, string> = { vivienda: 'Vivienda', privada: 'Sec. Privada', gasifera: 'Sec. Gasífera' }
+const AREA_DOT_COLOR: Record<string, string> = { vivienda: '#01aae3', privada: '#398ebd', gasifera: '#d17612' }
 
 // ── Badges ───────────────────────────────────────────────────────────────────────
 
@@ -852,7 +853,7 @@ export function ResumenTerritorialPage() {
                                 <span className="text-xs font-semibold text-gov-navy flex items-center gap-1.5">
                                   <span
                                     className="w-1.5 h-1.5 rounded-sm"
-                                    style={{ background: p.area === 'privada' ? '#398ebd' : '#01aae3' }}
+                                    style={{ background: AREA_DOT_COLOR[p.area] ?? '#01aae3' }}
                                   />
                                   {p.programa_label}
                                 </span>
