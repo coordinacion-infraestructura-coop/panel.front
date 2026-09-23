@@ -32,11 +32,18 @@ export interface SyncEstado {
   triggered_by: string | null
 }
 
+export interface CronogramaPago {
+  periodo: string
+  monto: number
+}
+
 export const atpApi = {
   compromisos: () =>
     apiClient
       .get<{ items: Compromiso[]; total: number }>(`${BASE}/compromisos`, { params: { limit: 1500 } })
       .then((r) => r.data),
+  cronograma: (compromisoId: string) =>
+    apiClient.get<CronogramaPago[]>(`${BASE}/compromisos/${compromisoId}/cronograma`).then((r) => r.data),
   syncEstado: () =>
     apiClient.get<SyncEstado | null>(`${BASE}/sync-estado`).then((r) => r.data),
 }
