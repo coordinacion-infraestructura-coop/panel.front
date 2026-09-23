@@ -47,35 +47,89 @@ function pendiente(c: Compromiso): number | null {
 
 // ── Cruce Departamento/Localidad contra el padrón geográfico canónico ────────
 // (viv_geo_localidades) — el Sheet trae texto libre tipeado a mano por el
-// área, así que puede haber variantes de tildes/mayúsculas o localidades que
-// directamente no están en el padrón. Match best-effort por nombre
-// normalizado (mismo criterio que shared/utils/normalizeName.ts, que a su
-// vez espeja app/geo/matching.py del backend) — no resuelve alias entre
-// paréntesis como sí hace candidatos_localidad() en el backend, es un primer
-// cruce para detectar problemas de calidad de dato, no una normalización
-// exhaustiva.
+// área, así que puede haber variantes de tildes/mayúsculas, abreviaturas de
+// departamento, alias entre paréntesis, o localidades que directamente no
+// están en el padrón. Investigado contra datos reales (2026-09-23): de 57
+// discrepancias iniciales, 39 eran falsos positivos de un matching
+// demasiado simple (27 abreviaturas de depto tipo "General"/"Gral", 12 alias
+// entre paréntesis/guion como ya resuelve `candidatos_localidad()` del
+// backend) — quedan ~17 casos reales, algunos con vinculación manual
+// confirmada (ver `VINCULACION_MANUAL`).
 type GeoMatch = 'ok' | 'depto-distinto' | 'sin-match' | 'sin-dato'
+
+// Igual a candidatos_localidad() de app/geo/matching.py — alias entre
+// paréntesis ("VILLA DE SOTO (Est. Soto)") y nombres separados por guion
+// ("CHILIBROSTE - SANTA CECILIA"). Se aplica tanto al nombre que trae el
+// Sheet como al que trae el padrón, para que matcheen sin importar de qué
+// lado está el alias.
+function candidatosLocalidad(nombre: string | null | undefined): Set<string> {
+  const keys = new Set<string>()
+  if (!nombre) return keys
+  keys.add(normalizeName(nombre))
+  keys.add(normalizeName(nombre.split('(')[0]))
+  const m = nombre.match(/\(([^)]*)\)/)
+  if (m) {
+    keys.add(normalizeName(m[1]))
+    keys.add(normalizeName(m[1]).replace(/^(est\.?|estacion)\s*\.?\s*/, ''))
+  }
+  for (const parte of nombre.split(' - ')) {
+    keys.add(normalizeName(parte))
+  }
+  keys.delete('')
+  return keys
+}
+
+// El Sheet escribe el departamento completo ("GENERAL ROCA", "PRESIDENTE
+// ROQUE SAENZ PEÑA"); el padrón lo abrevia ("GRAL ROCA", "PTE ROQUE SAENZ
+// PEÑA"). Mismo lugar, solo normalizar la abreviatura para que comparen igual.
+function normalizeDepartamento(s: string | null | undefined): string {
+  return normalizeName(s)
+    .replace(/\bgeneral\b/g, 'gral')
+    .replace(/\bpresidente\b/g, 'pte')
+}
+
+// Vinculación manual confirmada con el usuario para casos que el matching
+// automático no puede resolver solo (localidad ambigua entre departamentos
+// límítrofes, etc.) — ver docs/files/spec-sync-atp-compromiso-gobernador.md
+// §12.8 para el detalle de cada caso y por qué no se pudo resolver solo.
+// Clave: normalizeName(localidad tal cual la escribe el Sheet).
+const VINCULACION_MANUAL: Record<string, { departamento: string }> = {
+  // Paso del Durazno está en el límite Juárez Celman/Río Cuarto; el Sheet la
+  // carga bajo Juárez Celman pero el padrón oficial la ubica en Río Cuarto
+  // (confirmado por el usuario 2026-09-23) — se usa el departamento del
+  // padrón como autoridad, no se pide corregir el Sheet.
+  [normalizeName('Paso del Durazno')]: { departamento: 'rio cuarto' },
+}
 
 function buildGeoIndex(geo: GeoLocalidad[]): Map<string, GeoLocalidad[]> {
   const index = new Map<string, GeoLocalidad[]>()
   for (const g of geo) {
     if (!g.activo) continue
-    const key = normalizeName(g.localidad)
-    const arr = index.get(key)
-    if (arr) arr.push(g)
-    else index.set(key, [g])
+    for (const key of candidatosLocalidad(g.localidad)) {
+      const arr = index.get(key)
+      if (arr) arr.push(g)
+      else index.set(key, [g])
+    }
   }
   return index
 }
 
 function matchGeo(c: Compromiso, geoIndex: Map<string, GeoLocalidad[]>): GeoMatch {
   if (!c.localidad) return 'sin-dato'
-  const candidatos = geoIndex.get(normalizeName(c.localidad))
-  if (!candidatos || candidatos.length === 0) return 'sin-match'
-  if (c.departamento && candidatos.some((g) => normalizeName(g.departamento) === normalizeName(c.departamento))) {
+
+  const candidatos = new Set<GeoLocalidad>()
+  for (const key of candidatosLocalidad(c.localidad)) {
+    for (const g of geoIndex.get(key) ?? []) candidatos.add(g)
+  }
+  if (candidatos.size === 0) return 'sin-match'
+
+  const overrideDepto = VINCULACION_MANUAL[normalizeName(c.localidad)]?.departamento
+  const deptoEsperado = overrideDepto ?? normalizeDepartamento(c.departamento)
+  if (!c.departamento) return 'ok'
+  if ([...candidatos].some((g) => normalizeDepartamento(g.departamento) === deptoEsperado)) {
     return 'ok'
   }
-  return c.departamento ? 'depto-distinto' : 'ok'
+  return 'depto-distinto'
 }
 
 function GeoMatchBadge({ estado }: { estado: GeoMatch }) {
