@@ -22,6 +22,9 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
     { to: '/privada/gestiones', label: 'Gestiones' },
     { to: '/privada/tablero', label: 'Tablero' },
   ],
+  gasifera: [
+    { to: '/gasifera/pit', label: 'Tablero PIT Gas' },
+  ],
   gralgob: [
     { to: '/gralgob/atp', label: 'ATP' },
   ],
@@ -42,12 +45,14 @@ function navItemsFor(secretaria: string, rol: string | undefined): NavItem[] {
 const SECRETARIA_LABEL: Record<string, string> = {
   vivienda: 'Sec. Vivienda',
   privada: 'Sec. Privada',
+  gasifera: 'Sec. Gasífera',
   gralgob: 'Sec. General de Gobierno',
 }
 
 function getActiveSecretaria(pathname: string): string | null {
   if (pathname.startsWith('/vivienda')) return 'vivienda'
   if (pathname.startsWith('/privada')) return 'privada'
+  if (pathname.startsWith('/gasifera')) return 'gasifera'
   if (pathname.startsWith('/gralgob')) return 'gralgob'
   return null
 }

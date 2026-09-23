@@ -52,9 +52,10 @@ const SECRETARIAS: Secretaria[] = [
   {
     id: 'gasifera',
     nombre: 'Secretaría de Infraestructura Gasífera',
-    activa: false,
-    modulos: [],
-    itemsEnDesarrollo: ['Conexión de Gas en Escuelas', 'Asesoramiento Legal y Contable', 'Créditos para Infraestructura'],
+    activa: true,
+    modulos: [
+      { label: 'Tablero PIT Gas', desc: 'Obras de gas y seguimiento territorial (solo lectura, preliminar)', to: '/gasifera/pit' },
+    ],
   },
   {
     id: 'gralgob',

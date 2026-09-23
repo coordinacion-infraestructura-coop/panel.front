@@ -16,6 +16,7 @@ import { ChecklistTecnicoPage } from './modules/vivienda/pages/ChecklistTecnicoP
 import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
+import { GasiferaPitPage } from './modules/gasifera/pages/GasiferaPitPage'
 import { AtpPage } from './modules/gralgob/pages/AtpPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
@@ -73,6 +74,7 @@ export default function App() {
               <Route path="vivienda/checklist-tecnico" element={<ChecklistTecnicoPage />} />
               <Route path="privada/gestiones" element={<GestionesListPage />} />
               <Route path="privada/tablero" element={<TableroPage />} />
+              <Route path="gasifera/pit" element={<GasiferaPitPage />} />
               <Route path="gralgob/atp" element={<AtpPage />} />
               <Route
                 path="admin/usuarios"
