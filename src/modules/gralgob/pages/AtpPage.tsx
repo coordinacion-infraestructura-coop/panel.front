@@ -49,12 +49,18 @@ function pendiente(c: Compromiso): number | null {
 // (viv_geo_localidades) — el Sheet trae texto libre tipeado a mano por el
 // área, así que puede haber variantes de tildes/mayúsculas, abreviaturas de
 // departamento, alias entre paréntesis, o localidades que directamente no
-// están en el padrón. Investigado contra datos reales (2026-09-23): de 57
-// discrepancias iniciales, 39 eran falsos positivos de un matching
-// demasiado simple (27 abreviaturas de depto tipo "General"/"Gral", 12 alias
-// entre paréntesis/guion como ya resuelve `candidatos_localidad()` del
-// backend) — quedan ~17 casos reales, algunos con vinculación manual
-// confirmada (ver `VINCULACION_MANUAL`).
+// están en el padrón. Investigado contra datos reales (2026-09-23, rama
+// atp-comGob): de 57 discrepancias iniciales, 39 eran falsos positivos de un
+// matching demasiado simple (27 abreviaturas de depto tipo "General"/"Gral",
+// 12 alias entre paréntesis/guion como ya resuelve `candidatos_localidad()`
+// del backend). De las 18 restantes, 17 tienen vinculación manual confirmada
+// con el usuario (`VINCULACION_MANUAL`, por `id_geo` exacto) — quedan
+// resueltas como "ok" aunque el texto no coincida letra por letra. Solo
+// **Santiago Temple** (Río Segundo) sigue sin resolver: es una localidad real
+// que falta directamente en `viv_geo_localidades` — pendiente de que el área
+// de Vivienda la agregue al padrón, no es un problema de este panel ni del
+// Sheet de ATP. Ver spec-sync-atp-compromiso-gobernador.md §12.8 para el
+// detalle completo de cada caso.
 type GeoMatch = 'ok' | 'depto-distinto' | 'sin-match' | 'sin-dato'
 
 // Igual a candidatos_localidad() de app/geo/matching.py — alias entre
@@ -88,44 +94,69 @@ function normalizeDepartamento(s: string | null | undefined): string {
     .replace(/\bpresidente\b/g, 'pte')
 }
 
-// Vinculación manual confirmada con el usuario para casos que el matching
-// automático no puede resolver solo (localidad ambigua entre departamentos
-// límítrofes, etc.) — ver docs/files/spec-sync-atp-compromiso-gobernador.md
-// §12.8 para el detalle de cada caso y por qué no se pudo resolver solo.
-// Clave: normalizeName(localidad tal cual la escribe el Sheet).
-const VINCULACION_MANUAL: Record<string, { departamento: string }> = {
-  // Paso del Durazno está en el límite Juárez Celman/Río Cuarto; el Sheet la
-  // carga bajo Juárez Celman pero el padrón oficial la ubica en Río Cuarto
-  // (confirmado por el usuario 2026-09-23) — se usa el departamento del
-  // padrón como autoridad, no se pide corregir el Sheet.
-  [normalizeName('Paso del Durazno')]: { departamento: 'rio cuarto' },
+// Vinculación manual confirmada con el usuario (2026-09-23) para localidades
+// del Sheet que el matching automático no puede resolver por sí solo —
+// nombres abreviados/incompletos, typos de una letra, o formato distinto al
+// del padrón (paréntesis del lado del padrón pero no del Sheet). Clave:
+// normalizeName(localidad tal cual la escribe el Sheet) -> id_geo real en
+// viv_geo_localidades. Ver spec-sync-atp-compromiso-gobernador.md §12.8 para
+// el detalle de cada caso (qué decía el Sheet, qué dice el padrón, por qué
+// el matching automático no lo resolvía solo).
+const VINCULACION_MANUAL: Record<string, string> = {
+  [normalizeName('Paso del Durazno')]: '443', // límite Juárez Celman/Río Cuarto — se usa el depto del padrón oficial (Río Cuarto)
+  [normalizeName('Nicolás Bruzzone')]: '55', // padrón: "Nicolas Bruzone" (una sola z)
+  [normalizeName('Huanchilla')]: '92', // padrón: "Huanchillas" (plural)
+  [normalizeName("Capitán General Bernardo O'Higgins")]: '103', // padrón: "Cap. Gral. B.Ohiggins"
+  [normalizeName('Colonia Barge')]: '105', // padrón: "Castro Urdiales - Colonia 25 de Mayo"
+  [normalizeName('General Levalle')]: '128', // padrón: "General Le Valle" (con espacio)
+  [normalizeName('Villa Río Icho Cruz')]: '158', // padrón: "Icho Cruz"
+  [normalizeName('La Carolina El Potosí')]: '170', // padrón: "La Carolina (El Potosí)"
+  [normalizeName('Las Peñas Sud')]: '175', // padrón: "Las Peñas Sur"
+  [normalizeName('Santa Catalina Holmberg')]: '182', // padrón: "Santa Catalina (Est. Holmberg)"
+  [normalizeName('Montecristo')]: '392', // padrón: "Monte Cristo" (con espacio)
+  [normalizeName('Villa de María')]: '221', // padrón: "Villa de Maria de Rio Seco"
+  [normalizeName('San Javier y Yacanto')]: '261', // padrón solo lista "San Javier" — el área confirmó que es la forma abreviada de la misma localidad
+  [normalizeName('Miramar de Ansenuza')]: '289', // padrón: "Miramar"
+  [normalizeName('Saturnino María Laspiur')]: '296', // padrón: "Saturnino M. Laspiur"
+  [normalizeName('Dalmacio Vélez')]: '324', // padrón: "Dalmacio Velez Sarsfield"
+  [normalizeName('James Craik')]: '327', // padrón: "James Craick" (con c)
 }
 
-function buildGeoIndex(geo: GeoLocalidad[]): Map<string, GeoLocalidad[]> {
-  const index = new Map<string, GeoLocalidad[]>()
+interface GeoIndex {
+  porNombre: Map<string, GeoLocalidad[]>
+  porId: Map<string, GeoLocalidad>
+}
+
+function buildGeoIndex(geo: GeoLocalidad[]): GeoIndex {
+  const porNombre = new Map<string, GeoLocalidad[]>()
+  const porId = new Map<string, GeoLocalidad>()
   for (const g of geo) {
     if (!g.activo) continue
+    porId.set(g.id_geo, g)
     for (const key of candidatosLocalidad(g.localidad)) {
-      const arr = index.get(key)
+      const arr = porNombre.get(key)
       if (arr) arr.push(g)
-      else index.set(key, [g])
+      else porNombre.set(key, [g])
     }
   }
-  return index
+  return { porNombre, porId }
 }
 
-function matchGeo(c: Compromiso, geoIndex: Map<string, GeoLocalidad[]>): GeoMatch {
+function matchGeo(c: Compromiso, geoIndex: GeoIndex): GeoMatch {
   if (!c.localidad) return 'sin-dato'
+
+  const idVinculado = VINCULACION_MANUAL[normalizeName(c.localidad)]
+  if (idVinculado) {
+    return geoIndex.porId.has(idVinculado) ? 'ok' : 'sin-match'
+  }
 
   const candidatos = new Set<GeoLocalidad>()
   for (const key of candidatosLocalidad(c.localidad)) {
-    for (const g of geoIndex.get(key) ?? []) candidatos.add(g)
+    for (const g of geoIndex.porNombre.get(key) ?? []) candidatos.add(g)
   }
   if (candidatos.size === 0) return 'sin-match'
-
-  const overrideDepto = VINCULACION_MANUAL[normalizeName(c.localidad)]?.departamento
-  const deptoEsperado = overrideDepto ?? normalizeDepartamento(c.departamento)
   if (!c.departamento) return 'ok'
+  const deptoEsperado = normalizeDepartamento(c.departamento)
   if ([...candidatos].some((g) => normalizeDepartamento(g.departamento) === deptoEsperado)) {
     return 'ok'
   }
