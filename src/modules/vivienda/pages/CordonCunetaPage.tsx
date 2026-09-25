@@ -1,12 +1,12 @@
 import { useState, useMemo, useId } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { cordonCunetaApi } from '../api/vivienda.api'
+import { cordonCunetaApi, checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
   EstadoCC, MunicipioCC, MunicipioCCUpdate, MunicipioCCCreate,
-  EstadoCCCreate, EstadoCCUpdate, EstadoHistorialCC, PedidoCC, ChecklistItemCC,
+  EstadoCCCreate, EstadoCCUpdate, EstadoHistorialCC, PedidoCC,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -324,31 +324,11 @@ function HistorialEstadosTab({
   )
 }
 
-// ── Checklist Técnico (sync Google Sheet "Base TOTAL") ────────────────────────────
-
-const CHECKLIST_BLOQUES: Array<{ titulo: string; min: number; max: number }> = [
-  { titulo: 'Documentación inicial', min: 1, max: 4 },
-  { titulo: 'Proyecto técnico', min: 5, max: 14 },
-  { titulo: 'Documentación administrativa', min: 15, max: 19 },
-]
-
-function checklistValorStyle(valor: string): { bg: string; color: string } {
-  const v = valor.trim().toLowerCase()
-  if (v === 'completo ok') return { bg: '#dcfce7', color: '#166534' }
-  if (v === 'a corregir por m/c') return { bg: '#fef3c7', color: '#92400e' }
-  if (v.startsWith('en evaluaci')) return { bg: '#dbeafe', color: '#1e40af' }
-  if (v.startsWith('sin presentar')) return { bg: '#f1f5f9', color: '#64748b' }
-  return { bg: '#f1f5f9', color: '#64748b' }
-}
-
-function ChecklistValorBadge({ valor }: { valor: string }) {
-  const s = checklistValorStyle(valor)
-  return (
-    <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap" style={{ background: s.bg, color: s.color }}>
-      {valor.trim()}
-    </span>
-  )
-}
+// ── Checklist Técnico (resumen de solo lectura del módulo nuevo, spec-checklist-tecnico-dgv) ──
+// Reemplaza al viejo espejo de Google Sheet (retirado — ver docs/files/auditoria-codigo.md):
+// esta pestaña ahora lee EN VIVO lo que el área técnica carga en /vivienda/checklist-tecnico
+// (mismo entidad_id que el municipio de Cordón Cuneta, programa='cc'). Se edita desde ese panel,
+// no desde acá — el área administrativa solo mira el resumen.
 
 function fmtSincronizado(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -360,92 +340,122 @@ function fmtSincronizado(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function ChecklistTecnicoTab({ municipioId }: { municipioId: string }) {
+function ChecklistTecnicoResumenTab({ municipioId }: { municipioId: string }) {
   const { data: checklist, isLoading } = useQuery({
-    queryKey: ['cc-checklist-tecnico', municipioId],
-    queryFn: () => cordonCunetaApi.getChecklistTecnico(municipioId),
+    queryKey: ['checklist-tecnico-resumen', 'cc', municipioId],
+    queryFn: () => checklistTecnicoApi.getChecklist('cc', municipioId),
+  })
+  const { data: catalogos } = useQuery({
+    queryKey: ['checklist-catalogos'],
+    queryFn: checklistTecnicoApi.getCatalogos,
+  })
+  const { data: obsObra } = useQuery({
+    queryKey: ['checklist-tecnico-obs-obra-resumen', 'cc', municipioId],
+    queryFn: () => checklistTecnicoApi.getObsObra('cc', municipioId),
+    enabled: !!checklist,
   })
 
   if (isLoading) return <p role="status" className="text-sm text-gray-400 text-center py-8">Cargando...</p>
   if (!checklist) {
     return (
       <div className="px-5 py-8 text-center">
-        <p className="text-sm text-gray-400">Sin datos técnicos sincronizados para este municipio.</p>
-        <p className="text-xs text-gray-300 mt-1">El área técnica todavía no cargó o vinculó este municipio en su planilla de seguimiento.</p>
+        <p className="text-sm text-gray-400">El área técnica todavía no cargó este municipio en el Checklist Técnico.</p>
       </div>
     )
   }
 
-  const itemsPorBloque = (min: number, max: number) =>
-    checklist.items.filter((i: ChecklistItemCC) => i.item_num >= min && i.item_num <= max)
+  const estados = catalogos?.estados_expediente ?? []
+  const visitados = new Set(checklist.estados_visitados)
+  const excepcionVisitados = estados.filter((e) => e.en_ruta === false && visitados.has(e.id))
 
   return (
     <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-slate-50 rounded px-2.5 py-2">
-          <div className="text-gray-400 uppercase text-[10px] font-bold">Expediente</div>
-          <div className="font-mono text-gray-700">{checklist.expediente || '—'}</div>
-        </div>
-        <div className="bg-slate-50 rounded px-2.5 py-2">
-          <div className="text-gray-400 uppercase text-[10px] font-bold">Monto convenio</div>
-          <div className="font-semibold text-gov-blue">{fmtMonto(checklist.monto_convenio)}</div>
-        </div>
-        <div className="bg-slate-50 rounded px-2.5 py-2">
-          <div className="text-gray-400 uppercase text-[10px] font-bold">Cordón-Cuneta (ml)</div>
-          <div className="font-semibold">{fmtMl(checklist.cordon_cuneta_ml)}</div>
-        </div>
-        <div className="bg-slate-50 rounded px-2.5 py-2">
-          <div className="text-gray-400 uppercase text-[10px] font-bold">Adoquinado (m²)</div>
-          <div className="font-semibold">{fmtMl(checklist.adoquinado_m2)}</div>
-        </div>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Estado del expediente</p>
+        {checklist.estado_expediente_label ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {excepcionVisitados.map((e) => (
+              <span key={e.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                {e.label}
+              </span>
+            ))}
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-gov-navy text-white">
+              {checklist.estado_expediente_label}
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Sin definir</p>
+        )}
       </div>
 
-      {checklist.estado_expediente && (
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase text-gray-400">Estado del expediente</span>
-          <ChecklistValorBadge valor={checklist.estado_expediente} />
-        </div>
-      )}
-
-      {CHECKLIST_BLOQUES.map((bloque) => {
-        const items = itemsPorBloque(bloque.min, bloque.max)
-        if (items.length === 0) return null
-        return (
-          <div key={bloque.titulo}>
-            <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">{bloque.titulo}</p>
-            <ul className="space-y-1">
-              {items.map((item: ChecklistItemCC) => (
-                <li key={item.item_num} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-gray-600">{item.item_num}. {item.item_label}</span>
-                  <ChecklistValorBadge valor={item.valor} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )
-      })}
-
-      {checklist.observaciones && (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Observaciones del área técnica</p>
-          <p className="text-xs text-gray-600 whitespace-pre-line bg-slate-50 rounded p-2.5 max-h-48 overflow-y-auto">
-            {checklist.observaciones}
-          </p>
-        </div>
-      )}
-
-      {(checklist.fecha_radicacion || checklist.reparticion) && (
+      {(checklist.fecha_radicacion || checklist.reparticion_label) && (
         <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs">
           <p className="font-bold uppercase text-amber-800 text-[10px] mb-1">Expediente radicado en</p>
           <p className="text-amber-900">
-            {checklist.reparticion || '—'}
+            {checklist.reparticion_label || '—'}
             {checklist.fecha_radicacion && ` · ${new Date(checklist.fecha_radicacion + 'T00:00:00').toLocaleDateString('es-AR')}`}
           </p>
         </div>
       )}
 
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Documentación a presentar</p>
+        <ul className="space-y-1">
+          {checklist.items.map((item) => (
+            <li key={`${item.item_num}-${item.sub_item_num ?? ''}`} className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-gray-600">
+                {item.sub_item_num ? <span className="pl-3">· {item.label}</span> : <>{item.item_num}. {item.label}</>}
+              </span>
+              <span
+                className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+                style={{ background: item.bg, color: item.text_color }}
+              >
+                {item.item_estado_label}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {checklist.hitos && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Ejecución de obra</p>
+          <div className="grid grid-cols-2 gap-2">
+            {checklist.hitos.map((h) => (
+              <div key={h.tipo} className="bg-slate-50 rounded px-2.5 py-2 text-xs">
+                <div className="text-gray-400 uppercase text-[10px] font-bold">{h.label}</div>
+                <div className="font-semibold text-gov-blue">{h.monto !== null ? fmtMonto(h.monto) : '—'}</div>
+                <div className={`text-[10px] mt-0.5 ${h.fecha_acreditado ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                  {h.fecha_acreditado ? `Acreditado ${new Date(h.fecha_acreditado + 'T00:00:00').toLocaleDateString('es-AR')}` : 'Pendiente'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Observaciones de obra</p>
+        {!obsObra || obsObra.length === 0 ? (
+          <p className="text-xs text-gray-400">Sin observaciones de obra cargadas.</p>
+        ) : (
+          <ul className="space-y-2 max-h-48 overflow-y-auto">
+            {obsObra.map((o) => (
+              <li key={o.id} className="text-xs">
+                <div className="font-bold text-gov-navy">{new Date(o.fecha + 'T00:00:00').toLocaleDateString('es-AR')}</div>
+                <p className="text-gray-600">{o.descripcion}</p>
+                {(o.created_by_nombre || o.created_by) && (
+                  <p className="text-[10px] text-gray-400">{o.created_by_nombre || o.created_by}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <p className="text-[10px] text-gray-300 text-right pt-1">
-        Sincronizado {fmtSincronizado(checklist.last_synced_at)} · datos de solo lectura (planilla del área técnica)
+        Datos de solo lectura — se cargan en Checklist Técnico. Última actualización {fmtSincronizado(checklist.updated_at)}
+        {checklist.updated_by ? ` (${checklist.updated_by})` : ''}.
       </p>
     </div>
   )
@@ -609,8 +619,8 @@ function DetailPanel({
             <HistorialEstadosTab municipioId={municipio.id} estados={estados} />
           </div>
         )}
-        {/* Tab: Checklist Técnico (sync Google Sheet) */}
-        {tab === 'checklist' && <ChecklistTecnicoTab municipioId={municipio.id} />}
+        {/* Tab: Checklist Técnico (resumen del módulo nuevo, solo lectura) */}
+        {tab === 'checklist' && <ChecklistTecnicoResumenTab municipioId={municipio.id} />}
       </div>
     </>
   )
