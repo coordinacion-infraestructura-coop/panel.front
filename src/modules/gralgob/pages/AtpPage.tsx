@@ -1,8 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { atpApi, type Compromiso, type CronogramaPago, type GeoLocalidad } from '../api/atp.api'
+import { atpApi, type Compromiso, type CronogramaPago } from '../api/atp.api'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
-import { normalizeName } from '../../../shared/utils/normalizeName'
 
 // Panel preliminar de solo lectura (spec-sync-atp-compromiso-gobernador.md
 // §12) — espeja atp_compromisos tal cual está sincronizado desde la hoja
@@ -46,128 +45,22 @@ function pendiente(c: Compromiso): number | null {
 }
 
 // ── Cruce Departamento/Localidad contra el padrón geográfico canónico ────────
-// (viv_geo_localidades) — el Sheet trae texto libre tipeado a mano por el
-// área, así que puede haber variantes de tildes/mayúsculas, abreviaturas de
-// departamento, alias entre paréntesis, o localidades que directamente no
-// están en el padrón. Investigado contra datos reales (2026-09-23, rama
-// atp-comGob): de 57 discrepancias iniciales, 39 eran falsos positivos de un
-// matching demasiado simple (27 abreviaturas de depto tipo "General"/"Gral",
-// 12 alias entre paréntesis/guion como ya resuelve `candidatos_localidad()`
-// del backend). De las 18 restantes, 17 tienen vinculación manual confirmada
-// con el usuario (`VINCULACION_MANUAL`, por `id_geo` exacto) — quedan
-// resueltas como "ok" aunque el texto no coincida letra por letra. Solo
-// **Santiago Temple** (Río Segundo) sigue sin resolver: es una localidad real
-// que falta directamente en `viv_geo_localidades` — pendiente de que el área
-// de Vivienda la agregue al padrón, no es un problema de este panel ni del
-// Sheet de ATP. Ver spec-sync-atp-compromiso-gobernador.md §12.8 para el
-// detalle completo de cada caso.
-type GeoMatch = 'ok' | 'depto-distinto' | 'sin-match' | 'sin-dato'
+// El matching (alias entre paréntesis/guion, vinculación manual confirmada
+// para las localidades que el Sheet escribe distinto al padrón, etc.) ya no
+// se recalcula acá: lo resuelve el backend en sync-time contra
+// `viv_geo_localidades` (ADR-024) y lo persiste en `id_geo`/`match_tipo` —
+// ver docs/files/spec-normalizacion-localidades.md §4.5 y el detalle
+// caso-por-caso original en spec-sync-atp-compromiso-gobernador.md §12.8/§12.9.
+type GeoMatch = 'ok' | 'sin-match' | 'sin-dato'
 
-// Igual a candidatos_localidad() de app/geo/matching.py — alias entre
-// paréntesis ("VILLA DE SOTO (Est. Soto)") y nombres separados por guion
-// ("CHILIBROSTE - SANTA CECILIA"). Se aplica tanto al nombre que trae el
-// Sheet como al que trae el padrón, para que matcheen sin importar de qué
-// lado está el alias.
-function candidatosLocalidad(nombre: string | null | undefined): Set<string> {
-  const keys = new Set<string>()
-  if (!nombre) return keys
-  keys.add(normalizeName(nombre))
-  keys.add(normalizeName(nombre.split('(')[0]))
-  const m = nombre.match(/\(([^)]*)\)/)
-  if (m) {
-    keys.add(normalizeName(m[1]))
-    keys.add(normalizeName(m[1]).replace(/^(est\.?|estacion)\s*\.?\s*/, ''))
-  }
-  for (const parte of nombre.split(' - ')) {
-    keys.add(normalizeName(parte))
-  }
-  keys.delete('')
-  return keys
-}
-
-// El Sheet escribe el departamento completo ("GENERAL ROCA", "PRESIDENTE
-// ROQUE SAENZ PEÑA"); el padrón lo abrevia ("GRAL ROCA", "PTE ROQUE SAENZ
-// PEÑA"). Mismo lugar, solo normalizar la abreviatura para que comparen igual.
-function normalizeDepartamento(s: string | null | undefined): string {
-  return normalizeName(s)
-    .replace(/\bgeneral\b/g, 'gral')
-    .replace(/\bpresidente\b/g, 'pte')
-}
-
-// Vinculación manual confirmada con el usuario (2026-09-23) para localidades
-// del Sheet que el matching automático no puede resolver por sí solo —
-// nombres abreviados/incompletos, typos de una letra, o formato distinto al
-// del padrón (paréntesis del lado del padrón pero no del Sheet). Clave:
-// normalizeName(localidad tal cual la escribe el Sheet) -> id_geo real en
-// viv_geo_localidades. Ver spec-sync-atp-compromiso-gobernador.md §12.8 para
-// el detalle de cada caso (qué decía el Sheet, qué dice el padrón, por qué
-// el matching automático no lo resolvía solo).
-const VINCULACION_MANUAL: Record<string, string> = {
-  [normalizeName('Paso del Durazno')]: '443', // límite Juárez Celman/Río Cuarto — se usa el depto del padrón oficial (Río Cuarto)
-  [normalizeName('Nicolás Bruzzone')]: '55', // padrón: "Nicolas Bruzone" (una sola z)
-  [normalizeName('Huanchilla')]: '92', // padrón: "Huanchillas" (plural)
-  [normalizeName("Capitán General Bernardo O'Higgins")]: '103', // padrón: "Cap. Gral. B.Ohiggins"
-  [normalizeName('Colonia Barge')]: '105', // padrón: "Castro Urdiales - Colonia 25 de Mayo"
-  [normalizeName('General Levalle')]: '128', // padrón: "General Le Valle" (con espacio)
-  [normalizeName('Villa Río Icho Cruz')]: '158', // padrón: "Icho Cruz"
-  [normalizeName('La Carolina El Potosí')]: '170', // padrón: "La Carolina (El Potosí)"
-  [normalizeName('Las Peñas Sud')]: '175', // padrón: "Las Peñas Sur"
-  [normalizeName('Santa Catalina Holmberg')]: '182', // padrón: "Santa Catalina (Est. Holmberg)"
-  [normalizeName('Montecristo')]: '392', // padrón: "Monte Cristo" (con espacio)
-  [normalizeName('Villa de María')]: '221', // padrón: "Villa de Maria de Rio Seco"
-  [normalizeName('San Javier y Yacanto')]: '261', // padrón solo lista "San Javier" — el área confirmó que es la forma abreviada de la misma localidad
-  [normalizeName('Miramar de Ansenuza')]: '289', // padrón: "Miramar"
-  [normalizeName('Saturnino María Laspiur')]: '296', // padrón: "Saturnino M. Laspiur"
-  [normalizeName('Dalmacio Vélez')]: '324', // padrón: "Dalmacio Velez Sarsfield"
-  [normalizeName('James Craik')]: '327', // padrón: "James Craick" (con c)
-}
-
-interface GeoIndex {
-  porNombre: Map<string, GeoLocalidad[]>
-  porId: Map<string, GeoLocalidad>
-}
-
-function buildGeoIndex(geo: GeoLocalidad[]): GeoIndex {
-  const porNombre = new Map<string, GeoLocalidad[]>()
-  const porId = new Map<string, GeoLocalidad>()
-  for (const g of geo) {
-    if (!g.activo) continue
-    porId.set(g.id_geo, g)
-    for (const key of candidatosLocalidad(g.localidad)) {
-      const arr = porNombre.get(key)
-      if (arr) arr.push(g)
-      else porNombre.set(key, [g])
-    }
-  }
-  return { porNombre, porId }
-}
-
-function matchGeo(c: Compromiso, geoIndex: GeoIndex): GeoMatch {
+function matchGeo(c: Compromiso): GeoMatch {
   if (!c.localidad) return 'sin-dato'
-
-  const idVinculado = VINCULACION_MANUAL[normalizeName(c.localidad)]
-  if (idVinculado) {
-    return geoIndex.porId.has(idVinculado) ? 'ok' : 'sin-match'
-  }
-
-  const candidatos = new Set<GeoLocalidad>()
-  for (const key of candidatosLocalidad(c.localidad)) {
-    for (const g of geoIndex.porNombre.get(key) ?? []) candidatos.add(g)
-  }
-  if (candidatos.size === 0) return 'sin-match'
-  if (!c.departamento) return 'ok'
-  const deptoEsperado = normalizeDepartamento(c.departamento)
-  if ([...candidatos].some((g) => normalizeDepartamento(g.departamento) === deptoEsperado)) {
-    return 'ok'
-  }
-  return 'depto-distinto'
+  return c.match_tipo ? 'ok' : 'sin-match'
 }
 
 function GeoMatchBadge({ estado }: { estado: GeoMatch }) {
   if (estado === 'ok' || estado === 'sin-dato') return null
-  const texto = estado === 'sin-match'
-    ? 'Esta localidad no se encontró en el padrón geográfico (viv_geo_localidades) — puede ser un error de tipeo en el Sheet.'
-    : 'Esta localidad existe en el padrón, pero en un departamento distinto al cargado en el Sheet.'
+  const texto = 'Esta localidad no se encontró en el padrón geográfico (viv_geo_localidades) — puede ser un error de tipeo en el Sheet.'
   return (
     <span
       title={texto}
@@ -246,11 +139,9 @@ function DetailPanel({
               Este compromiso fue derivado a otra área para su ejecución.
             </p>
           )}
-          {geoMatch !== 'ok' && geoMatch !== 'sin-dato' && (
+          {geoMatch === 'sin-match' && (
             <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2.5 py-1.5">
-              {geoMatch === 'sin-match'
-                ? 'Localidad no encontrada en el padrón geográfico (viv_geo_localidades) — revisar cómo está tipeada en el Sheet.'
-                : 'Localidad encontrada en el padrón, pero en otro departamento al cargado acá.'}
+              Localidad no encontrada en el padrón geográfico (viv_geo_localidades) — revisar cómo está tipeada en el Sheet.
             </p>
           )}
         </div>
@@ -294,14 +185,8 @@ export function AtpPage() {
     queryFn: atpApi.syncEstado,
     staleTime: 60 * 1000,
   })
-  const geoQ = useQuery({
-    queryKey: ['gralgob-atp-geo-localidades'],
-    queryFn: atpApi.geoLocalidades,
-    staleTime: 30 * 60 * 1000, // padrón geográfico, cambia poquísimo
-  })
 
   const compromisos = compromisosQ.data?.items ?? []
-  const geoIndex = useMemo(() => buildGeoIndex(geoQ.data ?? []), [geoQ.data])
 
   const deptoId = useId()
   const localidadId = useId()
@@ -342,10 +227,10 @@ export function AtpPage() {
       if (deptoFilter && c.departamento !== deptoFilter) return false
       if (localidadFilter && c.localidad !== localidadFilter) return false
       if (ministerioFilter && c.ministerio_destino !== ministerioFilter) return false
-      if (soloSinPadron && matchGeo(c, geoIndex) === 'ok') return false
+      if (soloSinPadron && matchGeo(c) === 'ok') return false
       return true
     })
-  }, [compromisos, deptoFilter, localidadFilter, ministerioFilter, soloSinPadron, geoIndex])
+  }, [compromisos, deptoFilter, localidadFilter, ministerioFilter, soloSinPadron])
 
   const hasFilters = !!(deptoFilter || localidadFilter || ministerioFilter || soloSinPadron)
 
@@ -353,7 +238,7 @@ export function AtpPage() {
     const montoTotal = compromisos.reduce((acc, c) => acc + (c.monto ?? 0), 0)
     const entregadoTotal = compromisos.reduce((acc, c) => acc + entregado(c), 0)
     const derivados = compromisos.filter((c) => c.derivado).length
-    const sinPadron = compromisos.filter((c) => matchGeo(c, geoIndex) !== 'ok' && matchGeo(c, geoIndex) !== 'sin-dato').length
+    const sinPadron = compromisos.filter((c) => matchGeo(c) === 'sin-match').length
     return [
       { value: compromisos.length, label: 'Compromisos ATP', accent: 'navy' },
       { value: fmtMonto(montoTotal), label: 'Monto total anunciado', accent: 'cyan' },
@@ -362,7 +247,7 @@ export function AtpPage() {
       { value: derivados, label: 'Derivados a otra área', accent: 'navy' },
       { value: sinPadron, label: 'Sin coincidencia en el padrón geo', accent: 'red' },
     ]
-  }, [compromisos, geoIndex])
+  }, [compromisos])
 
   const isLoading = compromisosQ.isLoading
   const isError = compromisosQ.isError
@@ -480,7 +365,7 @@ export function AtpPage() {
                                 {c.localidad ?? '—'}
                                 <span className="block text-[9px] font-normal text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity leading-none">Ver entregas</span>
                               </span>
-                              <GeoMatchBadge estado={matchGeo(c, geoIndex)} />
+                              <GeoMatchBadge estado={matchGeo(c)} />
                             </button>
                           </td>
                           <td className="px-2.5 py-1.5 font-mono text-gray-500 whitespace-nowrap" style={{ fontSize: '11px' }}>{c.nro_expediente || '—'}</td>
@@ -517,7 +402,7 @@ export function AtpPage() {
       {detailTarget && (
         <DetailPanel
           compromiso={detailTarget}
-          geoMatch={matchGeo(detailTarget, geoIndex)}
+          geoMatch={matchGeo(detailTarget)}
           onClose={() => setDetailTarget(null)}
         />
       )}
