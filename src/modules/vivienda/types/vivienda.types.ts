@@ -643,6 +643,9 @@ export interface EntidadChecklistItem {
   id: string
   nombre: string
   departamento: string | null
+  // Resuelto contra viv_geo_localidades (ADR-024) — permite agrupar la misma
+  // localidad real entre CC/CH/ML aunque el texto crudo difiera.
+  id_geo: string | null
 }
 
 export interface PedidoChecklist {

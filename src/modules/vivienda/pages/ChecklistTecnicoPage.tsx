@@ -115,8 +115,14 @@ export function ChecklistTecnicoPage() {
 
   const grupos = useMemo<LocalidadGroup[]>(() => {
     const map = new Map<string, LocalidadGroup>()
-    const upsert = (programa: ProgramaChecklist, id: string, nombre: string, departamento: string | null) => {
-      const key = `${normalize(nombre)}|${normalize(departamento ?? '')}`
+    // Prioriza id_geo (resuelto server-side contra viv_geo_localidades, ADR-024) como
+    // clave de agrupación — dos entidades con el mismo id_geo son la misma localidad real
+    // aunque su texto crudo difiera (ej. "GENERAL BALDISSERA" en CC vs "GENERAL BALDISERA"
+    // en CH). Sin id_geo resuelto cae al texto normalizado, como antes.
+    const upsert = (
+      programa: ProgramaChecklist, id: string, nombre: string, departamento: string | null, idGeo: string | null,
+    ) => {
+      const key = idGeo ? `geo:${idGeo}` : `txt:${normalize(nombre)}|${normalize(departamento ?? '')}`
       let g = map.get(key)
       if (!g) {
         g = { key, nombre, departamento, programs: {} }
@@ -124,7 +130,7 @@ export function ChecklistTecnicoPage() {
       }
       g.programs[programa] = { id, nombre }
     }
-    for (const e of entidades ?? []) upsert(e.programa, e.id, e.nombre, e.departamento)
+    for (const e of entidades ?? []) upsert(e.programa, e.id, e.nombre, e.departamento, e.id_geo)
     return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   }, [entidades])
 
