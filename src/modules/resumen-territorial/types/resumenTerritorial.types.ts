@@ -46,6 +46,8 @@ export interface ResumenLocalidad {
   id_geo: string | null // ADR-024 — llave de join con svc-datos-externos
   localidad: string
   departamento: string | null
+  lat_centro: number | null // centroide del padrón — zoom del mapa a la localidad
+  lon_centro: number | null
   // Censo 2022 + transferencias automáticas (svc-datos-externos, ADR-025).
   // Todos null si no hubo match de id_geo o la federación está apagada/caída.
   categoria: 'MU' | 'CO' | null

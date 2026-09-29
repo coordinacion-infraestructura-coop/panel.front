@@ -428,6 +428,8 @@ export function ResumenTerritorialPage() {
           id_geo: null,
           localidad: p.localidad,
           departamento: p.departamento,
+          lat_centro: null,
+          lon_centro: null,
           categoria: null,
           poblacion_2022: null,
           viviendas_2022: null,
@@ -509,6 +511,14 @@ export function ResumenTerritorialPage() {
   useEffect(() => {
     if (fLoc && !opcionesLoc.includes(fLoc)) setFLoc('')
   }, [fDep])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Si se elige una localidad directo (sin haber elegido antes su departamento),
+  // completar fDep para que el breadcrumb y el resalte del mapa queden consistentes.
+  useEffect(() => {
+    if (!fLocActivo || fDep) return
+    const real = payload?.localidades.find((l) => l.localidad === fLocActivo)?.departamento
+    if (real) setFDep(real)
+  }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     const nq = norm(q)
@@ -752,10 +762,50 @@ export function ResumenTerritorialPage() {
               )}
             </nav>
 
+            {/* Ir a: departamento/localidad — controla el mapa (zoom + resalte) y la
+                tabla de abajo a la vez, no solo la tabla (feedback QA visual Etapa 3). */}
+            <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-lg p-3">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mr-1">
+                Ir a
+              </span>
+              <select
+                value={fDep}
+                onChange={(e) => setFDep(e.target.value)}
+                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
+              >
+                <option value="">Toda la provincia</option>
+                {opciones.deps.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </select>
+              <input
+                list="rt-loc-list"
+                value={fLoc}
+                onChange={(e) => setFLoc(e.target.value)}
+                placeholder={fDep ? `Localidad de ${fDep}…` : 'Localidad…'}
+                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5 min-w-[170px]"
+              />
+              <datalist id="rt-loc-list">
+                {opcionesLoc.map((l) => <option key={l} value={l} />)}
+              </datalist>
+              {(fDep || fLocActivo) && (
+                <button
+                  onClick={() => {
+                    setFDep('')
+                    setFLoc('')
+                  }}
+                  className="text-xs text-gov-blue"
+                >
+                  ✕ Volver a la provincia
+                </button>
+              )}
+            </div>
+
             <VistaProvincia
               payload={payload}
               departamentoSeleccionado={fDep || null}
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
+              localidadSeleccionada={fLocActivo || null}
             />
 
             <button
@@ -847,27 +897,11 @@ export function ResumenTerritorialPage() {
             {fichaError && <p className="text-xs text-red-600">{fichaError}</p>}
             {exportAviso && <p className="text-xs text-amber-600">{exportAviso}</p>}
 
-            {/* Filtros */}
+            {/* Filtros (departamento/localidad viven arriba, junto al mapa) */}
             <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-lg p-3">
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mr-1">
                 Filtros
               </span>
-              <select value={fDep} onChange={(e) => setFDep(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                <option value="">Todos los departamentos</option>
-                {opciones.deps.map((d) => (
-                  <option key={d}>{d}</option>
-                ))}
-              </select>
-              <input
-                list="rt-loc-list"
-                value={fLoc}
-                onChange={(e) => setFLoc(e.target.value)}
-                placeholder={fDep ? `Localidad de ${fDep}…` : 'Localidad…'}
-                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5 min-w-[170px]"
-              />
-              <datalist id="rt-loc-list">
-                {opcionesLoc.map((l) => <option key={l} value={l} />)}
-              </datalist>
               {opciones.areas.length > 1 && (
                 <select value={fArea} onChange={(e) => setFArea(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
                   <option value="">Todas las áreas</option>

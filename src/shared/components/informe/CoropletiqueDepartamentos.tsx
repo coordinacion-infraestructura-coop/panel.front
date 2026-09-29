@@ -61,6 +61,8 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
   label,
   seleccionado = null,
   onDepartamentoClick,
+  puntoZoom = null,
+  zoomPunto = 12,
   paleta = 'blues',
   height = 460,
   centerLat = -31.5,
@@ -76,10 +78,13 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
   formatValor?: (v: number) => string
   /** Título de la leyenda. Default: "Cobertura %"/"Cantidad" para las métricas legado. */
   label?: string
-  /** Departamento normalizado ya elegido en otro filtro — se resalta en el mapa (filtro bidireccional). */
+  /** Departamento normalizado ya elegido en otro filtro — se resalta y hace zoom (filtro bidireccional). */
   seleccionado?: string | null
   /** Clic en un departamento — filtro bidireccional (spec §4, Etapa 3). */
   onDepartamentoClick?: (departamento: string) => void
+  /** Centroide de una localidad elegida — zoom de punto, tiene prioridad sobre `seleccionado`. */
+  puntoZoom?: { lat: number; lon: number } | null
+  zoomPunto?: number
   paleta?: keyof typeof PALETAS
   height?: number
   centerLat?: number
@@ -149,6 +154,7 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
     }
 
     const seleccionadoNorm = seleccionado ? normalizeName(seleccionado) : null
+    let capaSeleccionada: L.Layer | null = null
 
     geoLayerRef.current?.remove()
     geoLayerRef.current = L.geoJSON(geoJson, {
@@ -188,9 +194,23 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
           const el = (layer as L.Path).getElement?.() as HTMLElement | undefined
           el?.style.setProperty('cursor', 'pointer')
         }
+        if (seleccionadoNorm !== null && normalizeName(nombre) === seleccionadoNorm) {
+          capaSeleccionada = layer
+        }
       },
     }).addTo(mapRef.current)
-  }, [geoJson, data, metrica, escala, centroDivergente, paleta, seleccionado, onDepartamentoClick])
+
+    // Zoom del mapa: a la localidad si hay punto (más específico), si no al
+    // departamento seleccionado, si no volver a la vista provincial completa
+    // — filtro bidireccional con zoom real (spec §4, feedback QA visual Etapa 3).
+    if (puntoZoom) {
+      mapRef.current.setView([puntoZoom.lat, puntoZoom.lon], zoomPunto)
+    } else if (capaSeleccionada) {
+      mapRef.current.fitBounds((capaSeleccionada as L.Polygon).getBounds(), { padding: [24, 24], maxZoom: 10 })
+    } else {
+      mapRef.current.setView([centerLat, centerLon], zoom)
+    }
+  }, [geoJson, data, metrica, escala, centroDivergente, paleta, seleccionado, onDepartamentoClick, puntoZoom, zoomPunto])
 
   useEffect(
     () => () => {

@@ -39,15 +39,26 @@ export function VistaProvincia({
   payload,
   departamentoSeleccionado,
   onSelectDepartamento,
+  localidadSeleccionada,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
   onSelectDepartamento: (departamento: string) => void
+  /** Nombre exacto de la localidad elegida arriba (fLocActivo de la página) — hace zoom de punto en el mapa. */
+  localidadSeleccionada: string | null
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
 
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
   const kpis = useMemo(() => calcularKpisProvincia(payload), [payload])
+
+  const puntoZoom = useMemo(() => {
+    if (!localidadSeleccionada) return null
+    const loc = payload.localidades.find((l) => l.localidad === localidadSeleccionada)
+    return loc?.lat_centro != null && loc?.lon_centro != null
+      ? { lat: loc.lat_centro, lon: loc.lon_centro }
+      : null
+  }, [payload, localidadSeleccionada])
 
   const mapData: DatoMapa[] = useMemo(
     () =>
@@ -122,10 +133,12 @@ export function VistaProvincia({
           formatValor={(v) => formatValorMetrica(metrica, v)}
           seleccionado={departamentoSeleccionado}
           onDepartamentoClick={onSelectDepartamento}
+          puntoZoom={puntoZoom}
           height={440}
         />
         <p className="text-[11px] text-gray-400 mt-2">
-          {metricaInfo.label}. Clic en un departamento para filtrar la tabla de abajo por esa zona.
+          {metricaInfo.label}. Clic en un departamento, o elegí departamento/localidad arriba, para
+          hacer zoom y filtrar la tabla de abajo por esa zona.
           {metrica === 'focalizacion_atp' &&
             ' Índice = % de la inversión ATP que recibió el depto / % de la población provincial que vive ahí — 1.00 es proporcional.'}
         </p>
