@@ -5,14 +5,19 @@ export function BarChart({
   labels,
   values,
   color = '#01aae3',
+  colors,
   horizontal = false,
   height = 300,
+  tooltipSuffix = '',
 }: {
   labels: string[]
   values: number[]
   color?: string
+  /** Color por barra (ej. escala divergente) — si viene, gana sobre `color`. */
+  colors?: string[]
   horizontal?: boolean
   height?: number
+  tooltipSuffix?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chartRef = useRef<Chart | null>(null)
@@ -22,12 +27,15 @@ export function BarChart({
     chartRef.current?.destroy()
     chartRef.current = new Chart(canvasRef.current, {
       type: 'bar',
-      data: { labels, datasets: [{ data: values, backgroundColor: color, borderRadius: 3 }] },
+      data: { labels, datasets: [{ data: values, backgroundColor: colors ?? color, borderRadius: 3 }] },
       options: {
         indexAxis: horizontal ? 'y' : 'x',
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: { display: false },
+          tooltip: tooltipSuffix ? { callbacks: { label: (ctx) => `${ctx.formattedValue}${tooltipSuffix}` } } : undefined,
+        },
         scales: {
           x: { ticks: { font: { size: 10 } }, grid: { display: !horizontal } },
           y: { ticks: { font: { size: 10 } }, grid: { display: horizontal } },
@@ -35,7 +43,7 @@ export function BarChart({
       },
     })
     return () => chartRef.current?.destroy()
-  }, [labels, values, color, horizontal])
+  }, [labels, values, color, colors, horizontal, tooltipSuffix])
 
   return (
     <div style={{ position: 'relative', height }}>

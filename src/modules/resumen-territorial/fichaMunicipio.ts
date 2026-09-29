@@ -1,8 +1,12 @@
-// Ficha de municipio (imprimible) — junta datos de 5 fuentes para un municipio y
+// Ficha de municipio (imprimible) — junta datos de 7 fuentes para un municipio y
 // arma un PDF y un Excel. Todo client-side, con el token del usuario.
 
 import apiClient from '../../shared/api/client'
 import { exportToXlsx } from '../../shared/utils/exportTable'
+import { gasiferaPitApi } from '../gasifera/api/gasiferaPit.api'
+import type { AccionTerritorio } from '../gasifera/api/gasiferaPit.api'
+import { atpApi } from '../gralgob/api/atp.api'
+import type { Compromiso, CronogramaPago } from '../gralgob/api/atp.api'
 import { cordobaHogarApi, cordonCunetaApi, miLugarApi } from '../vivienda/api/vivienda.api'
 import type { EstadoCC, EstadoCH, EstadoML } from '../vivienda/types/vivienda.types'
 import { fichaLocalidadApi } from './api/fichaLocalidad.api'
@@ -85,6 +89,27 @@ interface GestionApiItem {
   nro_expediente?: string | null
 }
 
+// Fila de acción en territorio de svc-gasifera ya resuelta para la ficha.
+interface GasiferaFila {
+  id: string
+  area: string
+  accion: string
+  etapa: string          // detalle_accion
+  estado: string
+  monto_solicitado: number | null
+}
+
+// Fila de compromiso ATP (svc-gralgob) + su cronograma de entregas.
+interface AtpFila {
+  id: string
+  ministerio_destino: string
+  fecha_anuncio: string
+  destino: string
+  monto: number | null
+  entregado: number | null   // abs(total_pagado) — mismo criterio que AtpPage.tsx
+  entregas: { periodo: string; monto: number }[]
+}
+
 export interface FichaMunicipio {
   departamento: string
   localidad: string
@@ -100,6 +125,8 @@ export interface FichaMunicipio {
   cordonCuneta: null | { monto: string; estado_general: string; estado_bg: string | null; updated_at: string; volumen: string; avance: string; ok_gob: string }
   miLugar: { lotes: string; monto: string; etecnico: string; ejuridico: string; efinanciero: string; estado_general: string; estado_bg: string | null; avance: string; updated_at: string; ok_gob: string }[]
   gestiones: { total: number; filas: GestionFila[] }
+  gasifera: { total: number; filas: GasiferaFila[] }
+  atp: { total: number; filas: AtpFila[] }
 }
 
 async function catCategoriasMap(): Promise<Map<string, string>> {
@@ -141,10 +168,20 @@ async function movimientosDeGestion(idGestion: string): Promise<{ ultimo_mov: st
   }
 }
 
+/** Compara (departamento, localidad) de una fuente contra el municipio de la
+ *  ficha — exige coincidencia de localidad siempre y de departamento sólo
+ *  cuando la fuente lo trae (evita colisión de nombres de localidad repetidos
+ *  entre departamentos, mismo riesgo que documentó §2 sobre el join viejo por
+ *  nombre normalizado en spec-resumen-territorial-ficha-localidad.md). */
+function mismoMunicipio(departamento: string, nl: string, depto?: string | null, loc?: string | null): boolean {
+  if (norm(loc ?? '') !== nl) return false
+  return !depto || norm(depto) === norm(departamento)
+}
+
 /** Junta toda la ficha para (departamento, localidad). */
 export async function armarFichaMunicipio(departamento: string, localidad: string): Promise<FichaMunicipio> {
   const nl = norm(localidad)
-  const [li, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap] = await Promise.all([
+  const [li, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
     cordobaHogarApi.getPanel().catch(() => null),
     cordonCunetaApi.getPanel().catch(() => null),
@@ -157,6 +194,8 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
     catalogoNombreMap('ministerios').catch(() => new Map<string, string>()),
     catalogoNombreMap('tipos-gestion').catch(() => new Map<string, string>()),
     campoTrabajoMap().catch(() => new Map<number, string>()),
+    gasiferaPitApi.accionesTerritorio().catch(() => ({ items: [] as AccionTerritorio[], total: 0 })),
+    atpApi.compromisos().catch(() => ({ items: [] as Compromiso[], total: 0 })),
   ])
 
   const chEstados: EstadoCH[] = chPanel?.estados ?? []
@@ -170,6 +209,16 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
   // fecha_evento) + "Derivado A" (metadata_json.derivado_a del último evento que lo tenga).
   const items = gestResp.items ?? []
   const movs = await Promise.all(items.map((g) => movimientosDeGestion(g.id_gestion)))
+
+  // svc-gasifera y svc-gralgob no ofrecen filtro por departamento/localidad en
+  // sus endpoints de solo lectura (carve-out §12 de sus specs de sync) — se
+  // trae la lista completa (datasets moderados, mismo criterio que sus
+  // paneles preliminares) y se filtra acá, igual que CH/CC/ML.
+  const gasItems = (gasResp.items ?? []).filter((a) => mismoMunicipio(departamento, nl, a.departamento, a.localidad))
+  const atpItems = (atpResp.items ?? []).filter((c) => mismoMunicipio(departamento, nl, c.departamento, c.localidad))
+  const atpCronogramas = await Promise.all(
+    atpItems.map((c) => atpApi.cronograma(c.id).catch(() => [] as CronogramaPago[])),
+  )
 
   return {
     departamento,
@@ -233,6 +282,29 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
         nro_expediente: g.nro_expediente,
         ultimo_mov: movs[i].ultimo_mov,
       })).sort(compararGestionFila),
+    },
+    gasifera: {
+      total: gasItems.length,
+      filas: gasItems.map((a) => ({
+        id: a.id,
+        area: a.area || '—',
+        accion: a.accion || '—',
+        etapa: a.detalle_accion || '—',
+        estado: a.estado || '—',
+        monto_solicitado: a.monto_inversion_solicitado ?? null,
+      })),
+    },
+    atp: {
+      total: atpItems.length,
+      filas: atpItems.map((c, i) => ({
+        id: c.id,
+        ministerio_destino: c.ministerio_destino || '—',
+        fecha_anuncio: fmtFecha(c.fecha_anuncio),
+        destino: c.destino || '—',
+        monto: c.monto ?? null,
+        entregado: c.total_pagado != null ? Math.abs(c.total_pagado) : null,
+        entregas: (atpCronogramas[i] ?? []).map((p) => ({ periodo: p.periodo, monto: p.monto })),
+      })),
     },
   }
 }
@@ -411,6 +483,64 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     })
   }
 
+  // ── Gasífera (acciones en territorio) ──
+  heading(`Gasífera — Acciones en Territorio  |  Total ${f.gasifera.total}`)
+  if (!f.gasifera.filas.length) {
+    vacio()
+  } else {
+    f.gasifera.filas.forEach((g, i) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
+      const accLns = doc.splitTextToSize(`Acción: ${g.accion}`, W) as string[]
+      const etapaLns = doc.splitTextToSize(`Etapa: ${g.etapa}`, W) as string[]
+      ensure(60 + accLns.length * 12 + etapaLns.length * 12 + (i ? 24 : 0))
+      if (i && y > M) {
+        y += 8
+        doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y, M + W, y)
+        y += 16
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
+      doc.text(doc.splitTextToSize(`Área: ${g.area}`, W) as string[], M, y); y += 14
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
+      doc.text(accLns, M, y); y += accLns.length * 12
+      doc.setTextColor(...GRAY)
+      doc.text(etapaLns, M, y); y += etapaLns.length * 12
+      doc.text(`Estado: ${g.estado}`, M, y); y += 12
+      doc.text(`Monto solicitado: ${g.monto_solicitado != null ? fmtNum(g.monto_solicitado) : '—'}`, M, y); y += 4
+    })
+  }
+
+  // ── ATP (compromiso Gobernador) ──
+  heading(`ATP — Compromiso Gobernador  |  Total ${f.atp.total}`)
+  if (!f.atp.filas.length) {
+    vacio()
+  } else {
+    f.atp.filas.forEach((c, i) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5)
+      const destinoLns = doc.splitTextToSize(`Destino: ${c.destino}`, W) as string[]
+      const entregasTxt = c.entregas.length
+        ? c.entregas.map((e) => `${e.periodo.slice(0, 7)}: ${fmtNum(e.monto)}`).join(' · ')
+        : 'Sin entregas registradas'
+      const entLns = doc.splitTextToSize(`Entregas: ${entregasTxt}`, W) as string[]
+      ensure(76 + destinoLns.length * 12 + entLns.length * 12 + (i ? 24 : 0))
+      if (i && y > M) {
+        y += 8
+        doc.setDrawColor(220); doc.setLineWidth(0.6); doc.line(M, y, M + W, y)
+        y += 16
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setInk()
+      doc.text(doc.splitTextToSize(`Ministerio Destino: ${c.ministerio_destino}`, W) as string[], M, y); y += 14
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...INK)
+      doc.text(destinoLns, M, y); y += destinoLns.length * 12
+      doc.setTextColor(...GRAY)
+      doc.text(`Fecha de anuncio: ${c.fecha_anuncio}`, M, y); y += 12
+      doc.text(
+        `Monto: ${c.monto != null ? fmtNum(c.monto) : '—'}   |   Entregado: ${c.entregado != null ? fmtNum(c.entregado) : '—'}`,
+        M, y,
+      ); y += 12
+      doc.text(entLns, M, y); y += entLns.length * 12 + 4
+    })
+  }
+
   // ── Pie de página en todas las hojas ──
   const total = doc.getNumberOfPages()
   const gen = new Date().toLocaleString('es-AR')
@@ -478,13 +608,28 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     'Último movimiento': g.ultimo_mov || '',
     'Nro expediente': g.nro_expediente || 'Sin Expediente',
   }))
+  const gasif = f.gasifera.filas.map((g) => ({
+    Campo: g.area,
+    Valor: `${g.accion} | ${g.etapa} | ${g.estado} | $${g.monto_solicitado != null ? fmtNum(g.monto_solicitado) : '—'}`,
+  }))
+  const atp = f.atp.filas.map((c) => ({
+    Campo: c.ministerio_destino,
+    Valor: `${c.destino} | anuncio ${c.fecha_anuncio} | monto $${c.monto != null ? fmtNum(c.monto) : '—'}`
+      + ` | entregado $${c.entregado != null ? fmtNum(c.entregado) : '—'} | ${c.entregas.length} entrega(s)`,
+  }))
   // dos hojas: ficha (clave/valor) y gestiones (tabla) — exportToXlsx sólo hace 1 hoja,
-  // así que apilamos: primero la ficha, una fila en blanco, luego la tabla de gestiones.
+  // así que apilamos: primero la ficha, una fila en blanco, luego cada tabla.
   const filas: Record<string, unknown>[] = [
     ...cab,
     {},
     { Campo: `Gestiones — Total ${f.gestiones.total}`, Valor: '' },
     ...gest.map((g) => ({ Campo: g.Categoría, Valor: `${g.Detalle} | ${g.Estado} | ${g['Fecha de ingreso']} | exp ${g['Nro expediente']}` })),
+    {},
+    { Campo: `Gasífera — Total ${f.gasifera.total}`, Valor: '' },
+    ...gasif,
+    {},
+    { Campo: `ATP — Total ${f.atp.total}`, Valor: '' },
+    ...atp,
   ]
   exportToXlsx(filas, 'Ficha municipio', `ficha_${norm(f.localidad).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

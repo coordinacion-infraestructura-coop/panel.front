@@ -1,0 +1,140 @@
+// Agregación por departamento a partir del payload ya federado (5 fuentes,
+// ver ADR-025). Se calcula client-side porque los datos que necesita
+// (`poblacion_2022`, el monto de las líneas "atp") ya viajan en
+// `ResumenTerritorialPayload.localidades` — no requiere un endpoint nuevo.
+//
+// El backend (`app/resumen_territorial/aggregations.py::focalizacion_atp_por_departamento`)
+// tiene la misma fórmula ya escrita y testeada, pero deliberadamente sin
+// exponer todavía (Etapa 2) — no había una vista que la consumiera. Esta es
+// esa vista (Etapa 3): misma metodología, calculada acá para no esperar un
+// nuevo campo en el payload sólo para esto.
+//
+// Spec: docs/files/spec-resumen-territorial-tablero-v2.md §4 (Etapa 3)
+import type { ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
+
+export interface DepartamentoAgregado {
+  departamento: string
+  localidades_con_datos: number
+  localidades_totales: number // 0 = sin dato del padrón para este depto
+  pct_cobertura: number // 0-100, 0 si no hay padrón
+  total_programas: number
+  promedio_programas: number // total_programas / localidades_totales (0 si no hay padrón)
+  poblacion_2022: number | null
+  transferencias_total: number | null
+  atp_monto: number
+  atp_monto_per_capita: number | null
+  gestiones_10k_hab: number | null
+  focalizacion_atp: number | null // null si no hay ATP o población provincial para comparar
+}
+
+interface Acumulador {
+  localidadesConDatos: number
+  totalProgramas: number
+  poblacion: number
+  transferenciasTotal: number
+  atpMonto: number
+}
+
+export function calcularDepartamentos(payload: ResumenTerritorialPayload): DepartamentoAgregado[] {
+  const porDepto = new Map<string, Acumulador>()
+
+  const ensure = (dep: string): Acumulador => {
+    let acc = porDepto.get(dep)
+    if (!acc) {
+      acc = { localidadesConDatos: 0, totalProgramas: 0, poblacion: 0, transferenciasTotal: 0, atpMonto: 0 }
+      porDepto.set(dep, acc)
+    }
+    return acc
+  }
+
+  // Departamentos con padrón pero, hoy, cero programas: deben figurar igual
+  // (0% de cobertura es un dato real, no "sin datos").
+  for (const dep of Object.keys(payload.total_localidades_por_departamento)) ensure(dep)
+
+  for (const loc of payload.localidades) {
+    const dep = loc.departamento ?? 'Sin departamento'
+    const acc = ensure(dep)
+    acc.localidadesConDatos += 1
+    acc.totalProgramas += loc.programas.length
+    if (loc.poblacion_2022) acc.poblacion += loc.poblacion_2022
+    if (loc.transferencias_total) acc.transferenciasTotal += loc.transferencias_total
+    for (const p of loc.programas) {
+      if (p.programa === 'atp' && p.monto) acc.atpMonto += p.monto
+    }
+  }
+
+  const totalAtpProvincia = [...porDepto.values()].reduce((s, a) => s + a.atpMonto, 0)
+  const totalPoblacionProvincia = [...porDepto.values()].reduce((s, a) => s + a.poblacion, 0)
+
+  const resultado: DepartamentoAgregado[] = []
+  for (const [departamento, acc] of porDepto) {
+    const localidadesTotales = payload.total_localidades_por_departamento[departamento] ?? 0
+    const pctCobertura = localidadesTotales > 0 ? (acc.localidadesConDatos / localidadesTotales) * 100 : 0
+    const promedioProgramas = localidadesTotales > 0 ? acc.totalProgramas / localidadesTotales : 0
+    const gestiones10kHab = acc.poblacion > 0 ? (acc.totalProgramas / acc.poblacion) * 10000 : null
+    const atpPerCapita = acc.poblacion > 0 && acc.atpMonto > 0 ? acc.atpMonto / acc.poblacion : null
+
+    let focalizacionAtp: number | null = null
+    if (totalAtpProvincia > 0 && totalPoblacionProvincia > 0 && acc.poblacion > 0) {
+      const pctAtp = acc.atpMonto / totalAtpProvincia
+      const pctPoblacion = acc.poblacion / totalPoblacionProvincia
+      focalizacionAtp = pctPoblacion > 0 ? pctAtp / pctPoblacion : null
+    }
+
+    resultado.push({
+      departamento,
+      localidades_con_datos: acc.localidadesConDatos,
+      localidades_totales: localidadesTotales,
+      pct_cobertura: Math.round(pctCobertura * 10) / 10,
+      total_programas: acc.totalProgramas,
+      promedio_programas: Math.round(promedioProgramas * 100) / 100,
+      poblacion_2022: acc.poblacion || null,
+      transferencias_total: acc.transferenciasTotal || null,
+      atp_monto: acc.atpMonto,
+      atp_monto_per_capita: atpPerCapita,
+      gestiones_10k_hab: gestiones10kHab !== null ? Math.round(gestiones10kHab * 10) / 10 : null,
+      focalizacion_atp: focalizacionAtp !== null ? Math.round(focalizacionAtp * 100) / 100 : null,
+    })
+  }
+
+  return resultado.sort((a, b) => a.departamento.localeCompare(b.departamento, 'es'))
+}
+
+export interface KpisProvincia {
+  poblacion_2022: number | null
+  transferencias_total: number | null
+  transferencias_per_capita: number | null
+  transferencias_periodo: string | null
+  pct_cobertura: number | null // sobre el total de localidades con padrón conocido
+  atp_monto_total: number
+  atp_monto_per_capita: number | null
+}
+
+/** KPIs de cabecera a nivel provincia — misma fuente que `calcularDepartamentos`,
+ * agregada una vez más. Densidad y crecimiento intercensal quedan fuera a
+ * propósito: sin superficie ni Censo 2010 (huecos de datos bloqueados,
+ * spec §5), no se fabrican. */
+export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisProvincia {
+  const deptos = calcularDepartamentos(payload)
+
+  const poblacion = deptos.reduce((s, d) => s + (d.poblacion_2022 ?? 0), 0) || null
+  const transferenciasTotal = deptos.reduce((s, d) => s + (d.transferencias_total ?? 0), 0) || null
+  const atpMontoTotal = deptos.reduce((s, d) => s + d.atp_monto, 0)
+
+  const localidadesTotales = deptos.reduce((s, d) => s + d.localidades_totales, 0)
+  const localidadesConDatos = deptos.reduce((s, d) => s + d.localidades_con_datos, 0)
+  const pctCobertura = localidadesTotales > 0 ? Math.round((localidadesConDatos / localidadesTotales) * 1000) / 10 : null
+
+  const periodo = payload.localidades.find((l) => l.transferencias_periodo)?.transferencias_periodo ?? null
+
+  return {
+    poblacion_2022: poblacion,
+    transferencias_total: transferenciasTotal,
+    transferencias_per_capita:
+      transferenciasTotal !== null && poblacion ? Math.round((transferenciasTotal / poblacion) * 100) / 100 : null,
+    transferencias_periodo: periodo,
+    pct_cobertura: pctCobertura,
+    atp_monto_total: atpMontoTotal,
+    atp_monto_per_capita: poblacion && atpMontoTotal > 0 ? Math.round((atpMontoTotal / poblacion) * 100) / 100 : null,
+  }
+}

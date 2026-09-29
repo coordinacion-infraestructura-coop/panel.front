@@ -6,6 +6,7 @@ import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
 import { fichaLocalidadApi } from '../api/fichaLocalidad.api'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
 import { exportarResumenXlsx } from '../exportResumen'
+import { VistaProvincia } from '../components/VistaProvincia'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -49,8 +50,12 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 const norm = (s: string) =>
   s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
-const AREA_LABEL: Record<string, string> = { vivienda: 'Vivienda', privada: 'Sec. Privada', gasifera: 'Sec. Gasífera' }
-const AREA_DOT_COLOR: Record<string, string> = { vivienda: '#01aae3', privada: '#398ebd', gasifera: '#d17612' }
+const AREA_LABEL: Record<string, string> = {
+  vivienda: 'Vivienda', privada: 'Sec. Privada', gasifera: 'Sec. Gasífera', gralgob: 'Sec. Gral. de Gobierno',
+}
+const AREA_DOT_COLOR: Record<string, string> = {
+  vivienda: '#01aae3', privada: '#398ebd', gasifera: '#d17612', gralgob: '#172c3f',
+}
 
 // ── Badges ───────────────────────────────────────────────────────────────────────
 
@@ -385,6 +390,9 @@ export function ResumenTerritorialPage() {
   })
 
   const [unidad, setUnidad] = useState<Unidad>('localidad')
+  // Tabla general (filtros + tabla legado) colapsada por defecto — la vista
+  // principal ahora es VistaProvincia (mapa + KPIs), spec §4 Etapa 3.
+  const [tablaAbierta, setTablaAbierta] = useState(false)
   const [q, setQ] = useState('')
   const [fDep, setFDep] = useState('')
   const [fLoc, setFLoc] = useState('')
@@ -392,6 +400,9 @@ export function ResumenTerritorialPage() {
   const [fProg, setFProg] = useState('')
   const [fEstado, setFEstado] = useState('')
   const [fChecklist, setFChecklist] = useState('')
+  // "Visita del gobernador": estar en ATP (área gralgob) implica que el gobernador
+  // fue a la localidad y anunció algo — mismo criterio que el badge ATP del resumen.
+  const [fVisitaGob, setFVisitaGob] = useState('')
   const [detalleLoc, setDetalleLoc] = useState<ResumenLocalidad | null>(null)
 
   // Payload efectivo = snapshot de Vivienda (backend) + líneas de Privada (frontend), mergeadas
@@ -414,8 +425,16 @@ export function ResumenTerritorialPage() {
         existente.programas.push(p.programa)
       } else {
         const nueva: ResumenLocalidad = {
+          id_geo: null,
           localidad: p.localidad,
           departamento: p.departamento,
+          categoria: null,
+          poblacion_2022: null,
+          viviendas_2022: null,
+          transferencias_periodo: null,
+          transferencias_total: null,
+          transferencias_per_capita: null,
+          atp_monto_per_capita: null,
           programas: [p.programa],
         }
         byKey.set(p.key, nueva)
@@ -432,6 +451,7 @@ export function ResumenTerritorialPage() {
       total_localidades: locs.length,
       total_programas: locs.reduce((n, l) => n + l.programas.length, 0),
       localidades: locs,
+      total_localidades_por_departamento: base.total_localidades_por_departamento,
     }
   }, [snapshot, privadaQuery.data])
 
@@ -456,6 +476,20 @@ export function ResumenTerritorialPage() {
     }
   }, [payload])
 
+  // El mapa (departamentos_cba.json) y el payload (padrón viv_geo_localidades)
+  // pueden variar en tildes/mayúsculas — se resuelve por texto normalizado
+  // antes de fijar el filtro, para que el clic en el mapa siempre encuentre
+  // su columna real en la tabla (filtro bidireccional, spec §4).
+  function seleccionarDepartamentoDesdeMapa(nombreMapa: string) {
+    const nq = norm(nombreMapa)
+    const real =
+      opciones.deps.find((d) => norm(d) === nq) ??
+      Object.keys(payload?.total_localidades_por_departamento ?? {}).find((d) => norm(d) === nq) ??
+      nombreMapa
+    setFDep((actual) => (actual === real ? '' : real))
+    setTablaAbierta(true)
+  }
+
   // Localidades para el combobox — si hay departamento elegido, sólo las de ese depto.
   const opcionesLoc = useMemo(() => {
     const set = new Set<string>()
@@ -479,6 +513,20 @@ export function ResumenTerritorialPage() {
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     const nq = norm(q)
     return (payload?.localidades ?? [])
+      .filter((loc) => {
+        if (fDep && loc.departamento !== fDep) return false
+        if (fLocActivo && loc.localidad !== fLocActivo) return false
+        if (nq && !norm(`${loc.localidad} ${loc.departamento ?? ''}`).includes(nq)) return false
+        // Chequea contra los programas originales de la localidad (no los ya
+        // filtrados por fArea/fProg más abajo) — "visitó" es un hecho de la
+        // localidad, independiente de qué área/programa esté mostrando la tabla.
+        if (fVisitaGob) {
+          const visito = loc.programas.some((p) => p.area === 'gralgob')
+          if (fVisitaGob === 'si' && !visito) return false
+          if (fVisitaGob === 'no' && visito) return false
+        }
+        return true
+      })
       .map((loc) => {
         const progs = loc.programas.filter((p) => {
           if (fArea && p.area !== fArea) return false
@@ -493,13 +541,8 @@ export function ResumenTerritorialPage() {
         })
         return { ...loc, programas: progs }
       })
-      .filter((loc) => {
-        if (fDep && loc.departamento !== fDep) return false
-        if (fLocActivo && loc.localidad !== fLocActivo) return false
-        if (nq && !norm(`${loc.localidad} ${loc.departamento ?? ''}`).includes(nq)) return false
-        return loc.programas.length > 0
-      })
-  }, [payload, q, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist])
+      .filter((loc) => loc.programas.length > 0)
+  }, [payload, q, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist, fVisitaGob])
 
   const kpis = useMemo<Kpi[]>(() => {
     const progs = localidadesFiltradas.flatMap((l) => l.programas)
@@ -549,7 +592,7 @@ export function ResumenTerritorialPage() {
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
-  const hayFiltros = q || fDep || fLocActivo || fArea || fProg || fEstado || fChecklist
+  const hayFiltros = q || fDep || fLocActivo || fArea || fProg || fEstado || fChecklist || fVisitaGob
   const limpiar = () => {
     setQ('')
     setFDep('')
@@ -558,6 +601,7 @@ export function ResumenTerritorialPage() {
     setFProg('')
     setFEstado('')
     setFChecklist('')
+    setFVisitaGob('')
   }
 
   // Un único export: .xlsx multi-hoja con los municipios que cumplen los filtros
@@ -572,6 +616,7 @@ export function ResumenTerritorialPage() {
     fProg && `programa ${opciones.progs.find(([id]) => id === fProg)?.[1] ?? fProg}`,
     fEstado && `estado ${fEstado}`,
     fChecklist && `checklist ${fChecklist}`,
+    fVisitaGob && `visita del gobernador ${fVisitaGob === 'si' ? 'SÍ' : 'NO'}`,
   ].filter(Boolean).join(' · ')
   const incluirPrivada = localidadesFiltradas.some((l) => l.programas.some((p) => p.area === 'privada'))
 
@@ -676,6 +721,53 @@ export function ResumenTerritorialPage() {
 
         {payload && payload.localidades.length > 0 && (
           <div className="space-y-4">
+            {/* Breadcrumb de navegación — nivel Departamento/Localidad reusa los
+                filtros existentes (fDep/fLocActivo) como estado, spec §4 Etapa 3. */}
+            <nav className="flex items-center gap-1.5 text-sm">
+              <button
+                onClick={() => {
+                  setFDep('')
+                  setFLoc('')
+                }}
+                className={fDep ? 'text-gov-blue hover:underline' : 'text-gov-navy font-semibold cursor-default'}
+              >
+                Córdoba
+              </button>
+              {fDep && (
+                <>
+                  <span className="text-gray-300">›</span>
+                  <button
+                    onClick={() => setFLoc('')}
+                    className={fLocActivo ? 'text-gov-blue hover:underline' : 'text-gov-navy font-semibold cursor-default'}
+                  >
+                    {fDep}
+                  </button>
+                </>
+              )}
+              {fLocActivo && (
+                <>
+                  <span className="text-gray-300">›</span>
+                  <span className="text-gov-navy font-semibold">{fLocActivo}</span>
+                </>
+              )}
+            </nav>
+
+            <VistaProvincia
+              payload={payload}
+              departamentoSeleccionado={fDep || null}
+              onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
+            />
+
+            <button
+              onClick={() => setTablaAbierta((v) => !v)}
+              className="flex items-center gap-1.5 text-sm font-semibold text-gov-navy hover:text-gov-blue"
+            >
+              <span className={`inline-block transition-transform ${tablaAbierta ? 'rotate-90' : ''}`}>›</span>
+              Tabla general {fDep ? `— ${fDep}` : '(todas las localidades)'}
+            </button>
+
+            {tablaAbierta && (
+            <>
             <KpiStrip items={kpis} />
 
             {/* Búsqueda libre — separada de los filtros, es lo primero de la barra */}
@@ -805,6 +897,16 @@ export function ResumenTerritorialPage() {
                 <option value="con_faltantes">Con ítems faltantes</option>
                 <option value="completo">Completo</option>
                 <option value="no_iniciado">No iniciado</option>
+              </select>
+              <select
+                value={fVisitaGob}
+                onChange={(e) => setFVisitaGob(e.target.value)}
+                title="Estar en ATP (Sec. Gral. de Gobierno) implica que el gobernador visitó la localidad y anunció algo"
+                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
+              >
+                <option value="">Visita del gobernador: cualquiera</option>
+                <option value="si">Visita del gobernador: SÍ</option>
+                <option value="no">Visita del gobernador: NO</option>
               </select>
               {hayFiltros && (
                 <button onClick={limpiar} className="text-xs text-gov-blue">
@@ -945,6 +1047,8 @@ export function ResumenTerritorialPage() {
               Datos del último snapshot consolidado (svc-vivienda + Sec. Privada). Se recalcula con
               el botón “Actualizar” y automáticamente por tarea programada.
             </p>
+            </>
+            )}
           </div>
         )}
       </div>
