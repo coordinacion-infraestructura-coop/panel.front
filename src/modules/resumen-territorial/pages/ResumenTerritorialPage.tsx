@@ -301,17 +301,6 @@ export function ResumenTerritorialPage() {
     if (fDep || fLocActivo) setTablaAbierta(true)
   }, [fDep, fLocActivo])
 
-  // Elegir una localidad navega directo a su Ficha (ruta propia) — mismo
-  // criterio que Checklist Técnico (elegir una entidad abre su panel), pero
-  // como página en vez de modal: se puede compartir el link y funciona con
-  // F5 / atrás del navegador. Sólo dispara con un cambio de localidad, no en
-  // cada recálculo del payload.
-  useEffect(() => {
-    if (!fLocActivo) return
-    const loc = payload?.localidades.find((l) => l.localidad === fLocActivo)
-    if (loc) irAFicha(loc)
-  }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
-
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     const nq = norm(q)
     return (payload?.localidades ?? [])
@@ -580,6 +569,17 @@ export function ResumenTerritorialPage() {
               <datalist id="rt-loc-list">
                 {opcionesLoc.map((l) => <option key={l} value={l} />)}
               </datalist>
+              {fLocActivo && (
+                <button
+                  onClick={() => {
+                    const loc = payload?.localidades.find((l) => l.localidad === fLocActivo)
+                    if (loc) irAFicha(loc)
+                  }}
+                  className="text-xs bg-gov-cyan text-white font-semibold rounded px-3 py-1.5"
+                >
+                  Ver ficha completa →
+                </button>
+              )}
               {(fDep || fLocActivo) && (
                 <button
                   onClick={() => {
