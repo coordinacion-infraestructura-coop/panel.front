@@ -1,17 +1,22 @@
-// Ficha de Localidad — modal de pantalla completa que reemplaza el viejo
-// DetailDrawer lateral. Reusa armarFichaMunicipio (ya arma PDF/Excel con
-// datos item por item de Privada/Gasífera/ATP) para no duplicar el camino de
-// datos — sólo le suma la sección de transferencias, que ya viaja en el
-// payload de resumen_territorial (ResumenLocalidad), no en armarFichaMunicipio.
+// Ficha de Localidad — ruta propia (/resumen-territorial/:departamento/:localidad),
+// reemplaza el modal de pantalla completa (FichaLocalidadModal, borrado). Misma
+// estética/contenido ya aprobados; el motivo del cambio es poder compartir un
+// link directo a la ficha de una localidad y que funcione con F5 / el botón
+// atrás del navegador — cosas que un modal no puede dar por definición.
 //
-// z-index muy por encima de Leaflet (que usa hasta ~1000 en sus paneles
-// internos) a propósito — el DetailDrawer anterior usaba z-40/z-50 y el mapa
-// le ganaba la pulseada de capas, dejándolo no funcional (feedback QA visual).
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+// Al abrirse directo (bookmark, link compartido, F5) esta página NO pasa por
+// ResumenTerritorialPage — tiene que buscar el snapshot ella misma (mismo
+// query key de TanStack Query que la página principal, así si ya está en
+// caché es instantáneo) y resolver departamento/localidad de la URL contra
+// `payload.localidades`, tolerando acentos/mayúsculas.
+import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
-import type { ResumenLocalidad } from '../types/resumenTerritorial.types'
+import { useState } from 'react'
+
+const norm = (s: string) =>
+  (s ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
 const SEMAFORO_DOT: Record<string, string> = { Verde: 'bg-green-500', Amarillo: 'bg-yellow-400', Rojo: 'bg-red-500' }
 const fmtMoney = (n: number | null | undefined) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
@@ -30,9 +35,7 @@ function SectionHeader({ icon, title, badge }: { icon: string; title: string; ba
     <div className="flex items-center justify-between mb-3">
       <span className="text-sm font-extrabold text-gov-navy">{icon} {title}</span>
       {badge && (
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-dceffb bg-[#dceffb] text-[#036aa1]">
-          {badge}
-        </span>
+        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#dceffb] text-[#036aa1]">{badge}</span>
       )}
     </div>
   )
@@ -49,30 +52,28 @@ function EstadoChip({ label, bg }: { label: string; bg?: string | null }) {
   )
 }
 
-export function FichaLocalidadModal({
-  resumen,
-  onClose,
-}: {
-  resumen: ResumenLocalidad | null
-  onClose: () => void
-}) {
-  const habilitado = !!resumen?.departamento && !!resumen?.localidad
+export function FichaLocalidadPage() {
+  const { departamento: departamentoUrl, localidad: localidadUrl } = useParams<{ departamento: string; localidad: string }>()
 
-  const { data: ficha, isLoading, isError } = useQuery({
+  const { data: snapshot, isLoading: cargandoSnapshot } = useQuery({
+    queryKey: ['resumen-territorial'],
+    queryFn: resumenTerritorialApi.getResumen,
+    staleTime: Infinity,
+  })
+
+  const resumen = snapshot?.payload.localidades.find(
+    (l) =>
+      norm(l.localidad) === norm(localidadUrl ?? '') &&
+      (!departamentoUrl || norm(l.departamento ?? '') === norm(departamentoUrl)),
+  )
+
+  const habilitado = !!resumen?.departamento && !!resumen?.localidad
+  const { data: ficha, isLoading: cargandoFicha, isError } = useQuery({
     queryKey: ['ficha-municipio', resumen?.departamento, resumen?.localidad],
     queryFn: () => armarFichaMunicipio(resumen!.departamento!, resumen!.localidad),
     enabled: habilitado,
     staleTime: 2 * 60 * 1000,
   })
-
-  useEffect(() => {
-    if (!resumen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [resumen, onClose])
 
   const [fichaBusy, setFichaBusy] = useState<null | 'pdf' | 'xlsx'>(null)
   const [fichaError, setFichaError] = useState<string | null>(null)
@@ -91,7 +92,39 @@ export function FichaLocalidadModal({
     }
   }
 
-  if (!resumen) return null
+  const volverHref = resumen?.departamento
+    ? `/resumen-territorial?departamento=${encodeURIComponent(resumen.departamento)}`
+    : '/resumen-territorial'
+
+  // ── Estados de carga / no encontrada ─────────────────────────────────────
+  if (cargandoSnapshot) {
+    return <div className="text-sm text-gray-400 py-16 text-center">Cargando…</div>
+  }
+
+  if (!snapshot) {
+    return (
+      <div className="bg-white rounded-lg border border-slate-200 px-6 py-12 text-center">
+        <p className="text-gray-500 text-sm mb-4">Todavía no se calculó ningún resumen territorial.</p>
+        <Link to="/resumen-territorial" className="text-sm text-gov-cyan hover:text-gov-navy">
+          ← Ir a Resumen Territorial
+        </Link>
+      </div>
+    )
+  }
+
+  if (!resumen) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-6 py-12 text-center">
+        <p className="text-amber-800 text-sm mb-4">
+          No se encontró la localidad "{localidadUrl}"{departamentoUrl ? ` en el departamento "${departamentoUrl}"` : ''}.
+          Puede que el link esté desactualizado o que la localidad no tenga datos cargados.
+        </p>
+        <Link to="/resumen-territorial" className="text-sm text-gov-cyan hover:text-gov-navy">
+          ← Ir a Resumen Territorial
+        </Link>
+      </div>
+    )
+  }
 
   const semLabel = ficha?.demografica.color_semaforo
   const transferenciasPorConcepto = resumen.transferencias_por_concepto ?? {}
@@ -99,24 +132,25 @@ export function FichaLocalidadModal({
   const hayTransferencias = conceptosTraidos.length > 0 || resumen.transferencias_total != null
 
   return (
-    // z-[2000]: muy por encima de los paneles internos de Leaflet (hasta ~1000).
-    <div className="fixed inset-0 z-[2000] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8" onClick={onClose}>
-      <div
-        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl overflow-hidden my-4"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="max-w-3xl mx-auto">
+      {/* Navegación de vuelta */}
+      <Link to={volverHref} className="text-sm text-gov-cyan hover:text-gov-navy font-semibold inline-block mb-2">
+        ← Volver a Resumen Territorial
+      </Link>
+      <p className="text-sm text-gov-navy font-semibold mb-5">
+        <span className="text-gray-400 font-normal">Resumen Territorial</span>
+        <span className="text-slate-300"> › </span>
+        <span className="text-gov-cyan">{resumen.departamento ?? '—'}</span>
+        <span className="text-slate-300"> › </span>
+        <span>{resumen.localidad}</span>
+      </p>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="bg-gov-navy text-white px-6 py-5 relative">
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="absolute top-4 right-4 bg-white/15 hover:bg-white/25 w-8 h-8 rounded text-sm"
-          >
-            ✕
-          </button>
           <p className="text-[10px] uppercase tracking-widest text-gov-cyan font-bold">Ficha de localidad</p>
-          <div className="flex items-baseline gap-3 mt-1 flex-wrap pr-10">
-            <h2 className="text-2xl font-extrabold">{resumen.localidad}</h2>
+          <div className="flex items-baseline gap-3 mt-1 flex-wrap">
+            <h1 className="text-2xl font-extrabold">{resumen.localidad}</h1>
             <span className="text-xs bg-white/15 px-2.5 py-1 rounded-full">Depto. {resumen.departamento ?? '—'}</span>
           </div>
           <div className="flex gap-2 mt-3 flex-wrap">
@@ -151,12 +185,12 @@ export function FichaLocalidadModal({
 
         {fichaError && <p className="text-xs text-red-600 px-6 pt-3">{fichaError}</p>}
 
-        {isLoading && (
+        {cargandoFicha && (
           <div className="py-16 text-center text-sm text-gray-400">Cargando ficha de la localidad…</div>
         )}
         {isError && (
           <div className="py-16 text-center text-sm text-red-500">
-            No se pudo cargar la ficha completa. Reintentá cerrando y volviendo a abrir.
+            No se pudo cargar la ficha completa. Recargá la página para reintentar.
           </div>
         )}
 

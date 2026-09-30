@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
 import { exportarResumenXlsx } from '../exportResumen'
 import { VistaProvincia } from '../components/VistaProvincia'
-import { FichaLocalidadModal } from '../components/FichaLocalidadModal'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -109,7 +109,20 @@ type Unidad = 'localidad' | 'departamento'
 
 export function ResumenTerritorialPage() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { data: portalUser } = usePortalUser()
+
+  // Ruta propia de la Ficha de Localidad — reemplaza el viejo modal
+  // (FichaLocalidadModal). Se manda el departamento actual como query param
+  // para que el "← Volver" de la ficha pueda restaurarlo acá.
+  function irAFicha(loc: { departamento: string | null; localidad: string }) {
+    if (!loc.departamento) return
+    navigate(
+      `/resumen-territorial/${encodeURIComponent(loc.departamento)}/${encodeURIComponent(loc.localidad)}` +
+        `?departamento=${encodeURIComponent(loc.departamento)}`,
+    )
+  }
   const canActualizar = ['Admin', 'Supervisor', 'Operador', 'Autoridad'].includes(
     portalUser?.rol ?? '',
   )
@@ -152,7 +165,10 @@ export function ResumenTerritorialPage() {
   // principal ahora es VistaProvincia (mapa + KPIs), spec §4 Etapa 3.
   const [tablaAbierta, setTablaAbierta] = useState(false)
   const [q, setQ] = useState('')
-  const [fDep, setFDep] = useState('')
+  // Se inicializa desde ?departamento= si venimos del link "← Volver" de la
+  // Ficha de Localidad (ruta propia) — no perder el contexto de dónde se
+  // estaba antes de entrar a la ficha.
+  const [fDep, setFDep] = useState(() => searchParams.get('departamento') ?? '')
   const [fLoc, setFLoc] = useState('')
   const [fArea, setFArea] = useState('')
   const [fProg, setFProg] = useState('')
@@ -161,7 +177,6 @@ export function ResumenTerritorialPage() {
   // "Visita del gobernador": estar en ATP (área gralgob) implica que el gobernador
   // fue a la localidad y anunció algo — mismo criterio que el badge ATP del resumen.
   const [fVisitaGob, setFVisitaGob] = useState('')
-  const [detalleLoc, setDetalleLoc] = useState<ResumenLocalidad | null>(null)
 
   // Payload efectivo = snapshot de Vivienda (backend) + líneas de Privada (frontend), mergeadas
   // por clave de localidad normalizada.
@@ -286,14 +301,15 @@ export function ResumenTerritorialPage() {
     if (fDep || fLocActivo) setTablaAbierta(true)
   }, [fDep, fLocActivo])
 
-  // Elegir una localidad abre directo su panel de detalle — mismo criterio que
-  // Checklist Técnico (elegir una entidad abre su panel, no hay que ir a buscarla
-  // en la lista). Sólo dispara con un cambio de localidad, no en cada recálculo
-  // del payload — si el usuario cierra el panel a mano, se queda cerrado.
+  // Elegir una localidad navega directo a su Ficha (ruta propia) — mismo
+  // criterio que Checklist Técnico (elegir una entidad abre su panel), pero
+  // como página en vez de modal: se puede compartir el link y funciona con
+  // F5 / atrás del navegador. Sólo dispara con un cambio de localidad, no en
+  // cada recálculo del payload.
   useEffect(() => {
     if (!fLocActivo) return
     const loc = payload?.localidades.find((l) => l.localidad === fLocActivo)
-    if (loc) setDetalleLoc(loc)
+    if (loc) irAFicha(loc)
   }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
@@ -745,7 +761,7 @@ export function ResumenTerritorialPage() {
                     {localidadesFiltradas.map((loc, i) => (
                       <tr
                         key={i}
-                        onClick={() => setDetalleLoc(loc)}
+                        onClick={() => irAFicha(loc)}
                         className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer align-top"
                       >
                         <td className="px-4 py-3">
@@ -861,8 +877,6 @@ export function ResumenTerritorialPage() {
           </div>
         )}
       </div>
-
-      <FichaLocalidadModal resumen={detalleLoc} onClose={() => setDetalleLoc(null)} />
     </div>
   )
 }

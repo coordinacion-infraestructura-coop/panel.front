@@ -19,6 +19,7 @@ import { TableroPage } from './modules/privada/pages/TableroPage'
 import { GasiferaPitPage } from './modules/gasifera/pages/GasiferaPitPage'
 import { AtpPage } from './modules/gralgob/pages/AtpPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
+import { FichaLocalidadPage } from './modules/resumen-territorial/pages/FichaLocalidadPage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
@@ -52,6 +53,16 @@ export default function App() {
                     roles={['Admin', 'Autoridad', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV']}
                   >
                     <ResumenTerritorialPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="resumen-territorial/:departamento/:localidad"
+                element={
+                  <ProtectedRoute
+                    roles={['Admin', 'Autoridad', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV']}
+                  >
+                    <FichaLocalidadPage />
                   </ProtectedRoute>
                 }
               />
