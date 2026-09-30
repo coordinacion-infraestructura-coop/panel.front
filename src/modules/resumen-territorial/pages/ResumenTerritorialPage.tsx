@@ -520,6 +520,23 @@ export function ResumenTerritorialPage() {
     if (real) setFDep(real)
   }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // La tabla general sigue colapsada por defecto (no queremos las ~400 localidades
+  // juntas en el primer pantallazo) — pero elegir depto/localidad arriba en "Ir a"
+  // la descolapsa al toque, para no tener que abrirla a mano después de filtrar.
+  useEffect(() => {
+    if (fDep || fLocActivo) setTablaAbierta(true)
+  }, [fDep, fLocActivo])
+
+  // Elegir una localidad abre directo su panel de detalle — mismo criterio que
+  // Checklist Técnico (elegir una entidad abre su panel, no hay que ir a buscarla
+  // en la lista). Sólo dispara con un cambio de localidad, no en cada recálculo
+  // del payload — si el usuario cierra el panel a mano, se queda cerrado.
+  useEffect(() => {
+    if (!fLocActivo) return
+    const loc = payload?.localidades.find((l) => l.localidad === fLocActivo)
+    if (loc) setDetalleLoc(loc)
+  }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     const nq = norm(q)
     return (payload?.localidades ?? [])
