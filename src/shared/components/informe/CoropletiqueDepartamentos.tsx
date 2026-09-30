@@ -61,8 +61,6 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
   label,
   seleccionado = null,
   onDepartamentoClick,
-  puntoZoom = null,
-  zoomPunto = 12,
   paleta = 'blues',
   height = 460,
   centerLat = -31.5,
@@ -82,9 +80,6 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
   seleccionado?: string | null
   /** Clic en un departamento — filtro bidireccional (spec §4, Etapa 3). */
   onDepartamentoClick?: (departamento: string) => void
-  /** Centroide de una localidad elegida — zoom de punto, tiene prioridad sobre `seleccionado`. */
-  puntoZoom?: { lat: number; lon: number } | null
-  zoomPunto?: number
   paleta?: keyof typeof PALETAS
   height?: number
   centerLat?: number
@@ -200,17 +195,16 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
       },
     }).addTo(mapRef.current)
 
-    // Zoom del mapa: a la localidad si hay punto (más específico), si no al
-    // departamento seleccionado, si no volver a la vista provincial completa
-    // — filtro bidireccional con zoom real (spec §4, feedback QA visual Etapa 3).
-    if (puntoZoom) {
-      mapRef.current.setView([puntoZoom.lat, puntoZoom.lon], zoomPunto)
-    } else if (capaSeleccionada) {
+    // Zoom del mapa: al departamento seleccionado, o de vuelta a la vista
+    // provincial completa — filtro bidireccional (spec §4). El zoom a punto
+    // de una localidad se sacó (feedback QA visual): un choropleth de
+    // departamentos no tiene nada útil que mostrar zoomado a nivel calle.
+    if (capaSeleccionada) {
       mapRef.current.fitBounds((capaSeleccionada as L.Polygon).getBounds(), { padding: [24, 24], maxZoom: 10 })
     } else {
       mapRef.current.setView([centerLat, centerLon], zoom)
     }
-  }, [geoJson, data, metrica, escala, centroDivergente, paleta, seleccionado, onDepartamentoClick, puntoZoom, zoomPunto])
+  }, [geoJson, data, metrica, escala, centroDivergente, paleta, seleccionado, onDepartamentoClick])
 
   useEffect(
     () => () => {

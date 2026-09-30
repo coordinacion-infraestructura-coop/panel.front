@@ -55,6 +55,7 @@ export interface ResumenLocalidad {
   viviendas_2022: number | null
   transferencias_periodo: string | null // ej. "2026-07-01"
   transferencias_total: number | null
+  transferencias_por_concepto: Record<string, number> | null
   transferencias_per_capita: number | null
   atp_monto_per_capita: number | null
   programas: ResumenPrograma[]

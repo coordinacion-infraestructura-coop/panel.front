@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
 import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
-import { fichaLocalidadApi } from '../api/fichaLocalidad.api'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
 import { exportarResumenXlsx } from '../exportResumen'
 import { VistaProvincia } from '../components/VistaProvincia'
+import { FichaLocalidadModal } from '../components/FichaLocalidadModal'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -104,247 +103,6 @@ function ChecklistPill({ prog }: { prog: ResumenPrograma }) {
   )
 }
 
-// ── Ficha demográfica (E5b) ────────────────────────────────────────────────────
-
-const SEMAFORO: Record<string, { label: string; dot: string; bg: string }> = {
-  verde: { label: 'Verde', dot: 'bg-green-500', bg: 'bg-green-50 text-green-700 border-green-200' },
-  amarillo: { label: 'Amarillo', dot: 'bg-yellow-400', bg: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  rojo: { label: 'Rojo', dot: 'bg-red-500', bg: 'bg-red-50 text-red-700 border-red-200' },
-}
-const fmtNum = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString('es-AR'))
-
-function FichaDemografica({ localidad }: { localidad: ResumenLocalidad }) {
-  const dep = localidad.departamento ?? ''
-  const loc = localidad.localidad
-  const habilitado = !!dep && !!loc
-
-  const locQ = useQuery({
-    queryKey: ['ficha-localidad', dep, loc],
-    queryFn: () => fichaLocalidadApi.localidad(dep, loc),
-    enabled: habilitado,
-    staleTime: 5 * 60 * 1000,
-  })
-  const depQ = useQuery({
-    queryKey: ['ficha-departamento', dep],
-    queryFn: () => fichaLocalidadApi.departamento(dep),
-    enabled: habilitado,
-    staleTime: 5 * 60 * 1000,
-  })
-
-  if (!habilitado) return null
-
-  const li = locQ.data
-  const di = depQ.data
-  const sem = li?.color_semaforo ? SEMAFORO[li.color_semaforo.toLowerCase()] : undefined
-  const sinDatos =
-    !!li && li.habitantes == null && li.electores == null &&
-    !li.intendente_jefe_comunal && !li.tipo_localidad && !li.color_semaforo
-
-  return (
-    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/60">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] uppercase tracking-widest text-gray-400">Ficha demográfica</p>
-        {sem && (
-          <span className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${sem.bg}`}>
-            <span className={`w-2 h-2 rounded-full ${sem.dot}`} /> Semáforo {sem.label}
-          </span>
-        )}
-      </div>
-
-      {locQ.isLoading ? (
-        <p className="text-xs text-slate-400 mt-2">Cargando ficha…</p>
-      ) : locQ.isError ? (
-        <p className="text-xs text-slate-400 mt-2">No se pudo cargar la ficha de la localidad.</p>
-      ) : sinDatos ? (
-        <p className="text-xs text-slate-400 mt-2 italic">Sin datos de padrón cargados para esta localidad.</p>
-      ) : (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 mt-3 text-xs">
-          <div><dt className="text-gray-400">Habitantes</dt><dd className="font-semibold text-gov-navy">{fmtNum(li?.habitantes)}</dd></div>
-          <div><dt className="text-gray-400">Electores</dt><dd className="font-semibold text-gov-navy">{fmtNum(li?.electores)}</dd></div>
-          <div className="col-span-2">
-            <dt className="text-gray-400">Intendente / Jefe comunal</dt>
-            <dd className="text-slate-700">{li?.intendente_jefe_comunal || '—'}{li?.partido_politico ? ` · ${li.partido_politico}` : ''}</dd>
-          </div>
-          <div className="col-span-2"><dt className="text-gray-400">Tipo de localidad</dt><dd className="text-slate-700">{li?.tipo_localidad || '—'}</dd></div>
-        </dl>
-      )}
-
-      {di && (di.legislador_departamental || di.legislador_sabana1 || di.legislador_sabana2 || di.electores != null || di.habitantes != null) && (
-        <div className="mt-3 pt-3 border-t border-slate-200">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">Departamento · {di.departamento}</p>
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-            {di.electores != null && <div><dt className="text-gray-400">Electores (depto)</dt><dd className="font-semibold text-gov-navy">{fmtNum(di.electores)}</dd></div>}
-            {di.habitantes != null && <div><dt className="text-gray-400">Habitantes (depto)</dt><dd className="font-semibold text-gov-navy">{fmtNum(di.habitantes)}</dd></div>}
-            {di.legislador_departamental && (
-              <div className="col-span-2"><dt className="text-gray-400">Legislador departamental</dt>
-                <dd className="text-slate-700">{di.legislador_departamental}{di.partido_politico ? ` · ${di.partido_politico}` : ''}</dd></div>
-            )}
-            {di.legislador_sabana1 && (
-              <div className="col-span-2"><dt className="text-gray-400">Legislador (sábana 1)</dt>
-                <dd className="text-slate-700">{di.legislador_sabana1}{di.partido_politico_sabana1 ? ` · ${di.partido_politico_sabana1}` : ''}</dd></div>
-            )}
-            {di.legislador_sabana2 && (
-              <div className="col-span-2"><dt className="text-gray-400">Legislador (sábana 2)</dt>
-                <dd className="text-slate-700">{di.legislador_sabana2}{di.partido_politico_sabana2 ? ` · ${di.partido_politico_sabana2}` : ''}</dd></div>
-            )}
-          </dl>
-        </div>
-      )}
-
-      {li?.updated_at && (
-        <p className="text-[10px] text-gray-400 mt-2">
-          Actualizado {fmtDate(li.updated_at)}{li.updated_by ? ` · ${li.updated_by}` : ''}
-        </p>
-      )}
-    </div>
-  )
-}
-
-// ── Ficha de localidad (drawer) ─────────────────────────────────────────────────
-
-function DetailDrawer({
-  localidad,
-  onClose,
-}: {
-  localidad: ResumenLocalidad | null
-  onClose: () => void
-}) {
-  return (
-    <>
-      <div
-        className={`fixed inset-0 bg-black/40 z-40 transition-opacity ${
-          localidad ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={onClose}
-      />
-      <aside
-        className={`fixed top-0 right-0 bottom-0 w-full max-w-md bg-white z-50 shadow-2xl flex flex-col transition-transform ${
-          localidad ? 'translate-x-0' : 'translate-x-full'
-        }`}
-        aria-hidden={!localidad}
-      >
-        {localidad && (
-          <>
-            <header className="bg-gov-navy text-white px-5 py-4 relative">
-              <button
-                onClick={onClose}
-                aria-label="Cerrar"
-                className="absolute top-3 right-3 bg-white/15 hover:bg-white/25 w-7 h-7 rounded text-sm"
-              >
-                ✕
-              </button>
-              <p className="text-[10px] uppercase tracking-widest text-gov-cyan">
-                Ficha de localidad
-              </p>
-              <h2 className="text-lg font-semibold mt-0.5">{localidad.localidad}</h2>
-              <p className="text-xs text-white/60 uppercase tracking-wide mt-0.5">
-                {localidad.departamento ?? 'Sin departamento'}
-              </p>
-            </header>
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <FichaDemografica localidad={localidad} />
-              {localidad.programas.map((p, i) => (
-                <div key={i} className="border border-slate-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-gov-navy">{p.programa_label}</h3>
-                    <EstadoBadge prog={p} />
-                  </div>
-                  {p.detalle && <p className="text-xs text-gray-500 mt-1">{p.detalle}</p>}
-
-                  {p.area === 'vivienda' && p.subestados && (
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {(['juridico', 'tecnico', 'financiero'] as const).map((k) => (
-                        <span
-                          key={k}
-                          className="text-[10px] px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-slate-600"
-                        >
-                          {k === 'juridico' ? 'Jurídico' : k === 'tecnico' ? 'Técnico' : 'Financiero'}:{' '}
-                          <b className="text-gov-navy">{p.subestados?.[k] ?? '—'}</b>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {p.area === 'vivienda' && (
-                    <div className="mt-3">
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-                        Checklist técnico
-                      </p>
-                      {!p.checklist_iniciado ? (
-                        <p className="text-xs text-slate-500 italic">
-                          No iniciado — {p.checklist_total} ítems pendientes.
-                        </p>
-                      ) : p.checklist_faltan === 0 ? (
-                        <p className="text-xs text-green-700">
-                          Completo ({p.checklist_total}/{p.checklist_total}).
-                        </p>
-                      ) : (
-                        <ul className="text-xs text-slate-600 space-y-1">
-                          {p.checklist_faltantes.map((f, j) => (
-                            <li key={j} className="flex gap-1.5">
-                              <span className="text-red-500">○</span>
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-
-                  {p.area === 'privada' && p.privada_conteos && (
-                    <div className="mt-3">
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
-                        Gestiones por estado
-                      </p>
-                      <ul className="text-xs text-slate-600 space-y-0.5">
-                        {Object.entries(p.privada_conteos.por_estado).map(([e, n]) => (
-                          <li key={e} className="flex justify-between">
-                            <span>{e}</span>
-                            <b className="text-gov-navy">{n}</b>
-                          </li>
-                        ))}
-                      </ul>
-                      <Link
-                        to={`/privada/gestiones?departamento=${encodeURIComponent(
-                          localidad.departamento ?? '',
-                        )}&localidad=${encodeURIComponent(localidad.localidad)}`}
-                        className="text-xs text-gov-cyan hover:text-gov-navy mt-2 inline-block"
-                      >
-                        Ver en el panel de Privada →
-                      </Link>
-                    </div>
-                  )}
-
-                  <div className="mt-3 pt-3 border-t border-slate-100">
-                    <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">
-                      Última comunicación
-                    </p>
-                    {p.ultima_comunicacion ? (
-                      <p className="text-xs text-slate-600">
-                        {p.ultima_comunicacion.texto ?? (
-                          <span className="italic text-slate-400">
-                            (comunicación de otra área — sin acceso al detalle)
-                          </span>
-                        )}
-                        <span className="block text-[10px] text-gray-400 mt-0.5">
-                          {fmtDate(p.ultima_comunicacion.fecha)}
-                          {p.ultima_comunicacion.area ? ` · ${p.ultima_comunicacion.area}` : ''}
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-400 italic">Sin comunicaciones registradas.</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </aside>
-    </>
-  )
-}
-
 // ── Página ───────────────────────────────────────────────────────────────────────
 
 type Unidad = 'localidad' | 'departamento'
@@ -435,6 +193,7 @@ export function ResumenTerritorialPage() {
           viviendas_2022: null,
           transferencias_periodo: null,
           transferencias_total: null,
+          transferencias_por_concepto: null,
           transferencias_per_capita: null,
           atp_monto_per_capita: null,
           programas: [p.programa],
@@ -822,7 +581,6 @@ export function ResumenTerritorialPage() {
               payload={payload}
               departamentoSeleccionado={fDep || null}
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
-              localidadSeleccionada={fLocActivo || null}
             />
 
             <button
@@ -1104,7 +862,7 @@ export function ResumenTerritorialPage() {
         )}
       </div>
 
-      <DetailDrawer localidad={detalleLoc} onClose={() => setDetalleLoc(null)} />
+      <FichaLocalidadModal resumen={detalleLoc} onClose={() => setDetalleLoc(null)} />
     </div>
   )
 }

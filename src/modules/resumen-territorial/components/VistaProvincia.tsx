@@ -4,6 +4,12 @@
 // (Etapa 3). El nivel Departamento (zoom + burbujas) y el nivel Localidad
 // (ficha) son etapas separadas (4 y 5) — acá sólo se resuelve la vista
 // provincial y el filtro bidireccional mapa↔tabla.
+//
+// El mapa sólo hace zoom a nivel DEPARTAMENTO — el zoom a punto de una
+// localidad se sacó (feedback QA visual): un choropleth de departamentos no
+// tiene nada que mostrar zoomado a nivel calle, sólo queda un color plano
+// gigante sin contexto. El detalle de una localidad puntual vive en
+// FichaLocalidadModal, no en este mapa.
 import { useMemo, useState } from 'react'
 import { CoropletiqueDepartamentos, colorDivergente, type DatoMapa } from '../../../shared/components/informe/CoropletiqueDepartamentos'
 import { BarChart } from '../../../shared/components/informe/BarChart'
@@ -39,26 +45,31 @@ export function VistaProvincia({
   payload,
   departamentoSeleccionado,
   onSelectDepartamento,
-  localidadSeleccionada,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
   onSelectDepartamento: (departamento: string) => void
-  /** Nombre exacto de la localidad elegida arriba (fLocActivo de la página) — hace zoom de punto en el mapa. */
-  localidadSeleccionada: string | null
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
 
+  // El mapa y el gráfico de focalización son comparativos — siempre muestran
+  // los 26 departamentos entre sí, elegir uno no los recorta (perderían el
+  // punto de comparación). Los KPIs de cabecera sí recalculan para la zona
+  // elegida: bug real encontrado en QA visual, antes siempre mostraban el
+  // total de toda la provincia aunque hubiera un departamento seleccionado.
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
-  const kpis = useMemo(() => calcularKpisProvincia(payload), [payload])
 
-  const puntoZoom = useMemo(() => {
-    if (!localidadSeleccionada) return null
-    const loc = payload.localidades.find((l) => l.localidad === localidadSeleccionada)
-    return loc?.lat_centro != null && loc?.lon_centro != null
-      ? { lat: loc.lat_centro, lon: loc.lon_centro }
-      : null
-  }, [payload, localidadSeleccionada])
+  const payloadKpis = useMemo(() => {
+    if (!departamentoSeleccionado) return payload
+    return {
+      ...payload,
+      localidades: payload.localidades.filter((l) => l.departamento === departamentoSeleccionado),
+      total_localidades_por_departamento: departamentoSeleccionado in payload.total_localidades_por_departamento
+        ? { [departamentoSeleccionado]: payload.total_localidades_por_departamento[departamentoSeleccionado] }
+        : {},
+    }
+  }, [payload, departamentoSeleccionado])
+  const kpis = useMemo(() => calcularKpisProvincia(payloadKpis), [payloadKpis])
 
   const mapData: DatoMapa[] = useMemo(
     () =>
@@ -105,7 +116,12 @@ export function VistaProvincia({
 
   return (
     <div className="space-y-4">
-      <KpiStrip items={kpiItems} />
+      <div>
+        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          {departamentoSeleccionado ? `Indicadores — ${departamentoSeleccionado}` : 'Indicadores — toda la provincia'}
+        </p>
+        <KpiStrip items={kpiItems} />
+      </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -133,12 +149,11 @@ export function VistaProvincia({
           formatValor={(v) => formatValorMetrica(metrica, v)}
           seleccionado={departamentoSeleccionado}
           onDepartamentoClick={onSelectDepartamento}
-          puntoZoom={puntoZoom}
           height={440}
         />
         <p className="text-[11px] text-gray-400 mt-2">
-          {metricaInfo.label}. Clic en un departamento, o elegí departamento/localidad arriba, para
-          hacer zoom y filtrar la tabla de abajo por esa zona.
+          {metricaInfo.label}. Clic en un departamento, o elegí uno arriba en "Ir a", para hacer
+          zoom y recalcular los indicadores de esa zona.
           {metrica === 'focalizacion_atp' &&
             ' Índice = % de la inversión ATP que recibió el depto / % de la población provincial que vive ahí — 1.00 es proporcional.'}
         </p>

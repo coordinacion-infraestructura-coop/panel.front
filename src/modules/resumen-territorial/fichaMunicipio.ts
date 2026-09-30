@@ -120,6 +120,8 @@ export interface FichaMunicipio {
     electores: string
     intendente: string
     partido: string
+    legislador_departamental: string
+    partido_legislador: string
   }
   cordobaHogar: null | { fecha_anuncio: string; monto: string; casas: string; ok_gob: string; estado_general: string; estado_bg: string | null; avance: string }
   cordonCuneta: null | { monto: string; estado_general: string; estado_bg: string | null; updated_at: string; volumen: string; avance: string; ok_gob: string }
@@ -181,8 +183,9 @@ function mismoMunicipio(departamento: string, nl: string, depto?: string | null,
 /** Junta toda la ficha para (departamento, localidad). */
 export async function armarFichaMunicipio(departamento: string, localidad: string): Promise<FichaMunicipio> {
   const nl = norm(localidad)
-  const [li, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp] = await Promise.all([
+  const [li, di, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
+    fichaLocalidadApi.departamento(departamento).catch(() => null),
     cordobaHogarApi.getPanel().catch(() => null),
     cordonCunetaApi.getPanel().catch(() => null),
     miLugarApi.getProyectos({ localidad_nombre: localidad }).catch(() => [] as Awaited<ReturnType<typeof miLugarApi.getProyectos>>),
@@ -230,6 +233,8 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
       electores: fmtNum(li?.electores),
       intendente: li?.intendente_jefe_comunal ?? '—',
       partido: li?.partido_politico ?? '—',
+      legislador_departamental: di?.legislador_departamental ?? '—',
+      partido_legislador: di?.partido_politico ?? '—',
     },
     cordobaHogar: chRow ? {
       fecha_anuncio: fmtFecha(chRow.fecha_anuncio),
@@ -414,6 +419,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   kv('Electores', f.demografica.electores)
   kv('Intendente / Jefe Comunal', f.demografica.intendente)
   kv('Partido Político', f.demografica.partido)
+  kv('Legislador Departamental', f.demografica.legislador_departamental)
 
   heading('Córdoba Hogar · DGV')
   if (f.cordobaHogar) {
@@ -566,6 +572,7 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     { Campo: 'Electores', Valor: f.demografica.electores },
     { Campo: 'Intendente / Jefe Comunal', Valor: f.demografica.intendente },
     { Campo: 'Partido Político', Valor: f.demografica.partido },
+    { Campo: 'Legislador Departamental', Valor: f.demografica.legislador_departamental },
     {},
     { Campo: 'Córdoba Hogar', Valor: f.cordobaHogar ? '' : '—' },
     ...(f.cordobaHogar ? [
