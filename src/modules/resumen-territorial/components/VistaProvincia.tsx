@@ -237,6 +237,25 @@ export function VistaProvincia({
       ? { valor: departamentoAgregadoActivo?.transferencias_total ?? null, periodo: kpisProvinciaCompleta.transferencias_periodo }
       : { valor: kpisProvinciaCompleta.transferencias_total, periodo: kpisProvinciaCompleta.transferencias_periodo }
 
+  // Total ATP anunciado/entregado de la escala activa (pedido 2026-10-01,
+  // mismo criterio de escala que transferenciasTotalActivo).
+  const atpTotalActivo = useMemo(() => {
+    if (localidadSeleccionada) {
+      const atpProgs = localidadSeleccionada.programas.filter((p) => p.programa === 'atp')
+      return {
+        anunciado: atpProgs.reduce((s, p) => s + (p.monto ?? 0), 0) || null,
+        entregado: atpProgs.reduce((s, p) => s + (p.monto_entregado ?? 0), 0),
+      }
+    }
+    if (departamentoSeleccionado) {
+      return {
+        anunciado: departamentoAgregadoActivo?.atp_monto || null,
+        entregado: departamentoAgregadoActivo?.atp_monto_entregado ?? 0,
+      }
+    }
+    return { anunciado: kpisProvinciaCompleta.atp_monto_total || null, entregado: kpisProvinciaCompleta.atp_monto_entregado_total }
+  }, [localidadSeleccionada, departamentoSeleccionado, departamentoAgregadoActivo, kpisProvinciaCompleta])
+
   const mapData: DatoMapa[] = useMemo(
     () =>
       deptos.map((d) => {
@@ -347,6 +366,7 @@ export function VistaProvincia({
         conteos={conteosIndicadores}
         comparativas={comparativasIndicadores}
         transferenciasTotal={transferenciasTotalActivo}
+        atpTotal={atpTotalActivo}
       />
 
       <div>

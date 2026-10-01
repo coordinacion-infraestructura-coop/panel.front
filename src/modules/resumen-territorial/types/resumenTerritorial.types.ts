@@ -38,6 +38,7 @@ export interface ResumenPrograma {
   checklist_faltantes: string[]
   ultima_comunicacion: ResumenComunicacion | null
   monto: number | null
+  monto_entregado: number | null
   expediente: string | null
   privada_conteos: PrivadaConteos | null
 }

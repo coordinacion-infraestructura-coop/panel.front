@@ -121,6 +121,15 @@ export function FichaLocalidadPage() {
     ]
   }, [resumen, departamentoAgregado, kpisProvincia])
 
+  const atpTotalLocalidad = useMemo(() => {
+    if (!resumen) return { anunciado: null, entregado: 0 }
+    const atpProgs = resumen.programas.filter((p) => p.programa === 'atp')
+    return {
+      anunciado: atpProgs.reduce((s, p) => s + (p.monto ?? 0), 0) || null,
+      entregado: atpProgs.reduce((s, p) => s + (p.monto_entregado ?? 0), 0),
+    }
+  }, [resumen])
+
   const habilitado = !!resumen?.departamento && !!resumen?.localidad
   const { data: ficha, isLoading: cargandoFicha, isError } = useQuery({
     queryKey: ['ficha-municipio', resumen?.departamento, resumen?.localidad],
@@ -206,6 +215,7 @@ export function FichaLocalidadPage() {
             conteos={contarProgramasLocalidad(resumen)}
             comparativas={comparativasPerCapita}
             transferenciasTotal={{ valor: resumen.transferencias_total, periodo: resumen.transferencias_periodo }}
+            atpTotal={atpTotalLocalidad}
           />
         </div>
       )}

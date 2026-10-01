@@ -58,12 +58,15 @@ export interface ComparativaPerCapita {
 const fmtMoney = (n: number | null | undefined) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
 const fmtMillones = (n: number | null | undefined) =>
   n == null ? '—' : `$ ${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`
+const fmtPct = (n: number | null | undefined) =>
+  n == null ? '—' : `${n.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
 
 export function IndicadoresPrincipales({
   titulo,
   conteos,
   comparativas,
   transferenciasTotal,
+  atpTotal,
 }: {
   /** Ej. "Toda la provincia" / "Departamento Colón" / "Localidad Jesús María". */
   titulo: string
@@ -73,7 +76,16 @@ export function IndicadoresPrincipales({
    * millones de $ — se muda acá (2026-10-01) desde el panel de "Indicadores"
    * de abajo, junto con el resto de los montos. */
   transferenciasTotal: { valor: number | null; periodo: string | null }
+  /** Total ATP "anunciado" (= `monto`) y "entregado a la fecha" (=
+   * `monto_entregado`) de la escala activa, como figuran en
+   * /gralgob/atp — pedido 2026-10-01 (ADR-025). */
+  atpTotal: { anunciado: number | null; entregado: number | null }
 }) {
+  const ratioAtpEntregado =
+    atpTotal.anunciado && atpTotal.anunciado > 0 && atpTotal.entregado != null
+      ? (atpTotal.entregado / atpTotal.anunciado) * 100
+      : null
+
   const tarjetasConteo: { label: string; value: string | number; nd?: boolean; hint?: string }[] = [
     { label: 'Cordón Cuneta', value: conteos.cc },
     { label: 'Córdoba Hogar', value: conteos.ch },
@@ -89,6 +101,12 @@ export function IndicadoresPrincipales({
     {
       label: transferenciasTotal.periodo ? `Transferencias · ${transferenciasTotal.periodo}` : 'Transferencias',
       value: fmtMillones(transferenciasTotal.valor),
+    },
+    { label: 'Total ATP anunciado', value: fmtMillones(atpTotal.anunciado) },
+    {
+      label: 'ATP entregado / anunciado',
+      value: fmtPct(ratioAtpEntregado),
+      hint: `Entregado a la fecha: ${fmtMillones(atpTotal.entregado)}`,
     },
   ]
 

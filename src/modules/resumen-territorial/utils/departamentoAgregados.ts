@@ -23,6 +23,7 @@ export interface DepartamentoAgregado {
   transferencias_total: number | null
   transferencias_per_capita: number | null
   atp_monto: number
+  atp_monto_entregado: number // suma de "entregado a la fecha" — ver nota en KpisProvincia
   atp_monto_per_capita: number | null
   total_monto_per_capita: number | null // (transferencias + ATP) / población — "Total per cápita"
   gestiones_10k_hab: number | null
@@ -35,6 +36,7 @@ interface Acumulador {
   poblacion: number
   transferenciasTotal: number
   atpMonto: number
+  atpMontoEntregado: number
 }
 
 export function calcularDepartamentos(payload: ResumenTerritorialPayload): DepartamentoAgregado[] {
@@ -43,7 +45,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
   const ensure = (dep: string): Acumulador => {
     let acc = porDepto.get(dep)
     if (!acc) {
-      acc = { localidadesConDatos: 0, totalProgramas: 0, poblacion: 0, transferenciasTotal: 0, atpMonto: 0 }
+      acc = { localidadesConDatos: 0, totalProgramas: 0, poblacion: 0, transferenciasTotal: 0, atpMonto: 0, atpMontoEntregado: 0 }
       porDepto.set(dep, acc)
     }
     return acc
@@ -62,6 +64,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
     if (loc.transferencias_total) acc.transferenciasTotal += loc.transferencias_total
     for (const p of loc.programas) {
       if (p.programa === 'atp' && p.monto) acc.atpMonto += p.monto
+      if (p.programa === 'atp' && p.monto_entregado) acc.atpMontoEntregado += p.monto_entregado
     }
   }
 
@@ -100,6 +103,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
       transferencias_total: acc.transferenciasTotal || null,
       transferencias_per_capita: transferenciasPerCapita,
       atp_monto: acc.atpMonto,
+      atp_monto_entregado: acc.atpMontoEntregado,
       atp_monto_per_capita: atpPerCapita,
       total_monto_per_capita: totalMontoPerCapita,
       gestiones_10k_hab: gestiones10kHab !== null ? Math.round(gestiones10kHab * 10) / 10 : null,
@@ -165,7 +169,8 @@ export interface KpisProvincia {
   transferencias_per_capita: number | null
   transferencias_periodo: string | null
   pct_cobertura: number | null // sobre el total de localidades con padrón conocido
-  atp_monto_total: number
+  atp_monto_total: number // "anunciado" — ver `atp_monto` en ResumenPrograma
+  atp_monto_entregado_total: number // "entregado a la fecha" (ADR-025, 2026-10-01)
   atp_monto_per_capita: number | null
   total_monto_per_capita: number | null // (transferencias + ATP) / población — "Total per cápita"
 }
@@ -180,6 +185,7 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
   const poblacion = deptos.reduce((s, d) => s + (d.poblacion_2022 ?? 0), 0) || null
   const transferenciasTotal = deptos.reduce((s, d) => s + (d.transferencias_total ?? 0), 0) || null
   const atpMontoTotal = deptos.reduce((s, d) => s + d.atp_monto, 0)
+  const atpMontoEntregadoTotal = deptos.reduce((s, d) => s + d.atp_monto_entregado, 0)
 
   const localidadesTotales = deptos.reduce((s, d) => s + d.localidades_totales, 0)
   const localidadesConDatos = deptos.reduce((s, d) => s + d.localidades_con_datos, 0)
@@ -195,6 +201,7 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
     transferencias_periodo: periodo,
     pct_cobertura: pctCobertura,
     atp_monto_total: atpMontoTotal,
+    atp_monto_entregado_total: atpMontoEntregadoTotal,
     atp_monto_per_capita: poblacion && atpMontoTotal > 0 ? Math.round((atpMontoTotal / poblacion) * 100) / 100 : null,
     total_monto_per_capita:
       poblacion && (transferenciasTotal ?? 0) + atpMontoTotal > 0

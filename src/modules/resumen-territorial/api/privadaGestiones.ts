@@ -119,6 +119,7 @@ export async function fetchPrivadaPorLocalidad(): Promise<PrivadaLocalidad[]> {
         ? { fecha: grp.ultima.slice(0, 10), texto: null, area: 'privada', autor: null }
         : null,
       monto: null,
+      monto_entregado: null,
       expediente: null,
       privada_conteos: { por_estado: grp.porEstado, total },
     }
