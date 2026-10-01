@@ -26,13 +26,19 @@ function quantileBreaks(values: number[]): number[] {
 // diferencia de `quantileBreaks` (secuencial, pensada para conteos que
 // arrancan en 0), acá lo que importa es la distancia al centro en ambos
 // sentidos — spec-resumen-territorial-tablero-v2.md §4 (Etapa 3).
-const DIVERGENTE_BAJO = ['#7f1d1d', '#b91c1c', '#ef4444', '#fca5a5', '#fee2e2']
-const DIVERGENTE_ALTO = ['#e0f2fe', '#93c5fd', '#3b82f6', '#1d4ed8', '#1e3a8a']
-const SIN_DATO_COLOR = '#eef2f6'
+//
+// Rojo (<1) a verde oscuro (>1), con blanco en el centro — pedido explícito
+// del usuario (2026-10-01). Cada paleta va de MÁS CLARO (cerca del centro,
+// ratio≈0) a MÁS OSCURO (lejos del centro, ratio≈1): a mayor distancia de 1,
+// color más intenso. "Sin datos" es gris, inconfundible con cualquier punto
+// de la escala (ni rojo ni verde pálido).
+const DIVERGENTE_ROJO = ['#fee2e2', '#fca5a5', '#ef4444', '#dc2626', '#7f1d1d']
+const DIVERGENTE_VERDE = ['#dcfce7', '#86efac', '#22c55e', '#15803d', '#14532d']
+const SIN_DATO_COLOR = '#d1d5db'
 
 export function colorDivergente(value: number, centro: number): string {
   if (value === centro) return '#f8fafc'
-  const paleta = value < centro ? DIVERGENTE_BAJO : DIVERGENTE_ALTO
+  const paleta = value < centro ? DIVERGENTE_ROJO : DIVERGENTE_VERDE
   const ratio = Math.min(1, Math.abs(value - centro) / centro)
   const idx = Math.min(paleta.length - 1, Math.floor(ratio * paleta.length))
   return paleta[idx]
@@ -234,9 +240,9 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
         {escala === 'divergente' ? (
           <>
             {[
-              { color: DIVERGENTE_BAJO[0], texto: `< ${fmt(centroDivergente)} (menos de lo proporcional)` },
+              { color: DIVERGENTE_ROJO[DIVERGENTE_ROJO.length - 1], texto: `< ${fmt(centroDivergente)} (menos de lo proporcional)` },
               { color: '#f8fafc', texto: `≈ ${fmt(centroDivergente)} (proporcional)` },
-              { color: DIVERGENTE_ALTO[DIVERGENTE_ALTO.length - 1], texto: `> ${fmt(centroDivergente)} (más de lo proporcional)` },
+              { color: DIVERGENTE_VERDE[DIVERGENTE_VERDE.length - 1], texto: `> ${fmt(centroDivergente)} (más de lo proporcional)` },
             ].map((row) => (
               <div key={row.texto} className="flex items-center gap-1.5 mb-0.5">
                 <span className="w-3 h-3 rounded-sm border border-black/10" style={{ background: row.color }} />
