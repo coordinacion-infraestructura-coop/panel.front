@@ -43,11 +43,13 @@ export function MapaDualPuntos({
       zoom,
     )
     L.control.zoom({ position: 'topright' }).addTo(map)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap © CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map)
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles © Esri — Esri, DeLorme, NAVTEQ',
+        maxZoom: 16,
+      },
+    ).addTo(map)
     const layer = L.layerGroup().addTo(map)
     mapRef.current = map
     layerRef.current = layer

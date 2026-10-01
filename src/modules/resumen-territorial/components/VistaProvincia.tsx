@@ -19,11 +19,35 @@ import type { ResumenTerritorialPayload } from '../types/resumenTerritorial.type
 
 type MetricaProvincia = 'promedio_programas' | 'gestiones_10k_hab' | 'pct_cobertura' | 'focalizacion_atp'
 
-const METRICAS: { id: MetricaProvincia; label: string; corta: string }[] = [
-  { id: 'promedio_programas', label: 'Programas distintos por localidad', corta: 'Programas/localidad' },
-  { id: 'gestiones_10k_hab', label: 'Gestiones cada 10.000 hab.', corta: 'Gestiones /10k hab' },
-  { id: 'pct_cobertura', label: 'Cobertura del departamento', corta: 'Cobertura %' },
-  { id: 'focalizacion_atp', label: 'Focalización ATP (vs. población)', corta: 'Focalización ATP' },
+const METRICAS: { id: MetricaProvincia; label: string; corta: string; explicacion: string }[] = [
+  {
+    id: 'promedio_programas',
+    label: 'Programas distintos por localidad',
+    corta: 'Programas/localidad',
+    explicacion:
+      'Promedio de líneas de programa (Vivienda CC/CH/ML, Privada, Gasífera, ATP) por localidad del departamento — total de líneas ÷ cantidad de localidades del padrón.',
+  },
+  {
+    id: 'gestiones_10k_hab',
+    label: 'Gestiones cada 10.000 hab.',
+    corta: 'Gestiones /10k hab',
+    explicacion:
+      'Total de líneas de programa del departamento, llevado a una base comparable de 10.000 habitantes — total de líneas ÷ población del depto × 10.000.',
+  },
+  {
+    id: 'pct_cobertura',
+    label: 'Cobertura del departamento',
+    corta: 'Cobertura %',
+    explicacion:
+      '% de localidades del departamento con al menos un registro en alguna fuente (Vivienda, Privada, ATP, Gas), sobre el total de localidades del padrón geográfico.',
+  },
+  {
+    id: 'focalizacion_atp',
+    label: 'Focalización ATP (vs. población)',
+    corta: 'Focalización ATP',
+    explicacion:
+      '% de la inversión ATP que recibió el departamento ÷ % de la población provincial que vive ahí. 1.00 = proporcional a su población; > 1.00 recibió de más, < 1.00 de menos.',
+  },
 ]
 
 const fmtInt = (n: number | null) => (n == null ? '—' : Math.round(n).toLocaleString('es-AR'))
@@ -106,6 +130,25 @@ export function VistaProvincia({
     { value: 'N/D', label: 'Crecim. intercensal — falta Censo 2010', accent: 'navy' },
   ]
 
+  const kpiGlosario: { label: string; explicacion: string }[] = [
+    { label: 'Población (Censo 2022)', explicacion: 'Habitantes del padrón oficial (Censo Nacional 2022) de la zona.' },
+    {
+      label: 'Cobertura territorial',
+      explicacion: 'Localidades de la zona con al menos un registro en algún programa/fuente, sobre el total del padrón.',
+    },
+    {
+      label: 'Transferencias',
+      explicacion:
+        'Suma de transferencias automáticas provinciales a municipios/comunas (Coparticipación Ley 8663, FASAMU, FOFINDES, Fondo de Compensación) del último período cargado.',
+    },
+    { label: 'Transferencias per cápita', explicacion: 'Transferencias totales ÷ población de la zona.' },
+    { label: 'Inversión ATP per cápita', explicacion: 'Monto total comprometido en ATP ÷ población de la zona.' },
+    {
+      label: 'Densidad / Crecim. intercensal',
+      explicacion: 'No disponibles todavía — falta la fuente de superficie por departamento y el Censo 2010.',
+    },
+  ]
+
   // Focalización ATP por departamento — sólo los que tienen dato (con
   // población y algo de ATP en algún lado de la provincia), ordenados de
   // menor a mayor para que el patrón "quién recibe de más/de menos" se lea
@@ -121,6 +164,13 @@ export function VistaProvincia({
           {departamentoSeleccionado ? `Indicadores — ${departamentoSeleccionado}` : 'Indicadores — toda la provincia'}
         </p>
         <KpiStrip items={kpiItems} />
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-400">
+          {kpiGlosario.map((k) => (
+            <li key={k.label}>
+              <span className="font-semibold text-gray-500">{k.label}:</span> {k.explicacion}
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -151,12 +201,23 @@ export function VistaProvincia({
           onDepartamentoClick={onSelectDepartamento}
           height={440}
         />
-        <p className="text-[11px] text-gray-400 mt-2">
-          {metricaInfo.label}. Clic en un departamento, o elegí uno arriba en "Ir a", para hacer
-          zoom y recalcular los indicadores de esa zona.
-          {metrica === 'focalizacion_atp' &&
-            ' Índice = % de la inversión ATP que recibió el depto / % de la población provincial que vive ahí — 1.00 es proporcional.'}
+        <p className="text-[11px] text-gray-500 mt-2">
+          Clic en un departamento, o elegí uno arriba en "Ir a", para hacer zoom y recalcular los
+          indicadores de esa zona.
         </p>
+        <ul className="mt-1 space-y-0.5">
+          {METRICAS.map((m) => (
+            <li
+              key={m.id}
+              className={`text-[11px] ${metrica === m.id ? 'text-gray-600' : 'text-gray-400'}`}
+            >
+              <span className={`font-semibold ${metrica === m.id ? 'text-gov-navy' : 'text-gray-500'}`}>
+                {m.corta}:
+              </span>{' '}
+              {m.explicacion}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {focalizacion.length > 0 && (

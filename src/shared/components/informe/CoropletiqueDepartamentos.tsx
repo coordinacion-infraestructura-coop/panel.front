@@ -141,11 +141,13 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
         [centerLat, centerLon],
         zoom,
       )
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      }).addTo(mapRef.current)
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles © Esri — Esri, DeLorme, NAVTEQ',
+          maxZoom: 16,
+        },
+      ).addTo(mapRef.current)
     }
 
     const seleccionadoNorm = seleccionado ? normalizeName(seleccionado) : null
