@@ -56,16 +56,23 @@ export interface ComparativaPerCapita {
 }
 
 const fmtMoney = (n: number | null | undefined) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
+const fmtMillones = (n: number | null | undefined) =>
+  n == null ? '—' : `$ ${(n / 1_000_000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} M`
 
 export function IndicadoresPrincipales({
   titulo,
   conteos,
   comparativas,
+  transferenciasTotal,
 }: {
   /** Ej. "Toda la provincia" / "Departamento Colón" / "Localidad Jesús María". */
   titulo: string
   conteos: ConteosPrincipalesLocalidad
   comparativas: ComparativaPerCapita[]
+  /** Monto total de transferencias automáticas de la escala activa, en
+   * millones de $ — se muda acá (2026-10-01) desde el panel de "Indicadores"
+   * de abajo, junto con el resto de los montos. */
+  transferenciasTotal: { valor: number | null; periodo: string | null }
 }) {
   const tarjetasConteo: { label: string; value: string | number; nd?: boolean; hint?: string }[] = [
     { label: 'Cordón Cuneta', value: conteos.cc },
@@ -79,6 +86,10 @@ export function IndicadoresPrincipales({
       hint: 'Todavía sin fuente de datos — será un filtro del panel de gestiones de Privada',
     },
     { label: 'Demandas Generales', value: conteos.demandasGenerales },
+    {
+      label: transferenciasTotal.periodo ? `Transferencias · ${transferenciasTotal.periodo}` : 'Transferencias',
+      value: fmtMillones(transferenciasTotal.valor),
+    },
   ]
 
   return (

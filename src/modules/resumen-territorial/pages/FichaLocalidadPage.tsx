@@ -205,6 +205,7 @@ export function FichaLocalidadPage() {
             titulo={resumen.localidad}
             conteos={contarProgramasLocalidad(resumen)}
             comparativas={comparativasPerCapita}
+            transferenciasTotal={{ valor: resumen.transferencias_total, periodo: resumen.transferencias_periodo }}
           />
         </div>
       )}

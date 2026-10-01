@@ -15,6 +15,7 @@ import type {
 import type { Kpi } from '../../../shared/components/informe/KpiStrip'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { normalizeDepartamento } from '../../../shared/utils/normalizeName'
+import { calcularKpisProvincia } from '../utils/departamentoAgregados'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
@@ -346,6 +347,27 @@ export function ResumenTerritorialPage() {
     [payload],
   )
 
+  // `calcularKpisProvincia` acotado por `localidadesFiltradas` — se calcula
+  // acá (antes vivía dentro de `VistaProvincia`) porque "Cobertura
+  // territorial" se mudó al Resumen de la tabla general (2026-10-01) y
+  // también lo necesita `VistaProvincia` para su "Población" del segundo
+  // nivel — un único cálculo, pasado hacia abajo.
+  const deptosPresentesFiltrados = useMemo(
+    () => new Set(localidadesFiltradas.map((l) => l.departamento).filter((d): d is string => !!d)),
+    [localidadesFiltradas],
+  )
+  const payloadFiltrado = useMemo(
+    () => ({
+      ...(payload ?? { generado_para_areas: [], total_localidades: 0, total_programas: 0, localidades: [], total_localidades_por_departamento: {} }),
+      localidades: localidadesFiltradas,
+      total_localidades_por_departamento: Object.fromEntries(
+        Object.entries(payload?.total_localidades_por_departamento ?? {}).filter(([d]) => deptosPresentesFiltrados.has(d)),
+      ),
+    }),
+    [payload, localidadesFiltradas, deptosPresentesFiltrados],
+  )
+  const kpisFiltrados = useMemo(() => calcularKpisProvincia(payloadFiltrado), [payloadFiltrado])
+
   const kpis = useMemo<Kpi[]>(() => {
     const progs = localidadesFiltradas.flatMap((l) => l.programas)
     const conFaltantes = progs.filter(
@@ -357,14 +379,16 @@ export function ResumenTerritorialPage() {
       return (Date.now() - d.getTime()) / 86400000 <= 30
     }).length
     const deps = new Set(localidadesFiltradas.map((l) => l.departamento).filter(Boolean)).size
+    const pctCobertura = kpisFiltrados.pct_cobertura
     return [
       { value: `${localidadesFiltradas.length} de ${totalLocalidadesPadron}`, label: 'Localidades con alguna gestión' },
+      { value: pctCobertura == null ? '—' : `${pctCobertura.toLocaleString('es-AR')}%`, label: 'Cobertura territorial', accent: 'cyan' },
       { value: progs.length, label: 'Programas activos', accent: 'cyan' },
       { value: conFaltantes, label: 'Con ítems faltantes', accent: 'red' },
       { value: recientes, label: 'Comunicaciones · 30 días', accent: 'green' },
       { value: `${deps} de ${totalDepartamentosPadron}`, label: 'Departamentos con alguna gestión', accent: 'navy' },
     ]
-  }, [localidadesFiltradas, totalLocalidadesPadron, totalDepartamentosPadron])
+  }, [localidadesFiltradas, totalLocalidadesPadron, totalDepartamentosPadron, kpisFiltrados])
 
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
@@ -588,7 +612,7 @@ export function ResumenTerritorialPage() {
               departamentoSeleccionado={fDep || null}
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
               kpisTabla={kpis}
-              localidadesFiltradas={localidadesFiltradas}
+              kpisFiltrados={kpisFiltrados}
               localidadSeleccionada={
                 fLocActivo ? payload.localidades.find((l) => l.localidad === fLocActivo) ?? null : null
               }

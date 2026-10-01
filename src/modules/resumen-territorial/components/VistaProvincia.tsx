@@ -14,7 +14,12 @@ import { useMemo, useState } from 'react'
 import { CoropletiqueDepartamentos, colorDivergente, type DatoMapa } from '../../../shared/components/informe/CoropletiqueDepartamentos'
 import { BarChart } from '../../../shared/components/informe/BarChart'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
-import { calcularDepartamentos, calcularFocalizacionPorLocalidad, calcularKpisProvincia } from '../utils/departamentoAgregados'
+import {
+  calcularDepartamentos,
+  calcularFocalizacionPorLocalidad,
+  calcularKpisProvincia,
+  type KpisProvincia,
+} from '../utils/departamentoAgregados'
 import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
 import {
   IndicadoresPrincipales,
@@ -56,8 +61,6 @@ const METRICAS: { id: MetricaProvincia; label: string; corta: string; explicacio
 ]
 
 const fmtInt = (n: number | null) => (n == null ? '—' : Math.round(n).toLocaleString('es-AR'))
-const fmtMoney = (n: number | null) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
-const fmtPct = (n: number | null) => (n == null ? '—' : `${n.toLocaleString('es-AR')}%`)
 
 function formatValorMetrica(metrica: MetricaProvincia, v: number): string {
   switch (metrica) {
@@ -75,7 +78,7 @@ export function VistaProvincia({
   departamentoSeleccionado,
   onSelectDepartamento,
   kpisTabla,
-  localidadesFiltradas,
+  kpisFiltrados,
   localidadSeleccionada,
 }: {
   payload: ResumenTerritorialPayload
@@ -86,14 +89,15 @@ export function VistaProvincia({
    * usuario (no se recalculan acá, vienen ya armados de ResumenTerritorialPage
    * sobre `localidadesFiltradas`). */
   kpisTabla?: Kpi[]
-  /** Mismo conjunto ya filtrado (búsqueda + depto + localidad + área/programa/
-   * estado/checklist/visita) que alimenta `kpisTabla` — los indicadores de
-   * arriba (población, cobertura, transferencias, ATP) se recalculan sobre
-   * este conjunto en vez de filtrar sólo por departamento acá adentro, para
-   * que CUALQUIER filtro (incluida la localidad puntual) los afecte. Antes
-   * sólo reaccionaban a `departamentoSeleccionado` — bug real reportado
-   * 2026-10-01: elegir una localidad no cambiaba los indicadores nuevos. */
-  localidadesFiltradas?: ResumenLocalidad[]
+  /** `calcularKpisProvincia` ya acotado por `localidadesFiltradas` (búsqueda +
+   * depto + localidad + área/programa/estado/checklist/visita) — calculado en
+   * el padre (`ResumenTerritorialPage`) porque "Cobertura territorial" se
+   * mudó a `kpisTabla` (2026-10-01) y necesita el mismo valor; acá sólo queda
+   * `poblacion_2022` del segundo nivel de indicadores. Antes se calculaba
+   * acá mismo recibiendo `localidadesFiltradas` — bug real reportado
+   * 2026-10-01: elegir una localidad no cambiaba los indicadores nuevos,
+   * corregido escalando por el filtro activo (ahora resuelto en el padre). */
+  kpisFiltrados: KpisProvincia
   /** Localidad puntual elegida en "Ir a" (fLocActivo de ResumenTerritorialPage).
    * Los Indicadores Principales (pedido 2026-10-01) están SIEMPRE visibles —
    * se adaptan a la escala activa: provincia sin filtro, el departamento si
@@ -213,22 +217,14 @@ export function VistaProvincia({
     kpisProvinciaCompleta,
   ])
 
-  const baseLocalidadesKpis = localidadesFiltradas ?? payload.localidades
-  const deptosPresentesKpis = useMemo(
-    () => new Set(baseLocalidadesKpis.map((l) => l.departamento).filter((d): d is string => !!d)),
-    [baseLocalidadesKpis],
-  )
-  const payloadKpis = useMemo(
-    () => ({
-      ...payload,
-      localidades: baseLocalidadesKpis,
-      total_localidades_por_departamento: Object.fromEntries(
-        Object.entries(payload.total_localidades_por_departamento).filter(([d]) => deptosPresentesKpis.has(d)),
-      ),
-    }),
-    [payload, baseLocalidadesKpis, deptosPresentesKpis],
-  )
-  const kpis = useMemo(() => calcularKpisProvincia(payloadKpis), [payloadKpis])
+  // Transferencias totales de la escala activa, para la tarjeta de
+  // Indicadores Principales (se mudó acá desde el panel de "Indicadores" de
+  // abajo, 2026-10-01) — mismo criterio de escala que `comparativasIndicadores`.
+  const transferenciasTotalActivo = localidadSeleccionada
+    ? { valor: localidadSeleccionada.transferencias_total, periodo: localidadSeleccionada.transferencias_periodo }
+    : departamentoSeleccionado
+      ? { valor: departamentoAgregadoActivo?.transferencias_total ?? null, periodo: kpisProvinciaCompleta.transferencias_periodo }
+      : { valor: kpisProvinciaCompleta.transferencias_total, periodo: kpisProvinciaCompleta.transferencias_periodo }
 
   const mapData: DatoMapa[] = useMemo(
     () =>
@@ -250,17 +246,7 @@ export function VistaProvincia({
   const metricaInfo = METRICAS.find((m) => m.id === metrica)!
 
   const kpiItems: Kpi[] = [
-    { value: fmtInt(kpis.poblacion_2022), label: 'Población (Censo 2022)', accent: 'navy' },
-    { value: fmtPct(kpis.pct_cobertura), label: 'Cobertura territorial', accent: 'cyan' },
-    {
-      value: fmtMoney(kpis.transferencias_total),
-      label: kpis.transferencias_periodo
-        ? `Transferencias · ${kpis.transferencias_periodo}`
-        : 'Transferencias automáticas',
-      accent: 'green',
-    },
-    { value: fmtMoney(kpis.transferencias_per_capita), label: 'Transferencias per cápita', accent: 'green' },
-    { value: fmtMoney(kpis.atp_monto_per_capita), label: 'Inversión ATP per cápita', accent: 'orange' },
+    { value: fmtInt(kpisFiltrados.poblacion_2022), label: 'Población (Censo 2022)', accent: 'navy' },
     { value: 'N/D', label: 'Densidad — falta superficie', accent: 'navy' },
     { value: 'N/D', label: 'Crecim. intercensal — falta Censo 2010', accent: 'navy' },
   ]
@@ -341,11 +327,12 @@ export function VistaProvincia({
         titulo={tituloIndicadores}
         conteos={conteosIndicadores}
         comparativas={comparativasIndicadores}
+        transferenciasTotal={transferenciasTotalActivo}
       />
 
       <div>
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-          {departamentoSeleccionado ? `Indicadores — ${departamentoSeleccionado}` : 'Indicadores — toda la provincia'}
+          {departamentoSeleccionado ? `Indicadores Demográficos — ${departamentoSeleccionado}` : 'Indicadores Demográficos — toda la provincia'}
         </p>
         <KpiStrip items={kpiItems} />
       </div>
