@@ -14,6 +14,7 @@ import type {
 } from '../types/resumenTerritorial.types'
 import type { Kpi } from '../../../shared/components/informe/KpiStrip'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { normalizeDepartamento } from '../../../shared/utils/normalizeName'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
@@ -257,10 +258,14 @@ export function ResumenTerritorialPage() {
   // antes de fijar el filtro, para que el clic en el mapa siempre encuentre
   // su columna real en la tabla (filtro bidireccional, spec §4).
   function seleccionarDepartamentoDesdeMapa(nombreMapa: string) {
-    const nq = norm(nombreMapa)
+    // normalizeDepartamento (no el `norm` de arriba) — el GeoJSON usa grafías
+    // distintas al padrón ("GRAL. SAN MARTÍN"/"PTE. ROQUE SAENZ PEÑA" con
+    // punto, "GENERAL ROCA" sin abreviar) que `norm` a secas no empareja
+    // (bug real 2026-10-01: esos 3 deptos quedaban "sin datos" en el mapa).
+    const nq = normalizeDepartamento(nombreMapa)
     const real =
-      opciones.deps.find((d) => norm(d) === nq) ??
-      Object.keys(payload?.total_localidades_por_departamento ?? {}).find((d) => norm(d) === nq) ??
+      opciones.deps.find((d) => normalizeDepartamento(d) === nq) ??
+      Object.keys(payload?.total_localidades_por_departamento ?? {}).find((d) => normalizeDepartamento(d) === nq) ??
       nombreMapa
     setFDep((actual) => (actual === real ? '' : real))
     setTablaAbierta(true)

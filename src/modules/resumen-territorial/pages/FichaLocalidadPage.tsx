@@ -132,7 +132,7 @@ export function FichaLocalidadPage() {
   const hayTransferencias = conceptosTraidos.length > 0 || resumen.transferencias_total != null
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div>
       {/* Navegación de vuelta */}
       <Link to={volverHref} className="text-sm text-gov-cyan hover:text-gov-navy font-semibold inline-block mb-2">
         ← Volver a Resumen Territorial

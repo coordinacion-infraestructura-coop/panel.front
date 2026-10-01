@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { normalizeName } from '../../utils/normalizeName'
+import { normalizeDepartamento } from '../../utils/normalizeName'
 
 // Paletas — mismas que documenta la skill /mapa_coropleth_filtros.
 const PALETAS: Record<string, string[]> = {
@@ -103,7 +103,7 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
   }, [])
 
   const colors = PALETAS[paleta] ?? PALETAS.blues
-  const byDepto = new Map(data.map((d) => [normalizeName(d.departamento), d]))
+  const byDepto = new Map(data.map((d) => [normalizeDepartamento(d.departamento), d]))
   const fmt = formatValor ?? (escala === 'divergente' ? (v: number) => v.toFixed(2) : (v: number) => String(Math.round(v)))
 
   function campo(d: T | undefined, clave: string): unknown {
@@ -150,13 +150,13 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
       ).addTo(mapRef.current)
     }
 
-    const seleccionadoNorm = seleccionado ? normalizeName(seleccionado) : null
+    const seleccionadoNorm = seleccionado ? normalizeDepartamento(seleccionado) : null
     let capaSeleccionada: L.Layer | null = null
 
     geoLayerRef.current?.remove()
     geoLayerRef.current = L.geoJSON(geoJson, {
       style: (feature) => {
-        const nombreNorm = normalizeName(feature?.properties?.nombre)
+        const nombreNorm = normalizeDepartamento(feature?.properties?.nombre)
         const d = byDepto.get(nombreNorm)
         const esSeleccionado = seleccionadoNorm !== null && nombreNorm === seleccionadoNorm
         return {
@@ -168,7 +168,7 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
       },
       onEachFeature: (feature, layer) => {
         const nombre = feature.properties?.nombre ?? ''
-        const d = byDepto.get(normalizeName(nombre))
+        const d = byDepto.get(normalizeDepartamento(nombre))
         const valor = valorDe(d)
         const detalle =
           valor === null
@@ -178,12 +178,12 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
               : `${label ?? metrica}: ${fmt(valor)}`
         layer.bindTooltip(`<b>${nombre}</b><br/>${detalle}`, { sticky: true })
         layer.on('mouseover', function (this: L.Path) {
-          if (normalizeName(nombre) === seleccionadoNorm) return
+          if (normalizeDepartamento(nombre) === seleccionadoNorm) return
           this.setStyle({ fillOpacity: 1, weight: 2, color: '#f7b400' })
           this.bringToFront()
         })
         layer.on('mouseout', function (this: L.Path) {
-          if (normalizeName(nombre) === seleccionadoNorm) return
+          if (normalizeDepartamento(nombre) === seleccionadoNorm) return
           geoLayerRef.current?.resetStyle(this)
         })
         if (onDepartamentoClick) {
@@ -191,7 +191,7 @@ export function CoropletiqueDepartamentos<T extends { departamento: string }>({
           const el = (layer as L.Path).getElement?.() as HTMLElement | undefined
           el?.style.setProperty('cursor', 'pointer')
         }
-        if (seleccionadoNorm !== null && normalizeName(nombre) === seleccionadoNorm) {
+        if (seleccionadoNorm !== null && normalizeDepartamento(nombre) === seleccionadoNorm) {
           capaSeleccionada = layer
         }
       },
