@@ -102,6 +102,9 @@ export function VistaProvincia({
   localidadSeleccionada?: ResumenLocalidad | null
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
+  // Switch del gráfico de ATP (pedido 2026-10-01) — nominal ($ en millones)
+  // por default, focalización (%/%) como alternativa.
+  const [vistaAtp, setVistaAtp] = useState<'nominal' | 'focalizacion'>('nominal')
 
   // El mapa es comparativo — siempre muestra los 26 departamentos entre sí,
   // elegir uno no lo recorta (perdería el punto de comparación). Los KPIs de
@@ -213,6 +216,33 @@ export function VistaProvincia({
     ? focalizacionLocalidadesConDato.map((l) => l.localidad)
     : focalizacionDeptos.map((d) => d.departamento)
 
+  // Vista "nominal" del mismo gráfico (pedido 2026-10-01): monto ATP en
+  // millones de $ en vez del índice %/% de focalización, con una barra de
+  // referencia de promedio al final (provincial a nivel departamento,
+  // departamental a nivel localidad — mismo criterio contextual que ya usa
+  // el resto de este componente al elegir un departamento).
+  const ATP_MILLON = 1_000_000
+  const nominalDeptos = deptos.filter((d) => d.atp_monto > 0).sort((a, b) => b.atp_monto - a.atp_monto)
+  const promedioAtpProvincial = deptos.length
+    ? deptos.reduce((s, d) => s + d.atp_monto, 0) / deptos.length
+    : 0
+  const nominalLocalidades = [...focalizacionLocalidades]
+    .filter((l) => l.atp_monto > 0)
+    .sort((a, b) => b.atp_monto - a.atp_monto)
+  const promedioAtpDepartamental = focalizacionLocalidades.length
+    ? focalizacionLocalidades.reduce((s, l) => s + l.atp_monto, 0) / focalizacionLocalidades.length
+    : 0
+
+  const nominalItems = departamentoSeleccionado ? nominalLocalidades : nominalDeptos
+  const nominalPromedio = departamentoSeleccionado ? promedioAtpDepartamental : promedioAtpProvincial
+  const nominalPromedioLabel = departamentoSeleccionado ? 'Promedio departamental' : 'Promedio provincial'
+  const nominalLabels = [
+    ...(departamentoSeleccionado ? nominalLocalidades.map((l) => l.localidad) : nominalDeptos.map((d) => d.departamento)),
+    nominalPromedioLabel,
+  ]
+  const nominalValues = [...nominalItems.map((d) => d.atp_monto / ATP_MILLON), nominalPromedio / ATP_MILLON]
+  const nominalColors = [...nominalItems.map(() => '#01aae3'), '#172c3f']
+
   return (
     <div className="space-y-4">
       {localidadSeleccionada && (
@@ -294,22 +324,67 @@ export function VistaProvincia({
         </ul>
       </div>
 
-      {focalizacion.length > 0 && (
+      {(nominalItems.length > 0 || focalizacion.length > 0) && (
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-sm font-semibold text-gov-navy mb-1">
-            {departamentoSeleccionado ? `Focalización ATP por localidad — ${departamentoSeleccionado}` : 'Focalización ATP por departamento'}
-          </p>
-          <p className="text-[11px] text-gray-400 mb-3">
-            &gt; 1.00: {departamentoSeleccionado ? 'la localidad recibió' : 'el departamento recibió'} más ATP del que
-            le tocaría por población · &lt; 1.00: menos.
-          </p>
-          <BarChart
-            labels={focalizacionLabels}
-            values={focalizacion.map((d) => d.focalizacion_atp ?? 0)}
-            colors={focalizacion.map((d) => colorDivergente(d.focalizacion_atp ?? 1, 1))}
-            horizontal
-            height={Math.max(220, focalizacion.length * 26)}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <p className="text-sm font-semibold text-gov-navy">
+              {vistaAtp === 'nominal'
+                ? departamentoSeleccionado
+                  ? `ATP — montos por localidad (millones de $) — ${departamentoSeleccionado}`
+                  : 'ATP — montos por departamento (millones de $)'
+                : departamentoSeleccionado
+                  ? `Focalización ATP por localidad — ${departamentoSeleccionado}`
+                  : 'Focalización ATP por departamento'}
+            </p>
+            <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
+              {(
+                [
+                  { id: 'nominal', label: 'Montos ($)' },
+                  { id: 'focalizacion', label: 'Focalización (%/%)' },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => setVistaAtp(v.id)}
+                  className={`px-2.5 py-1.5 text-xs rounded-md whitespace-nowrap ${
+                    vistaAtp === v.id ? 'bg-gov-cyan text-white' : 'text-gray-600'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {vistaAtp === 'nominal' ? (
+            <>
+              <p className="text-[11px] text-gray-400 mb-3">
+                Monto total comprometido en ATP, en millones de pesos · "{nominalPromedioLabel}" es el promedio
+                {departamentoSeleccionado ? ' entre las localidades de este departamento' : ' entre los 26 departamentos'}.
+              </p>
+              <BarChart
+                labels={nominalLabels}
+                values={nominalValues.map((v) => Math.round(v * 10) / 10)}
+                colors={nominalColors}
+                horizontal
+                tooltipSuffix=" M"
+                height={Math.max(220, nominalLabels.length * 26)}
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] text-gray-400 mb-3">
+                &gt; 1.00: {departamentoSeleccionado ? 'la localidad recibió' : 'el departamento recibió'} más ATP del que
+                le tocaría por población · &lt; 1.00: menos.
+              </p>
+              <BarChart
+                labels={focalizacionLabels}
+                values={focalizacion.map((d) => d.focalizacion_atp ?? 0)}
+                colors={focalizacion.map((d) => colorDivergente(d.focalizacion_atp ?? 1, 1))}
+                horizontal
+                height={Math.max(220, focalizacion.length * 26)}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
