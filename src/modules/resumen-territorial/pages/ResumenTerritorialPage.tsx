@@ -658,6 +658,9 @@ export function ResumenTerritorialPage() {
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
               kpisTabla={kpis}
               localidadesFiltradas={localidadesFiltradas}
+              localidadSeleccionada={
+                fLocActivo ? payload.localidades.find((l) => l.localidad === fLocActivo) ?? null : null
+              }
             />
 
             <button

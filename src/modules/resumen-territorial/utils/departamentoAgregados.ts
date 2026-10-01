@@ -21,8 +21,10 @@ export interface DepartamentoAgregado {
   promedio_programas: number // total_programas / localidades_totales (0 si no hay padrón)
   poblacion_2022: number | null
   transferencias_total: number | null
+  transferencias_per_capita: number | null
   atp_monto: number
   atp_monto_per_capita: number | null
+  total_monto_per_capita: number | null // (transferencias + ATP) / población — "Total per cápita"
   gestiones_10k_hab: number | null
   focalizacion_atp: number | null // null si no hay ATP o población provincial para comparar
 }
@@ -73,6 +75,12 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
     const promedioProgramas = localidadesTotales > 0 ? acc.totalProgramas / localidadesTotales : 0
     const gestiones10kHab = acc.poblacion > 0 ? (acc.totalProgramas / acc.poblacion) * 10000 : null
     const atpPerCapita = acc.poblacion > 0 && acc.atpMonto > 0 ? acc.atpMonto / acc.poblacion : null
+    const transferenciasPerCapita =
+      acc.poblacion > 0 && acc.transferenciasTotal > 0 ? acc.transferenciasTotal / acc.poblacion : null
+    const totalMontoPerCapita =
+      acc.poblacion > 0 && acc.transferenciasTotal + acc.atpMonto > 0
+        ? (acc.transferenciasTotal + acc.atpMonto) / acc.poblacion
+        : null
 
     let focalizacionAtp: number | null = null
     if (totalAtpProvincia > 0 && totalPoblacionProvincia > 0 && acc.poblacion > 0) {
@@ -90,8 +98,10 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
       promedio_programas: Math.round(promedioProgramas * 100) / 100,
       poblacion_2022: acc.poblacion || null,
       transferencias_total: acc.transferenciasTotal || null,
+      transferencias_per_capita: transferenciasPerCapita,
       atp_monto: acc.atpMonto,
       atp_monto_per_capita: atpPerCapita,
+      total_monto_per_capita: totalMontoPerCapita,
       gestiones_10k_hab: gestiones10kHab !== null ? Math.round(gestiones10kHab * 10) / 10 : null,
       focalizacion_atp: focalizacionAtp !== null ? Math.round(focalizacionAtp * 100) / 100 : null,
     })
@@ -157,6 +167,7 @@ export interface KpisProvincia {
   pct_cobertura: number | null // sobre el total de localidades con padrón conocido
   atp_monto_total: number
   atp_monto_per_capita: number | null
+  total_monto_per_capita: number | null // (transferencias + ATP) / población — "Total per cápita"
 }
 
 /** KPIs de cabecera a nivel provincia — misma fuente que `calcularDepartamentos`,
@@ -185,5 +196,9 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
     pct_cobertura: pctCobertura,
     atp_monto_total: atpMontoTotal,
     atp_monto_per_capita: poblacion && atpMontoTotal > 0 ? Math.round((atpMontoTotal / poblacion) * 100) / 100 : null,
+    total_monto_per_capita:
+      poblacion && (transferenciasTotal ?? 0) + atpMontoTotal > 0
+        ? Math.round((((transferenciasTotal ?? 0) + atpMontoTotal) / poblacion) * 100) / 100
+        : null,
   }
 }

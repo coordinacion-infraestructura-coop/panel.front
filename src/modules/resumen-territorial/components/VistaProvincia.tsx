@@ -16,6 +16,10 @@ import { BarChart } from '../../../shared/components/informe/BarChart'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
 import { calcularDepartamentos, calcularFocalizacionPorLocalidad, calcularKpisProvincia } from '../utils/departamentoAgregados'
 import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
+import {
+  IndicadoresPrincipalesLocalidad,
+  contarProgramasLocalidad,
+} from './IndicadoresPrincipalesLocalidad'
 
 type MetricaProvincia = 'promedio_programas' | 'gestiones_10k_hab' | 'pct_cobertura' | 'focalizacion_atp'
 
@@ -71,6 +75,7 @@ export function VistaProvincia({
   onSelectDepartamento,
   kpisTabla,
   localidadesFiltradas,
+  localidadSeleccionada,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
@@ -88,6 +93,13 @@ export function VistaProvincia({
    * sólo reaccionaban a `departamentoSeleccionado` — bug real reportado
    * 2026-10-01: elegir una localidad no cambiaba los indicadores nuevos. */
   localidadesFiltradas?: ResumenLocalidad[]
+  /** Localidad puntual elegida en "Ir a" (fLocActivo de ResumenTerritorialPage)
+   * — cuando está presente, se muestran los Indicadores Principales (pedido
+   * 2026-10-01) primero y más grandes que el resto, igual que en la Ficha de
+   * Localidad. `null`/`undefined` = sin localidad elegida (sólo depto o toda
+   * la provincia), no se muestran — la comparativa per cápita no tiene
+   * sentido sin una localidad puntual contra la cual compararse. */
+  localidadSeleccionada?: ResumenLocalidad | null
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
 
@@ -96,6 +108,15 @@ export function VistaProvincia({
   // cabecera sí recalculan para la selección actual (ver `localidadesFiltradas`
   // arriba).
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
+
+  // Para los Indicadores Principales de la localidad elegida — SIEMPRE sobre
+  // el payload completo sin filtrar (mismo criterio que la Ficha de
+  // Localidad): el promedio departamental/provincial de la comparativa per
+  // cápita tiene que ser el real, no uno recortado por los filtros activos.
+  const kpisProvinciaCompleta = useMemo(() => calcularKpisProvincia(payload), [payload])
+  const departamentoDeLocalidadSeleccionada = localidadSeleccionada
+    ? deptos.find((d) => d.departamento === localidadSeleccionada.departamento) ?? null
+    : null
 
   const baseLocalidadesKpis = localidadesFiltradas ?? payload.localidades
   const deptosPresentesKpis = useMemo(
@@ -194,6 +215,15 @@ export function VistaProvincia({
 
   return (
     <div className="space-y-4">
+      {localidadSeleccionada && (
+        <IndicadoresPrincipalesLocalidad
+          conteos={contarProgramasLocalidad(localidadSeleccionada)}
+          localidad={localidadSeleccionada}
+          departamentoAgregado={departamentoDeLocalidadSeleccionada}
+          kpisProvincia={kpisProvinciaCompleta}
+        />
+      )}
+
       <div>
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
           {departamentoSeleccionado ? `Indicadores — ${departamentoSeleccionado}` : 'Indicadores — toda la provincia'}
