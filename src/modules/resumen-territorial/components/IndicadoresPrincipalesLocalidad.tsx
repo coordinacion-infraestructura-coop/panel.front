@@ -33,12 +33,27 @@ export interface ConteosPrincipalesLocalidad {
 export function contarProgramasAgregado(localidades: ResumenLocalidad[]): ConteosPrincipalesLocalidad {
   const contar = (id: string) =>
     localidades.reduce((s, loc) => s + loc.programas.filter((p) => p.programa === id).length, 0)
+  // "gestiones" es distinto a CC/CH/Gas/ATP: cada fila es un ROLLUP por
+  // localidad (`_map_privada_payload` en service.py), no una entidad real —
+  // el total de demandas real viaja en `privada_conteos.total`, contar filas
+  // sólo da la cantidad de localidades con alguna demanda (bug encontrado
+  // 2026-10-01: mostraba 377 localidades en vez de 2247 demandas reales,
+  // comparado contra el panel de gestiones de Privada).
+  const contarGestiones = () =>
+    localidades.reduce(
+      (s, loc) =>
+        s +
+        loc.programas
+          .filter((p) => p.programa === 'gestiones')
+          .reduce((ss, p) => ss + (p.privada_conteos?.total ?? 0), 0),
+      0,
+    )
   return {
     cc: contar('cordon_cuneta'),
     ch: contar('cordoba_hogar'),
     gas: contar('acciones_territorio'),
     atp: contar('atp'),
-    demandasGenerales: contar('gestiones'),
+    demandasGenerales: contarGestiones(),
   }
 }
 
