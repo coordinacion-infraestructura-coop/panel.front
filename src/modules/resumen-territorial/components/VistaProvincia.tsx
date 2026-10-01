@@ -14,8 +14,8 @@ import { useMemo, useState } from 'react'
 import { CoropletiqueDepartamentos, colorDivergente, type DatoMapa } from '../../../shared/components/informe/CoropletiqueDepartamentos'
 import { BarChart } from '../../../shared/components/informe/BarChart'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
-import { calcularDepartamentos, calcularKpisProvincia } from '../utils/departamentoAgregados'
-import type { ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
+import { calcularDepartamentos, calcularFocalizacionPorLocalidad, calcularKpisProvincia } from '../utils/departamentoAgregados'
+import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
 
 type MetricaProvincia = 'promedio_programas' | 'gestiones_10k_hab' | 'pct_cobertura' | 'focalizacion_atp'
 
@@ -70,6 +70,7 @@ export function VistaProvincia({
   departamentoSeleccionado,
   onSelectDepartamento,
   kpisTabla,
+  localidadesFiltradas,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
@@ -79,26 +80,38 @@ export function VistaProvincia({
    * usuario (no se recalculan acá, vienen ya armados de ResumenTerritorialPage
    * sobre `localidadesFiltradas`). */
   kpisTabla?: Kpi[]
+  /** Mismo conjunto ya filtrado (búsqueda + depto + localidad + área/programa/
+   * estado/checklist/visita) que alimenta `kpisTabla` — los indicadores de
+   * arriba (población, cobertura, transferencias, ATP) se recalculan sobre
+   * este conjunto en vez de filtrar sólo por departamento acá adentro, para
+   * que CUALQUIER filtro (incluida la localidad puntual) los afecte. Antes
+   * sólo reaccionaban a `departamentoSeleccionado` — bug real reportado
+   * 2026-10-01: elegir una localidad no cambiaba los indicadores nuevos. */
+  localidadesFiltradas?: ResumenLocalidad[]
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
 
-  // El mapa y el gráfico de focalización son comparativos — siempre muestran
-  // los 26 departamentos entre sí, elegir uno no los recorta (perderían el
-  // punto de comparación). Los KPIs de cabecera sí recalculan para la zona
-  // elegida: bug real encontrado en QA visual, antes siempre mostraban el
-  // total de toda la provincia aunque hubiera un departamento seleccionado.
+  // El mapa es comparativo — siempre muestra los 26 departamentos entre sí,
+  // elegir uno no lo recorta (perdería el punto de comparación). Los KPIs de
+  // cabecera sí recalculan para la selección actual (ver `localidadesFiltradas`
+  // arriba).
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
 
-  const payloadKpis = useMemo(() => {
-    if (!departamentoSeleccionado) return payload
-    return {
+  const baseLocalidadesKpis = localidadesFiltradas ?? payload.localidades
+  const deptosPresentesKpis = useMemo(
+    () => new Set(baseLocalidadesKpis.map((l) => l.departamento).filter((d): d is string => !!d)),
+    [baseLocalidadesKpis],
+  )
+  const payloadKpis = useMemo(
+    () => ({
       ...payload,
-      localidades: payload.localidades.filter((l) => l.departamento === departamentoSeleccionado),
-      total_localidades_por_departamento: departamentoSeleccionado in payload.total_localidades_por_departamento
-        ? { [departamentoSeleccionado]: payload.total_localidades_por_departamento[departamentoSeleccionado] }
-        : {},
-    }
-  }, [payload, departamentoSeleccionado])
+      localidades: baseLocalidadesKpis,
+      total_localidades_por_departamento: Object.fromEntries(
+        Object.entries(payload.total_localidades_por_departamento).filter(([d]) => deptosPresentesKpis.has(d)),
+      ),
+    }),
+    [payload, baseLocalidadesKpis, deptosPresentesKpis],
+  )
   const kpis = useMemo(() => calcularKpisProvincia(payloadKpis), [payloadKpis])
 
   const mapData: DatoMapa[] = useMemo(
@@ -159,9 +172,25 @@ export function VistaProvincia({
   // población y algo de ATP en algún lado de la provincia), ordenados de
   // menor a mayor para que el patrón "quién recibe de más/de menos" se lea
   // de un vistazo en la barra horizontal.
-  const focalizacion = deptos
+  const focalizacionDeptos = deptos
     .filter((d) => d.focalizacion_atp !== null)
     .sort((a, b) => (a.focalizacion_atp ?? 0) - (b.focalizacion_atp ?? 0))
+
+  // Con un departamento elegido, "por departamento" deja de tener sentido (ya
+  // es uno solo) — pasa a mostrar la misma focalización pero entre las
+  // localidades DE ese departamento (pedido explícito 2026-10-01).
+  const focalizacionLocalidades = useMemo(
+    () => (departamentoSeleccionado ? calcularFocalizacionPorLocalidad(payload, departamentoSeleccionado) : []),
+    [payload, departamentoSeleccionado],
+  )
+  const focalizacionLocalidadesConDato = focalizacionLocalidades
+    .filter((l) => l.focalizacion_atp !== null)
+    .sort((a, b) => (a.focalizacion_atp ?? 0) - (b.focalizacion_atp ?? 0))
+
+  const focalizacion = departamentoSeleccionado ? focalizacionLocalidadesConDato : focalizacionDeptos
+  const focalizacionLabels = departamentoSeleccionado
+    ? focalizacionLocalidadesConDato.map((l) => l.localidad)
+    : focalizacionDeptos.map((d) => d.departamento)
 
   return (
     <div className="space-y-4">
@@ -237,12 +266,15 @@ export function VistaProvincia({
 
       {focalizacion.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <p className="text-sm font-semibold text-gov-navy mb-1">Focalización ATP por departamento</p>
+          <p className="text-sm font-semibold text-gov-navy mb-1">
+            {departamentoSeleccionado ? `Focalización ATP por localidad — ${departamentoSeleccionado}` : 'Focalización ATP por departamento'}
+          </p>
           <p className="text-[11px] text-gray-400 mb-3">
-            &gt; 1.00: el departamento recibió más ATP del que le tocaría por población · &lt; 1.00: menos.
+            &gt; 1.00: {departamentoSeleccionado ? 'la localidad recibió' : 'el departamento recibió'} más ATP del que
+            le tocaría por población · &lt; 1.00: menos.
           </p>
           <BarChart
-            labels={focalizacion.map((d) => d.departamento)}
+            labels={focalizacionLabels}
             values={focalizacion.map((d) => d.focalizacion_atp ?? 0)}
             colors={focalizacion.map((d) => colorDivergente(d.focalizacion_atp ?? 1, 1))}
             horizontal

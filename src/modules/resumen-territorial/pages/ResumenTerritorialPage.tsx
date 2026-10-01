@@ -335,6 +335,18 @@ export function ResumenTerritorialPage() {
       .filter((loc) => loc.programas.length > 0)
   }, [payload, q, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist, fVisitaGob])
 
+  // Denominadores del padrón geográfico (siempre el total real, sin filtrar)
+  // para mostrar "413 de 426" en vez de un número pelado — a pedido del
+  // usuario (2026-10-01).
+  const totalLocalidadesPadron = useMemo(
+    () => Object.values(payload?.total_localidades_por_departamento ?? {}).reduce((s, n) => s + n, 0),
+    [payload],
+  )
+  const totalDepartamentosPadron = useMemo(
+    () => Object.keys(payload?.total_localidades_por_departamento ?? {}).length,
+    [payload],
+  )
+
   const kpis = useMemo<Kpi[]>(() => {
     const progs = localidadesFiltradas.flatMap((l) => l.programas)
     const conFaltantes = progs.filter(
@@ -347,13 +359,13 @@ export function ResumenTerritorialPage() {
     }).length
     const deps = new Set(localidadesFiltradas.map((l) => l.departamento).filter(Boolean)).size
     return [
-      { value: localidadesFiltradas.length, label: 'Localidades' },
+      { value: `${localidadesFiltradas.length} de ${totalLocalidadesPadron}`, label: 'Localidades' },
       { value: progs.length, label: 'Programas activos', accent: 'cyan' },
       { value: conFaltantes, label: 'Con ítems faltantes', accent: 'red' },
       { value: recientes, label: 'Comunicaciones · 30 días', accent: 'green' },
-      { value: deps, label: 'Departamentos', accent: 'navy' },
+      { value: `${deps} de ${totalDepartamentosPadron}`, label: 'Departamentos', accent: 'navy' },
     ]
-  }, [localidadesFiltradas])
+  }, [localidadesFiltradas, totalLocalidadesPadron, totalDepartamentosPadron])
 
   // Rollup por departamento (client-side, sobre el mismo payload filtrado)
   const porDepartamento = useMemo(() => {
@@ -640,6 +652,7 @@ export function ResumenTerritorialPage() {
               departamentoSeleccionado={fDep || null}
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
               kpisTabla={kpis}
+              localidadesFiltradas={localidadesFiltradas}
             />
 
             <button

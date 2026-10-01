@@ -100,6 +100,55 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
   return resultado.sort((a, b) => a.departamento.localeCompare(b.departamento, 'es'))
 }
 
+export interface LocalidadFocalizacion {
+  localidad: string
+  poblacion_2022: number | null
+  atp_monto: number
+  focalizacion_atp: number | null // null si no hay ATP o población del depto para comparar
+}
+
+/** Misma fórmula que `focalizacion_atp` de `calcularDepartamentos`, pero
+ * comparando cada localidad contra el total de SU departamento (no contra la
+ * provincia) — usado cuando el usuario ya eligió un departamento en el mapa:
+ * ahí "Focalización ATP por departamento" deja de tener sentido (ya es uno
+ * solo) y pasa a ser "por localidad" dentro de ese departamento. */
+export function calcularFocalizacionPorLocalidad(
+  payload: ResumenTerritorialPayload,
+  departamento: string,
+): LocalidadFocalizacion[] {
+  const locs = payload.localidades.filter((l) => l.departamento === departamento)
+
+  const porLocalidad = new Map<string, { poblacion: number; atpMonto: number }>()
+  for (const loc of locs) {
+    const acc = porLocalidad.get(loc.localidad) ?? { poblacion: 0, atpMonto: 0 }
+    if (loc.poblacion_2022) acc.poblacion += loc.poblacion_2022
+    for (const p of loc.programas) {
+      if (p.programa === 'atp' && p.monto) acc.atpMonto += p.monto
+    }
+    porLocalidad.set(loc.localidad, acc)
+  }
+
+  const totalAtpDepto = [...porLocalidad.values()].reduce((s, a) => s + a.atpMonto, 0)
+  const totalPoblacionDepto = [...porLocalidad.values()].reduce((s, a) => s + a.poblacion, 0)
+
+  return [...porLocalidad.entries()]
+    .map(([localidad, acc]) => {
+      let focalizacionAtp: number | null = null
+      if (totalAtpDepto > 0 && totalPoblacionDepto > 0 && acc.poblacion > 0) {
+        const pctAtp = acc.atpMonto / totalAtpDepto
+        const pctPoblacion = acc.poblacion / totalPoblacionDepto
+        focalizacionAtp = pctPoblacion > 0 ? pctAtp / pctPoblacion : null
+      }
+      return {
+        localidad,
+        poblacion_2022: acc.poblacion || null,
+        atp_monto: acc.atpMonto,
+        focalizacion_atp: focalizacionAtp !== null ? Math.round(focalizacionAtp * 100) / 100 : null,
+      }
+    })
+    .sort((a, b) => a.localidad.localeCompare(b.localidad, 'es'))
+}
+
 export interface KpisProvincia {
   poblacion_2022: number | null
   transferencias_total: number | null
