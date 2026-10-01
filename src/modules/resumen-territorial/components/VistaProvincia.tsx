@@ -284,8 +284,8 @@ export function VistaProvincia({
 
   const kpiItems: Kpi[] = [
     { value: fmtInt(kpisFiltrados.poblacion_2022), label: 'Población (Censo 2022)', accent: 'navy' },
-    { value: 'N/D', label: 'Densidad — falta superficie', accent: 'navy' },
-    { value: 'N/D', label: 'Crecim. intercensal — falta Censo 2010', accent: 'navy' },
+    { value: 'N/D', label: 'Densidad — falta superficie', accent: 'cyan' },
+    { value: 'N/D', label: 'Crecim. intercensal — falta Censo 2010', accent: 'orange' },
   ]
 
   const kpiGlosario: { label: string; explicacion: string }[] = [
@@ -370,15 +370,20 @@ export function VistaProvincia({
       />
 
       <div>
-        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-          {departamentoSeleccionado ? `Indicadores Demográficos — ${departamentoSeleccionado}` : 'Indicadores Demográficos — toda la provincia'}
+        <p className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          <span className="inline-block h-2 w-2 rounded-full bg-gov-blue" />
+          Indicadores Demográficos
+          <span className="rounded-full bg-gov-navy/5 px-2 py-0.5 text-gov-navy normal-case tracking-normal">
+            {departamentoSeleccionado ?? 'Toda la provincia'}
+          </span>
         </p>
         <KpiStrip items={kpiItems} />
       </div>
 
       {kpisTabla && kpisTabla.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          <p className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-gov-orange" />
             Resumen de la tabla general
           </p>
           <KpiStrip items={kpisTabla} />
@@ -388,7 +393,7 @@ export function VistaProvincia({
       {/* Explicaciones de los indicadores del segundo nivel (Población/
           Cobertura/Transferencias/etc.) — al final de todos los indicadores
           (pedido 2026-10-01), no pegadas al KpiStrip que describen. */}
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-400">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2 text-[11px] text-gray-400">
         {kpiGlosario.map((k) => (
           <li key={k.label}>
             <span className="font-semibold text-gray-500">{k.label}:</span> {k.explicacion}
@@ -396,16 +401,20 @@ export function VistaProvincia({
         ))}
       </ul>
 
-      <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-gov-navy via-gov-blue to-gov-cyan" />
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <p className="text-sm font-semibold text-gov-navy">Mapa por departamento</p>
-          <div className="inline-flex flex-wrap bg-slate-100 border border-slate-300 rounded-lg p-0.5">
+          <p className="flex items-center gap-2 text-sm font-semibold text-gov-navy">
+            <span className="inline-block h-2 w-2 rounded-full bg-gov-cyan" />
+            Mapa por departamento
+          </p>
+          <div className="inline-flex flex-wrap bg-slate-100 border border-slate-200 rounded-full p-0.5">
             {METRICAS.map((m) => (
               <button
                 key={m.id}
                 onClick={() => setMetrica(m.id)}
-                className={`px-2.5 py-1.5 text-xs rounded-md whitespace-nowrap ${
-                  metrica === m.id ? 'bg-gov-cyan text-white' : 'text-gray-600'
+                className={`px-2.5 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
+                  metrica === m.id ? 'bg-gov-cyan text-white shadow-sm' : 'text-gray-600 hover:text-gov-navy'
                 }`}
               >
                 {m.corta}
@@ -474,9 +483,11 @@ export function VistaProvincia({
       </div>
 
       {(nominalItems.length > 0 || focalizacion.length > 0) && (
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: '#7c3aed' }} />
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <p className="text-sm font-semibold text-gov-navy">
+            <p className="flex items-center gap-2 text-sm font-semibold text-gov-navy">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: '#7c3aed' }} />
               {vistaAtp === 'nominal'
                 ? departamentoSeleccionado
                   ? `ATP — montos por localidad (millones de $) — ${departamentoSeleccionado}`
@@ -485,7 +496,7 @@ export function VistaProvincia({
                   ? `Focalización ATP por localidad — ${departamentoSeleccionado}`
                   : 'Focalización ATP por departamento'}
             </p>
-            <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
+            <div className="inline-flex bg-slate-100 border border-slate-200 rounded-full p-0.5">
               {(
                 [
                   { id: 'nominal', label: 'Montos ($)' },
@@ -495,8 +506,8 @@ export function VistaProvincia({
                 <button
                   key={v.id}
                   onClick={() => setVistaAtp(v.id)}
-                  className={`px-2.5 py-1.5 text-xs rounded-md whitespace-nowrap ${
-                    vistaAtp === v.id ? 'bg-gov-cyan text-white' : 'text-gray-600'
+                  className={`px-2.5 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
+                    vistaAtp === v.id ? 'bg-gov-cyan text-white shadow-sm' : 'text-gray-600 hover:text-gov-navy'
                   }`}
                 >
                   {v.label}
