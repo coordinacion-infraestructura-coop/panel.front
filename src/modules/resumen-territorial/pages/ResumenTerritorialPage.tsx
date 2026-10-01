@@ -361,11 +361,11 @@ export function ResumenTerritorialPage() {
     }).length
     const deps = new Set(localidadesFiltradas.map((l) => l.departamento).filter(Boolean)).size
     return [
-      { value: `${localidadesFiltradas.length} de ${totalLocalidadesPadron}`, label: 'Localidades' },
+      { value: `${localidadesFiltradas.length} de ${totalLocalidadesPadron}`, label: 'Localidades con alguna gestión' },
       { value: progs.length, label: 'Programas activos', accent: 'cyan' },
       { value: conFaltantes, label: 'Con ítems faltantes', accent: 'red' },
       { value: recientes, label: 'Comunicaciones · 30 días', accent: 'green' },
-      { value: `${deps} de ${totalDepartamentosPadron}`, label: 'Departamentos', accent: 'navy' },
+      { value: `${deps} de ${totalDepartamentosPadron}`, label: 'Departamentos con alguna gestión', accent: 'navy' },
     ]
   }, [localidadesFiltradas, totalLocalidadesPadron, totalDepartamentosPadron])
 

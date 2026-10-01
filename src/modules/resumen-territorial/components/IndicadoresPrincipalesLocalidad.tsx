@@ -68,10 +68,10 @@ export function IndicadoresPrincipales({
   comparativas: ComparativaPerCapita[]
 }) {
   const tarjetasConteo: { label: string; value: string | number; nd?: boolean; hint?: string }[] = [
-    { label: 'CC', value: conteos.cc },
-    { label: 'CH', value: conteos.ch },
+    { label: 'Cordón Cuneta', value: conteos.cc },
+    { label: 'Córdoba Hogar', value: conteos.ch },
     { label: 'Gas', value: conteos.gas },
-    { label: 'Compromisos Gobernador (ATP)', value: conteos.atp },
+    { label: 'Compromisos Gobernador', value: conteos.atp },
     {
       label: 'Com. Regionales',
       value: '—',

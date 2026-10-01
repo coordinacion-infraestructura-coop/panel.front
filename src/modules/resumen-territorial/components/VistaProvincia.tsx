@@ -348,13 +348,6 @@ export function VistaProvincia({
           {departamentoSeleccionado ? `Indicadores — ${departamentoSeleccionado}` : 'Indicadores — toda la provincia'}
         </p>
         <KpiStrip items={kpiItems} />
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-400">
-          {kpiGlosario.map((k) => (
-            <li key={k.label}>
-              <span className="font-semibold text-gray-500">{k.label}:</span> {k.explicacion}
-            </li>
-          ))}
-        </ul>
       </div>
 
       {kpisTabla && kpisTabla.length > 0 && (
@@ -365,6 +358,17 @@ export function VistaProvincia({
           <KpiStrip items={kpisTabla} />
         </div>
       )}
+
+      {/* Explicaciones de los indicadores del segundo nivel (Población/
+          Cobertura/Transferencias/etc.) — al final de todos los indicadores
+          (pedido 2026-10-01), no pegadas al KpiStrip que describen. */}
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-400">
+        {kpiGlosario.map((k) => (
+          <li key={k.label}>
+            <span className="font-semibold text-gray-500">{k.label}:</span> {k.explicacion}
+          </li>
+        ))}
+      </ul>
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
