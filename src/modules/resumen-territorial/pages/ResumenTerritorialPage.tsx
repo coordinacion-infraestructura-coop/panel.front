@@ -106,8 +106,6 @@ function ChecklistPill({ prog }: { prog: ResumenPrograma }) {
 
 // ── Página ───────────────────────────────────────────────────────────────────────
 
-type Unidad = 'localidad' | 'departamento'
-
 export function ResumenTerritorialPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -161,7 +159,6 @@ export function ResumenTerritorialPage() {
     onError: (err) => setError(extractErrorMessage(err, 'No se pudo actualizar el resumen.')),
   })
 
-  const [unidad, setUnidad] = useState<Unidad>('localidad')
   // Tabla general (filtros + tabla legado) colapsada por defecto — la vista
   // principal ahora es VistaProvincia (mapa + KPIs), spec §4 Etapa 3.
   const [tablaAbierta, setTablaAbierta] = useState(false)
@@ -369,31 +366,6 @@ export function ResumenTerritorialPage() {
     ]
   }, [localidadesFiltradas, totalLocalidadesPadron, totalDepartamentosPadron])
 
-  // Rollup por departamento (client-side, sobre el mismo payload filtrado)
-  const porDepartamento = useMemo(() => {
-    const map = new Map<
-      string,
-      { departamento: string; localidades: number; porPrograma: Map<string, Map<string, number>>; faltan: number; ultima: string | null }
-    >()
-    for (const loc of localidadesFiltradas) {
-      const dep = loc.departamento ?? 'Sin departamento'
-      if (!map.has(dep)) {
-        map.set(dep, { departamento: dep, localidades: 0, porPrograma: new Map(), faltan: 0, ultima: null })
-      }
-      const agg = map.get(dep)!
-      agg.localidades += 1
-      for (const p of loc.programas) {
-        if (!agg.porPrograma.has(p.programa_label)) agg.porPrograma.set(p.programa_label, new Map())
-        const estMap = agg.porPrograma.get(p.programa_label)!
-        const est = p.estado_general_label ?? 'Sin estado'
-        estMap.set(est, (estMap.get(est) ?? 0) + 1)
-        agg.faltan += p.area === 'vivienda' && p.checklist_iniciado ? p.checklist_faltan : 0
-        const f = p.ultima_comunicacion?.fecha ?? null
-        if (f && (!agg.ultima || f > agg.ultima)) agg.ultima = f
-      }
-    }
-    return [...map.values()].sort((a, b) => a.departamento.localeCompare(b.departamento, 'es'))
-  }, [localidadesFiltradas])
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
@@ -525,25 +497,10 @@ export function ResumenTerritorialPage() {
 
         {payload && payload.localidades.length > 0 && (
           <div className="space-y-4">
-            {/* Por Localidad/Por Departamento — arriba de todo (debajo del título).
-                La barra de búsqueda con lupa que vivía acá se sacó (2026-10-01):
-                filtraba por localidad/departamento, redundante con "Ir a" de más
-                abajo, que ya resuelve lo mismo con un selector + autocomplete. */}
-            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg p-3">
-              <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
-                {(['localidad', 'departamento'] as Unidad[]).map((u) => (
-                  <button
-                    key={u}
-                    onClick={() => setUnidad(u)}
-                    className={`px-3 py-1.5 text-sm rounded-md ${
-                      unidad === u ? 'bg-gov-cyan text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    Por {u}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* El switcher "Por Localidad/Por Departamento" y la barra de búsqueda
+                con lupa que vivían acá se sacaron (2026-10-01) — sin utilidad hoy,
+                "Ir a" de más abajo ya resuelve filtrar por localidad/departamento,
+                y la tabla sólo tiene una vista (por localidad). */}
 
             {/* Breadcrumb de navegación — nivel Departamento/Localidad reusa los
                 filtros existentes (fDep/fLocActivo) como estado, spec §4 Etapa 3. */}
@@ -738,134 +695,80 @@ export function ResumenTerritorialPage() {
                   ✕ Limpiar
                 </button>
               )}
-              <span className="text-xs text-gray-400 ml-auto">
-                {unidad === 'localidad'
-                  ? `${localidadesFiltradas.length} localidades`
-                  : `${porDepartamento.length} departamentos`}
-              </span>
+              <span className="text-xs text-gray-400 ml-auto">{localidadesFiltradas.length} localidades</span>
             </div>
 
-            {/* Tabla */}
+            {/* Tabla — sólo "por localidad" (2026-10-01: se sacó el switcher
+                "Por Localidad/Por Departamento" y la vista agrupada por
+                departamento, sin utilidad hoy). */}
             <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-              {unidad === 'localidad' ? (
-                <table className="w-full min-w-[820px]">
-                  <thead>
-                    <tr className="text-[11px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                      <th className="text-left px-4 py-2.5 w-[200px]">Localidad</th>
-                      <th className="text-left px-4 py-2.5">
-                        Programas · estado · checklist · última comunicación
-                      </th>
+              <table className="w-full min-w-[820px]">
+                <thead>
+                  <tr className="text-[11px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
+                    <th className="text-left px-4 py-2.5 w-[200px]">Localidad</th>
+                    <th className="text-left px-4 py-2.5">
+                      Programas · estado · checklist · última comunicación
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {localidadesFiltradas.map((loc, i) => (
+                    <tr
+                      key={i}
+                      onClick={() => irAFicha(loc)}
+                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer align-top"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-sm text-gov-navy">{loc.localidad}</div>
+                        <div className="text-[11px] text-gray-400 uppercase tracking-wide">
+                          {loc.departamento ?? 'Sin departamento'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-2">
+                          {loc.programas.map((p, j) => (
+                            <div
+                              key={j}
+                              className="grid grid-cols-[160px_auto_1fr_auto] gap-2.5 items-center max-[720px]:grid-cols-2"
+                            >
+                              <span className="text-xs font-semibold text-gov-navy flex items-center gap-1.5">
+                                <span
+                                  className="w-1.5 h-1.5 rounded-sm"
+                                  style={{ background: AREA_DOT_COLOR[p.area] ?? '#01aae3' }}
+                                />
+                                {p.programa_label}
+                              </span>
+                              <EstadoBadge prog={p} />
+                              <ChecklistPill prog={p} />
+                              <span className="text-[11px] text-gray-500 text-right">
+                                {p.ultima_comunicacion ? (
+                                  <>
+                                    <span className="font-semibold text-gov-navy">
+                                      {fmtDate(p.ultima_comunicacion.fecha)}
+                                    </span>
+                                    {p.ultima_comunicacion.area
+                                      ? ` · ${p.ultima_comunicacion.area}`
+                                      : ''}
+                                  </>
+                                ) : (
+                                  '—'
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {localidadesFiltradas.map((loc, i) => (
-                      <tr
-                        key={i}
-                        onClick={() => irAFicha(loc)}
-                        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer align-top"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-sm text-gov-navy">{loc.localidad}</div>
-                          <div className="text-[11px] text-gray-400 uppercase tracking-wide">
-                            {loc.departamento ?? 'Sin departamento'}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col gap-2">
-                            {loc.programas.map((p, j) => (
-                              <div
-                                key={j}
-                                className="grid grid-cols-[160px_auto_1fr_auto] gap-2.5 items-center max-[720px]:grid-cols-2"
-                              >
-                                <span className="text-xs font-semibold text-gov-navy flex items-center gap-1.5">
-                                  <span
-                                    className="w-1.5 h-1.5 rounded-sm"
-                                    style={{ background: AREA_DOT_COLOR[p.area] ?? '#01aae3' }}
-                                  />
-                                  {p.programa_label}
-                                </span>
-                                <EstadoBadge prog={p} />
-                                <ChecklistPill prog={p} />
-                                <span className="text-[11px] text-gray-500 text-right">
-                                  {p.ultima_comunicacion ? (
-                                    <>
-                                      <span className="font-semibold text-gov-navy">
-                                        {fmtDate(p.ultima_comunicacion.fecha)}
-                                      </span>
-                                      {p.ultima_comunicacion.area
-                                        ? ` · ${p.ultima_comunicacion.area}`
-                                        : ''}
-                                    </>
-                                  ) : (
-                                    '—'
-                                  )}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {localidadesFiltradas.length === 0 && (
-                      <tr>
-                        <td colSpan={2} className="px-4 py-10 text-center text-sm text-gray-400">
-                          Sin resultados con los filtros actuales.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              ) : (
-                <table className="w-full min-w-[820px]">
-                  <thead>
-                    <tr className="text-[11px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                      <th className="text-left px-4 py-2.5 w-[200px]">Departamento</th>
-                      <th className="text-left px-4 py-2.5">Consolidado por programa</th>
-                      <th className="text-left px-4 py-2.5 w-[130px]">Últ. comunicación</th>
+                  ))}
+                  {localidadesFiltradas.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-10 text-center text-sm text-gray-400">
+                        Sin resultados con los filtros actuales.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {porDepartamento.map((d, i) => (
-                      <tr key={i} className="border-b border-slate-100 align-top">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-sm text-gov-navy">{d.departamento}</div>
-                          <div className="text-[11px] text-gray-400">
-                            {d.localidades} localidad{d.localidades !== 1 ? 'es' : ''} ·{' '}
-                            {d.faltan} ítems faltan
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col gap-1.5">
-                            {[...d.porPrograma.entries()].map(([prog, estMap]) => (
-                              <div key={prog} className="text-xs flex flex-wrap gap-1.5 items-center">
-                                <span className="font-semibold text-gov-navy min-w-[130px]">
-                                  {prog}
-                                </span>
-                                {[...estMap.entries()].map(([est, n]) => (
-                                  <span
-                                    key={est}
-                                    className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px]"
-                                  >
-                                    {est} · {n}
-                                  </span>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-[11px] text-gray-500">{fmtDate(d.ultima)}</td>
-                      </tr>
-                    ))}
-                    {porDepartamento.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="px-4 py-10 text-center text-sm text-gray-400">
-                          Sin resultados con los filtros actuales.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
+                  )}
+                </tbody>
+              </table>
             </div>
 
             <p className="text-[11px] text-gray-400">
