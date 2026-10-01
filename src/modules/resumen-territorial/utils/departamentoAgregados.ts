@@ -202,3 +202,41 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
         : null,
   }
 }
+
+export interface CoberturaUmbralDepartamento {
+  localidades_con_umbral: number
+  localidades_totales: number
+  pct_cobertura: number // 0-100, 0 si no hay padrón
+}
+
+/** Cobertura por departamento con umbral configurable — pedido 2026-10-01,
+ * mismo concepto que la "Curva de cobertura por umbral" del informe general
+ * de proyecto_sistema_gestiones: en vez de contar como "cubierta" cualquier
+ * localidad con ≥1 registro (criterio fijo de `calcularDepartamentos`), acá
+ * el mínimo de líneas de programa/gestión que necesita una localidad para
+ * contar como cubierta es ajustable (slider del mapa). Cuenta sobre
+ * `loc.programas.length` — la suma de TODAS las fuentes (Vivienda CC/CH/ML,
+ * Privada, Gasífera, ATP), no sólo gestiones de Privada como en el informe
+ * original, porque acá "cobertura" ya es transversal a las 5 fuentes. */
+export function calcularCoberturaPorUmbral(
+  payload: ResumenTerritorialPayload,
+  umbral: number,
+): Record<string, CoberturaUmbralDepartamento> {
+  const conUmbralPorDepto = new Map<string, number>()
+  for (const loc of payload.localidades) {
+    if (loc.programas.length < umbral) continue
+    const dep = loc.departamento ?? 'Sin departamento'
+    conUmbralPorDepto.set(dep, (conUmbralPorDepto.get(dep) ?? 0) + 1)
+  }
+
+  const resultado: Record<string, CoberturaUmbralDepartamento> = {}
+  for (const [departamento, localidadesTotales] of Object.entries(payload.total_localidades_por_departamento)) {
+    const localidadesConUmbral = conUmbralPorDepto.get(departamento) ?? 0
+    resultado[departamento] = {
+      localidades_con_umbral: localidadesConUmbral,
+      localidades_totales: localidadesTotales,
+      pct_cobertura: localidadesTotales > 0 ? Math.round((localidadesConUmbral / localidadesTotales) * 1000) / 10 : 0,
+    }
+  }
+  return resultado
+}

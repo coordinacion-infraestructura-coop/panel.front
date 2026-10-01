@@ -15,6 +15,7 @@ import { CoropletiqueDepartamentos, colorDivergente, type DatoMapa } from '../..
 import { BarChart } from '../../../shared/components/informe/BarChart'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
 import {
+  calcularCoberturaPorUmbral,
   calcularDepartamentos,
   calcularFocalizacionPorLocalidad,
   calcularKpisProvincia,
@@ -49,7 +50,7 @@ const METRICAS: { id: MetricaProvincia; label: string; corta: string; explicacio
     label: 'Cobertura del departamento',
     corta: 'Cobertura %',
     explicacion:
-      '% de localidades del departamento con al menos un registro en alguna fuente (Vivienda, Privada, ATP, Gas), sobre el total de localidades del padrón geográfico.',
+      '% de localidades del departamento que alcanzan el mínimo de gestiones elegido en el control de abajo (default 5), sumando las 5 fuentes (Vivienda, Privada, ATP, Gas), sobre el total de localidades del padrón geográfico.',
   },
   {
     id: 'focalizacion_atp',
@@ -109,12 +110,22 @@ export function VistaProvincia({
   // Switch del gráfico de ATP (pedido 2026-10-01) — nominal ($ en millones)
   // por default, focalización (%/%) como alternativa.
   const [vistaAtp, setVistaAtp] = useState<'nominal' | 'focalizacion'>('nominal')
+  // Umbral mínimo de líneas de programa/gestión para que una localidad
+  // cuente como "cubierta" en el mapa de Cobertura (pedido 2026-10-01, mismo
+  // control deslizante que la "Curva de cobertura por umbral" del informe
+  // general de proyecto_sistema_gestiones) — sólo se muestra con esa métrica
+  // elegida.
+  const [umbralCobertura, setUmbralCobertura] = useState(5)
 
   // El mapa es comparativo — siempre muestra los 26 departamentos entre sí,
   // elegir uno no lo recorta (perdería el punto de comparación). Los KPIs de
   // cabecera sí recalculan para la selección actual (ver `localidadesFiltradas`
   // arriba).
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
+  const coberturaUmbral = useMemo(
+    () => calcularCoberturaPorUmbral(payload, umbralCobertura),
+    [payload, umbralCobertura],
+  )
 
   // Indicadores Principales (pedido 2026-10-01) — SIEMPRE visibles, en 3
   // escalas posibles (provincia/departamento/localidad, la más específica
@@ -228,19 +239,26 @@ export function VistaProvincia({
 
   const mapData: DatoMapa[] = useMemo(
     () =>
-      deptos.map((d) => ({
-        departamento: d.departamento,
-        // shape legado (tooltip de cantidad/pct_cobertura reusa estos campos)
-        cantidad: d.total_programas,
-        localidades_cubiertas: d.localidades_con_datos,
-        localidades_totales: d.localidades_totales,
-        // métricas nuevas de Etapa 3
-        promedio_programas: d.promedio_programas,
-        gestiones_10k_hab: d.gestiones_10k_hab,
-        pct_cobertura: d.pct_cobertura,
-        focalizacion_atp: d.focalizacion_atp,
-      })),
-    [deptos],
+      deptos.map((d) => {
+        // Cobertura con umbral (pedido 2026-10-01): reemplaza el criterio fijo
+        // "≥1 registro" de `calcularDepartamentos` por el umbral ajustable del
+        // slider — sólo afecta estos 2 campos, que son los únicos que lee el
+        // tooltip de la métrica "pct_cobertura".
+        const cu = coberturaUmbral[d.departamento]
+        return {
+          departamento: d.departamento,
+          // shape legado (tooltip de cantidad/pct_cobertura reusa estos campos)
+          cantidad: d.total_programas,
+          localidades_cubiertas: cu?.localidades_con_umbral ?? d.localidades_con_datos,
+          localidades_totales: cu?.localidades_totales ?? d.localidades_totales,
+          // métricas nuevas de Etapa 3
+          promedio_programas: d.promedio_programas,
+          gestiones_10k_hab: d.gestiones_10k_hab,
+          pct_cobertura: cu?.pct_cobertura ?? d.pct_cobertura,
+          focalizacion_atp: d.focalizacion_atp,
+        }
+      }),
+    [deptos, coberturaUmbral],
   )
 
   const metricaInfo = METRICAS.find((m) => m.id === metrica)!
@@ -374,6 +392,36 @@ export function VistaProvincia({
             ))}
           </div>
         </div>
+        {metrica === 'pct_cobertura' && (
+          <div className="flex items-end gap-3 flex-wrap mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="flex-1 min-w-[220px]">
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                Mínimo de gestiones por localidad
+                <span className="text-sm font-extrabold text-gov-cyan">{umbralCobertura}</span>
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                step={1}
+                value={umbralCobertura}
+                onChange={(e) => setUmbralCobertura(Number(e.target.value))}
+                className="w-full accent-gov-cyan cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-gray-400 mt-0.5">
+                <span>1</span>
+                <span>5</span>
+                <span>10</span>
+                <span>15</span>
+                <span>20</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500 max-w-xs">
+              Una localidad cuenta como "cubierta" si tiene al menos esta cantidad de líneas de
+              programa/gestión registradas (sumando las 5 fuentes). Default: 5.
+            </p>
+          </div>
+        )}
         <CoropletiqueDepartamentos
           data={mapData}
           metrica={metrica}
