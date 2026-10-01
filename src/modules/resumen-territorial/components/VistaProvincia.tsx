@@ -50,7 +50,7 @@ const METRICAS: { id: MetricaProvincia; label: string; corta: string; explicacio
     label: 'Cobertura del departamento',
     corta: 'Cobertura %',
     explicacion:
-      '% de localidades del departamento que alcanzan el mínimo de gestiones elegido en el control de abajo (default 5), sumando las 5 fuentes (Vivienda, Privada, ATP, Gas), sobre el total de localidades del padrón geográfico.',
+      '% de localidades del departamento que alcanzan el mínimo de gestiones elegido en el control de abajo (default 3), sumando las 5 fuentes (Vivienda, Privada, ATP, Gas), sobre el total de localidades del padrón geográfico.',
   },
   {
     id: 'focalizacion_atp',
@@ -115,7 +115,7 @@ export function VistaProvincia({
   // control deslizante que la "Curva de cobertura por umbral" del informe
   // general de proyecto_sistema_gestiones) — sólo se muestra con esa métrica
   // elegida.
-  const [umbralCobertura, setUmbralCobertura] = useState(5)
+  const [umbralCobertura, setUmbralCobertura] = useState(3)
 
   // El mapa es comparativo — siempre muestra los 26 departamentos entre sí,
   // elegir uno no lo recorta (perdería el punto de comparación). Los KPIs de
@@ -313,10 +313,12 @@ export function VistaProvincia({
     : focalizacionDeptos.map((d) => d.departamento)
 
   // Vista "nominal" del mismo gráfico (pedido 2026-10-01): monto ATP en
-  // millones de $ en vez del índice %/% de focalización, con una barra de
-  // referencia de promedio al final (provincial a nivel departamento,
+  // millones de $ en vez del índice %/% de focalización, con una LÍNEA
+  // vertical punteada de referencia (provincial a nivel departamento,
   // departamental a nivel localidad — mismo criterio contextual que ya usa
-  // el resto de este componente al elegir un departamento).
+  // el resto de este componente al elegir un departamento). Antes era una
+  // barra más al final del gráfico — pedido 2026-10-01: pasa a línea para
+  // no competir visualmente como si fuera "un departamento/localidad más".
   const ATP_MILLON = 1_000_000
   const nominalDeptos = deptos.filter((d) => d.atp_monto > 0).sort((a, b) => b.atp_monto - a.atp_monto)
   const promedioAtpProvincial = deptos.length
@@ -332,12 +334,11 @@ export function VistaProvincia({
   const nominalItems = departamentoSeleccionado ? nominalLocalidades : nominalDeptos
   const nominalPromedio = departamentoSeleccionado ? promedioAtpDepartamental : promedioAtpProvincial
   const nominalPromedioLabel = departamentoSeleccionado ? 'Promedio departamental' : 'Promedio provincial'
-  const nominalLabels = [
-    ...(departamentoSeleccionado ? nominalLocalidades.map((l) => l.localidad) : nominalDeptos.map((d) => d.departamento)),
-    nominalPromedioLabel,
-  ]
-  const nominalValues = [...nominalItems.map((d) => d.atp_monto / ATP_MILLON), nominalPromedio / ATP_MILLON]
-  const nominalColors = [...nominalItems.map(() => '#01aae3'), '#172c3f']
+  const nominalLabels = departamentoSeleccionado
+    ? nominalLocalidades.map((l) => l.localidad)
+    : nominalDeptos.map((d) => d.departamento)
+  const nominalValues = nominalItems.map((d) => Math.round((d.atp_monto / ATP_MILLON) * 10) / 10)
+  const nominalColors = nominalItems.map(() => '#01aae3')
 
   return (
     <div className="space-y-4">
@@ -418,7 +419,7 @@ export function VistaProvincia({
             </div>
             <p className="text-[11px] text-gray-500 max-w-xs">
               Una localidad cuenta como "cubierta" si tiene al menos esta cantidad de líneas de
-              programa/gestión registradas (sumando las 5 fuentes). Default: 5.
+              programa/gestión registradas (sumando las 5 fuentes). Default: 3.
             </p>
           </div>
         )}
@@ -486,15 +487,17 @@ export function VistaProvincia({
           {vistaAtp === 'nominal' ? (
             <>
               <p className="text-[11px] text-gray-400 mb-3">
-                Monto total comprometido en ATP, en millones de pesos · "{nominalPromedioLabel}" es el promedio
-                {departamentoSeleccionado ? ' entre las localidades de este departamento' : ' entre los 26 departamentos'}.
+                Monto total comprometido en ATP, en millones de pesos · la línea punteada marca "
+                {nominalPromedioLabel}"
+                {departamentoSeleccionado ? ' (promedio entre las localidades de este departamento)' : ' (promedio entre los 26 departamentos)'}.
               </p>
               <BarChart
                 labels={nominalLabels}
-                values={nominalValues.map((v) => Math.round(v * 10) / 10)}
+                values={nominalValues}
                 colors={nominalColors}
                 horizontal
                 tooltipSuffix=" M"
+                lineaReferencia={{ valor: Math.round((nominalPromedio / ATP_MILLON) * 10) / 10 }}
                 height={Math.max(220, nominalLabels.length * 26)}
               />
             </>
@@ -502,13 +505,15 @@ export function VistaProvincia({
             <>
               <p className="text-[11px] text-gray-400 mb-3">
                 &gt; 1.00: {departamentoSeleccionado ? 'la localidad recibió' : 'el departamento recibió'} más ATP del que
-                le tocaría por población · &lt; 1.00: menos.
+                le tocaría por población · &lt; 1.00: menos · la línea punteada marca el total provincial (1.00,
+                proporcional).
               </p>
               <BarChart
                 labels={focalizacionLabels}
                 values={focalizacion.map((d) => d.focalizacion_atp ?? 0)}
                 colors={focalizacion.map((d) => colorDivergente(d.focalizacion_atp ?? 1, 1))}
                 horizontal
+                lineaReferencia={{ valor: 1 }}
                 height={Math.max(220, focalizacion.length * 26)}
               />
             </>
