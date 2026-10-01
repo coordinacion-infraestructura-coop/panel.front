@@ -3,17 +3,19 @@
 // tanto en el panel principal (ResumenTerritorialPage, cuando hay una
 // localidad elegida) como en la Ficha de Localidad (siempre, es inherente a
 // esa página). Dos filas:
-//   1. Conteos de programas por fuente (Viviendas/CC/CH/Gas/ATP/Demandas) —
-//      "Com. Regionales" queda como placeholder explícito: el propio usuario
+//   1. Conteos de programas por fuente (CC/CH/Gas/ATP/Demandas) — "Com.
+//      Regionales" queda como placeholder explícito: el propio usuario
 //      aclaró que todavía no hay fuente de datos (futuro filtro del panel de
-//      gestiones de Privada), no se inventa un número.
+//      gestiones de Privada), no se inventa un número. "Viviendas" se sacó
+//      (2026-10-01): el usuario la pensó como "cantidad de casas del
+//      programa CH", no el Censo 2022 — ya cubierto por el conteo "CH",
+//      redundante.
 //   2. Comparativas per cápita (transferencias/ATP/total) de la localidad
 //      contra el promedio de su departamento y el promedio provincial.
 import type { ResumenLocalidad } from '../types/resumenTerritorial.types'
 import type { DepartamentoAgregado, KpisProvincia } from '../utils/departamentoAgregados'
 
 export interface ConteosPrincipalesLocalidad {
-  viviendas: string
   cc: number
   ch: number
   gas: number
@@ -28,7 +30,6 @@ export interface ConteosPrincipalesLocalidad {
 export function contarProgramasLocalidad(loc: ResumenLocalidad): ConteosPrincipalesLocalidad {
   const contar = (id: string) => loc.programas.filter((p) => p.programa === id).length
   return {
-    viviendas: loc.viviendas_2022 != null ? loc.viviendas_2022.toLocaleString('es-AR') : '—',
     cc: contar('cordon_cuneta'),
     ch: contar('cordoba_hogar'),
     gas: contar('acciones_territorio'),
@@ -65,7 +66,6 @@ export function IndicadoresPrincipalesLocalidad({
     localidad.poblacion_2022 && totalMontoLocalidad > 0 ? totalMontoLocalidad / localidad.poblacion_2022 : null
 
   const tarjetasConteo: { label: string; value: string | number; nd?: boolean; hint?: string }[] = [
-    { label: 'Viviendas', value: conteos.viviendas },
     { label: 'CC', value: conteos.cc },
     { label: 'CH', value: conteos.ch },
     { label: 'Gas', value: conteos.gas },
