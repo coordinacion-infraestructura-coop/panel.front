@@ -12,7 +12,7 @@ import type {
   ResumenSnapshot,
   ResumenTerritorialPayload,
 } from '../types/resumenTerritorial.types'
-import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
+import type { Kpi } from '../../../shared/components/informe/KpiStrip'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -512,6 +512,47 @@ export function ResumenTerritorialPage() {
 
         {payload && payload.localidades.length > 0 && (
           <div className="space-y-4">
+            {/* Búsqueda + Por Localidad/Por Departamento — arriba de todo (debajo
+                del título), a pedido del usuario. Ya no dependen de la tabla
+                general abierta: ambos alimentan el "Resumen de la tabla general"
+                dentro de VistaProvincia, que ahora siempre está visible. */}
+            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg p-3">
+              <div className="relative flex-1 min-w-[220px] max-w-xl">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                  🔍
+                </span>
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por localidad o departamento…"
+                  className="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-gov-cyan/40 focus:border-gov-cyan"
+                />
+                {q && (
+                  <button
+                    onClick={() => setQ('')}
+                    aria-label="Limpiar búsqueda"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
+                {(['localidad', 'departamento'] as Unidad[]).map((u) => (
+                  <button
+                    key={u}
+                    onClick={() => setUnidad(u)}
+                    className={`px-3 py-1.5 text-sm rounded-md ${
+                      unidad === u ? 'bg-gov-cyan text-white' : 'text-gray-600'
+                    }`}
+                  >
+                    Por {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Breadcrumb de navegación — nivel Departamento/Localidad reusa los
                 filtros existentes (fDep/fLocActivo) como estado, spec §4 Etapa 3. */}
             <nav className="flex items-center gap-1.5 text-sm">
@@ -597,6 +638,7 @@ export function ResumenTerritorialPage() {
               payload={payload}
               departamentoSeleccionado={fDep || null}
               onSelectDepartamento={seleccionarDepartamentoDesdeMapa}
+              kpisTabla={kpis}
             />
 
             <button
@@ -609,46 +651,8 @@ export function ResumenTerritorialPage() {
 
             {tablaAbierta && (
             <>
-            <KpiStrip items={kpis} />
-
-            {/* Búsqueda libre — separada de los filtros, es lo primero de la barra */}
-            <div className="relative max-w-xl">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                🔍
-              </span>
-              <input
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar por localidad o departamento…"
-                className="w-full text-sm bg-white border border-slate-300 rounded-lg pl-9 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-gov-cyan/40 focus:border-gov-cyan"
-              />
-              {q && (
-                <button
-                  onClick={() => setQ('')}
-                  aria-label="Limpiar búsqueda"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {/* Toolbar */}
+            {/* Toolbar (búsqueda y Por Localidad/Departamento viven arriba, junto al título) */}
             <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
-                {(['localidad', 'departamento'] as Unidad[]).map((u) => (
-                  <button
-                    key={u}
-                    onClick={() => setUnidad(u)}
-                    className={`px-3 py-1.5 text-sm rounded-md ${
-                      unidad === u ? 'bg-gov-cyan text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    Por {u}
-                  </button>
-                ))}
-              </div>
               <span className="text-xs text-gray-500">
                 Alcance: <strong className="text-gov-navy">{alcance}</strong>
                 {puedeVerPrivada && privadaQuery.isLoading && (

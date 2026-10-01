@@ -69,10 +69,16 @@ export function VistaProvincia({
   payload,
   departamentoSeleccionado,
   onSelectDepartamento,
+  kpisTabla,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
   onSelectDepartamento: (departamento: string) => void
+  /** KPIs de la tabla general (versión anterior de Resumen Territorial) — se
+   * muestran debajo de los indicadores nuevos y antes del mapa, a pedido del
+   * usuario (no se recalculan acá, vienen ya armados de ResumenTerritorialPage
+   * sobre `localidadesFiltradas`). */
+  kpisTabla?: Kpi[]
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
 
@@ -172,6 +178,15 @@ export function VistaProvincia({
           ))}
         </ul>
       </div>
+
+      {kpisTabla && kpisTabla.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            Resumen de la tabla general
+          </p>
+          <KpiStrip items={kpisTabla} />
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
