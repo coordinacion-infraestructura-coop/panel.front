@@ -165,7 +165,6 @@ export function ResumenTerritorialPage() {
   // Tabla general (filtros + tabla legado) colapsada por defecto — la vista
   // principal ahora es VistaProvincia (mapa + KPIs), spec §4 Etapa 3.
   const [tablaAbierta, setTablaAbierta] = useState(false)
-  const [q, setQ] = useState('')
   // Se inicializa desde ?departamento= si venimos del link "← Volver" de la
   // Ficha de Localidad (ruta propia) — no perder el contexto de dónde se
   // estaba antes de entrar a la ficha.
@@ -307,12 +306,10 @@ export function ResumenTerritorialPage() {
   }, [fDep, fLocActivo])
 
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
-    const nq = norm(q)
     return (payload?.localidades ?? [])
       .filter((loc) => {
         if (fDep && loc.departamento !== fDep) return false
         if (fLocActivo && loc.localidad !== fLocActivo) return false
-        if (nq && !norm(`${loc.localidad} ${loc.departamento ?? ''}`).includes(nq)) return false
         // Chequea contra los programas originales de la localidad (no los ya
         // filtrados por fArea/fProg más abajo) — "visitó" es un hecho de la
         // localidad, independiente de qué área/programa esté mostrando la tabla.
@@ -338,7 +335,7 @@ export function ResumenTerritorialPage() {
         return { ...loc, programas: progs }
       })
       .filter((loc) => loc.programas.length > 0)
-  }, [payload, q, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist, fVisitaGob])
+  }, [payload, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist, fVisitaGob])
 
   // Denominadores del padrón geográfico (siempre el total real, sin filtrar)
   // para mostrar "413 de 426" en vez de un número pelado — a pedido del
@@ -400,9 +397,8 @@ export function ResumenTerritorialPage() {
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
-  const hayFiltros = q || fDep || fLocActivo || fArea || fProg || fEstado || fChecklist || fVisitaGob
+  const hayFiltros = fDep || fLocActivo || fArea || fProg || fEstado || fChecklist || fVisitaGob
   const limpiar = () => {
-    setQ('')
     setFDep('')
     setFLoc('')
     setFArea('')
@@ -417,7 +413,6 @@ export function ResumenTerritorialPage() {
   const [exportando, setExportando] = useState(false)
   const [exportAviso, setExportAviso] = useState<string | null>(null)
   const filtrosTexto = [
-    q && `texto “${q}”`,
     fDep && `departamento ${fDep}`,
     fLocActivo && `localidad ${fLocActivo}`,
     fArea && `área ${AREA_LABEL[fArea] ?? fArea}`,
@@ -530,32 +525,11 @@ export function ResumenTerritorialPage() {
 
         {payload && payload.localidades.length > 0 && (
           <div className="space-y-4">
-            {/* Búsqueda + Por Localidad/Por Departamento — arriba de todo (debajo
-                del título), a pedido del usuario. Ya no dependen de la tabla
-                general abierta: ambos alimentan el "Resumen de la tabla general"
-                dentro de VistaProvincia, que ahora siempre está visible. */}
+            {/* Por Localidad/Por Departamento — arriba de todo (debajo del título).
+                La barra de búsqueda con lupa que vivía acá se sacó (2026-10-01):
+                filtraba por localidad/departamento, redundante con "Ir a" de más
+                abajo, que ya resuelve lo mismo con un selector + autocomplete. */}
             <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg p-3">
-              <div className="relative flex-1 min-w-[220px] max-w-xl">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                  🔍
-                </span>
-                <input
-                  type="search"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por localidad o departamento…"
-                  className="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-gov-cyan/40 focus:border-gov-cyan"
-                />
-                {q && (
-                  <button
-                    onClick={() => setQ('')}
-                    aria-label="Limpiar búsqueda"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
               <div className="inline-flex bg-slate-100 border border-slate-300 rounded-lg p-0.5">
                 {(['localidad', 'departamento'] as Unidad[]).map((u) => (
                   <button

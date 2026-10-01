@@ -16,8 +16,9 @@ import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../f
 import { useState, useMemo } from 'react'
 import { calcularDepartamentos, calcularKpisProvincia } from '../utils/departamentoAgregados'
 import {
-  IndicadoresPrincipalesLocalidad,
+  IndicadoresPrincipales,
   contarProgramasLocalidad,
+  type ComparativaPerCapita,
 } from '../components/IndicadoresPrincipalesLocalidad'
 
 const norm = (s: string) =>
@@ -88,6 +89,37 @@ export function FichaLocalidadPage() {
   const departamentoAgregado = resumen
     ? deptosAgregados.find((d) => d.departamento === resumen.departamento) ?? null
     : null
+
+  const comparativasPerCapita: ComparativaPerCapita[] = useMemo(() => {
+    if (!resumen || !kpisProvincia) return []
+    const atpMontoLocalidad = resumen.programas
+      .filter((p) => p.programa === 'atp')
+      .reduce((s, p) => s + (p.monto ?? 0), 0)
+    const totalMontoLocalidad = (resumen.transferencias_total ?? 0) + atpMontoLocalidad
+    const totalPerCapitaLocalidad =
+      resumen.poblacion_2022 && totalMontoLocalidad > 0 ? totalMontoLocalidad / resumen.poblacion_2022 : null
+    const secundarios = (depto: number | null, prov: number | null) => [
+      { label: 'Depto', valor: depto },
+      { label: 'Provincia', valor: prov },
+    ]
+    return [
+      {
+        label: 'Transferencias per cápita',
+        valor: resumen.transferencias_per_capita,
+        secundarios: secundarios(departamentoAgregado?.transferencias_per_capita ?? null, kpisProvincia.transferencias_per_capita),
+      },
+      {
+        label: 'ATP per cápita',
+        valor: resumen.atp_monto_per_capita,
+        secundarios: secundarios(departamentoAgregado?.atp_monto_per_capita ?? null, kpisProvincia.atp_monto_per_capita),
+      },
+      {
+        label: 'Total per cápita',
+        valor: totalPerCapitaLocalidad,
+        secundarios: secundarios(departamentoAgregado?.total_monto_per_capita ?? null, kpisProvincia.total_monto_per_capita),
+      },
+    ]
+  }, [resumen, departamentoAgregado, kpisProvincia])
 
   const habilitado = !!resumen?.departamento && !!resumen?.localidad
   const { data: ficha, isLoading: cargandoFicha, isError } = useQuery({
@@ -169,11 +201,10 @@ export function FichaLocalidadPage() {
 
       {kpisProvincia && (
         <div className="mb-5">
-          <IndicadoresPrincipalesLocalidad
+          <IndicadoresPrincipales
+            titulo={resumen.localidad}
             conteos={contarProgramasLocalidad(resumen)}
-            localidad={resumen}
-            departamentoAgregado={departamentoAgregado}
-            kpisProvincia={kpisProvincia}
+            comparativas={comparativasPerCapita}
           />
         </div>
       )}

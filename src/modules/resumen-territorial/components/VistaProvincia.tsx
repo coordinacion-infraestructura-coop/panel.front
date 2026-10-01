@@ -17,8 +17,9 @@ import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
 import { calcularDepartamentos, calcularFocalizacionPorLocalidad, calcularKpisProvincia } from '../utils/departamentoAgregados'
 import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
 import {
-  IndicadoresPrincipalesLocalidad,
-  contarProgramasLocalidad,
+  IndicadoresPrincipales,
+  contarProgramasAgregado,
+  type ComparativaPerCapita,
 } from './IndicadoresPrincipalesLocalidad'
 
 type MetricaProvincia = 'promedio_programas' | 'gestiones_10k_hab' | 'pct_cobertura' | 'focalizacion_atp'
@@ -93,12 +94,11 @@ export function VistaProvincia({
    * sólo reaccionaban a `departamentoSeleccionado` — bug real reportado
    * 2026-10-01: elegir una localidad no cambiaba los indicadores nuevos. */
   localidadesFiltradas?: ResumenLocalidad[]
-  /** Localidad puntual elegida en "Ir a" (fLocActivo de ResumenTerritorialPage)
-   * — cuando está presente, se muestran los Indicadores Principales (pedido
-   * 2026-10-01) primero y más grandes que el resto, igual que en la Ficha de
-   * Localidad. `null`/`undefined` = sin localidad elegida (sólo depto o toda
-   * la provincia), no se muestran — la comparativa per cápita no tiene
-   * sentido sin una localidad puntual contra la cual compararse. */
+  /** Localidad puntual elegida en "Ir a" (fLocActivo de ResumenTerritorialPage).
+   * Los Indicadores Principales (pedido 2026-10-01) están SIEMPRE visibles —
+   * se adaptan a la escala activa: provincia sin filtro, el departamento si
+   * `departamentoSeleccionado` está puesto sin localidad, o esta localidad
+   * puntual si está presente. */
   localidadSeleccionada?: ResumenLocalidad | null
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
@@ -112,14 +112,106 @@ export function VistaProvincia({
   // arriba).
   const deptos = useMemo(() => calcularDepartamentos(payload), [payload])
 
-  // Para los Indicadores Principales de la localidad elegida — SIEMPRE sobre
-  // el payload completo sin filtrar (mismo criterio que la Ficha de
-  // Localidad): el promedio departamental/provincial de la comparativa per
-  // cápita tiene que ser el real, no uno recortado por los filtros activos.
+  // Indicadores Principales (pedido 2026-10-01) — SIEMPRE visibles, en 3
+  // escalas posibles (provincia/departamento/localidad, la más específica
+  // que esté activa). SIEMPRE calculados sobre el payload completo sin
+  // filtrar — el promedio departamental/provincial de la comparativa per
+  // cápita tiene que ser el real, nunca uno recortado por otros filtros.
   const kpisProvinciaCompleta = useMemo(() => calcularKpisProvincia(payload), [payload])
   const departamentoDeLocalidadSeleccionada = localidadSeleccionada
     ? deptos.find((d) => d.departamento === localidadSeleccionada.departamento) ?? null
     : null
+  const departamentoAgregadoActivo = departamentoSeleccionado
+    ? deptos.find((d) => d.departamento === departamentoSeleccionado) ?? null
+    : null
+
+  const tituloIndicadores = localidadSeleccionada
+    ? localidadSeleccionada.localidad
+    : departamentoSeleccionado
+      ? `Departamento ${departamentoSeleccionado}`
+      : 'Toda la provincia'
+
+  const conteosIndicadores = useMemo(() => {
+    if (localidadSeleccionada) return contarProgramasAgregado([localidadSeleccionada])
+    if (departamentoSeleccionado) {
+      return contarProgramasAgregado(payload.localidades.filter((l) => l.departamento === departamentoSeleccionado))
+    }
+    return contarProgramasAgregado(payload.localidades)
+  }, [payload, departamentoSeleccionado, localidadSeleccionada])
+
+  const comparativasIndicadores: ComparativaPerCapita[] = useMemo(() => {
+    if (localidadSeleccionada) {
+      const atpMontoLocalidad = localidadSeleccionada.programas
+        .filter((p) => p.programa === 'atp')
+        .reduce((s, p) => s + (p.monto ?? 0), 0)
+      const totalMontoLocalidad = (localidadSeleccionada.transferencias_total ?? 0) + atpMontoLocalidad
+      const totalPerCapitaLocalidad =
+        localidadSeleccionada.poblacion_2022 && totalMontoLocalidad > 0
+          ? totalMontoLocalidad / localidadSeleccionada.poblacion_2022
+          : null
+      const secundarios = (depto: number | null, prov: number | null) => [
+        { label: 'Depto', valor: depto },
+        { label: 'Provincia', valor: prov },
+      ]
+      return [
+        {
+          label: 'Transferencias per cápita',
+          valor: localidadSeleccionada.transferencias_per_capita,
+          secundarios: secundarios(
+            departamentoDeLocalidadSeleccionada?.transferencias_per_capita ?? null,
+            kpisProvinciaCompleta.transferencias_per_capita,
+          ),
+        },
+        {
+          label: 'ATP per cápita',
+          valor: localidadSeleccionada.atp_monto_per_capita,
+          secundarios: secundarios(
+            departamentoDeLocalidadSeleccionada?.atp_monto_per_capita ?? null,
+            kpisProvinciaCompleta.atp_monto_per_capita,
+          ),
+        },
+        {
+          label: 'Total per cápita',
+          valor: totalPerCapitaLocalidad,
+          secundarios: secundarios(
+            departamentoDeLocalidadSeleccionada?.total_monto_per_capita ?? null,
+            kpisProvinciaCompleta.total_monto_per_capita,
+          ),
+        },
+      ]
+    }
+    if (departamentoSeleccionado) {
+      return [
+        {
+          label: 'Transferencias per cápita',
+          valor: departamentoAgregadoActivo?.transferencias_per_capita ?? null,
+          secundarios: [{ label: 'Provincia', valor: kpisProvinciaCompleta.transferencias_per_capita }],
+        },
+        {
+          label: 'ATP per cápita',
+          valor: departamentoAgregadoActivo?.atp_monto_per_capita ?? null,
+          secundarios: [{ label: 'Provincia', valor: kpisProvinciaCompleta.atp_monto_per_capita }],
+        },
+        {
+          label: 'Total per cápita',
+          valor: departamentoAgregadoActivo?.total_monto_per_capita ?? null,
+          secundarios: [{ label: 'Provincia', valor: kpisProvinciaCompleta.total_monto_per_capita }],
+        },
+      ]
+    }
+    // Provincia — no hay nada más amplio contra qué comparar.
+    return [
+      { label: 'Transferencias per cápita', valor: kpisProvinciaCompleta.transferencias_per_capita, secundarios: [] },
+      { label: 'ATP per cápita', valor: kpisProvinciaCompleta.atp_monto_per_capita, secundarios: [] },
+      { label: 'Total per cápita', valor: kpisProvinciaCompleta.total_monto_per_capita, secundarios: [] },
+    ]
+  }, [
+    localidadSeleccionada,
+    departamentoSeleccionado,
+    departamentoDeLocalidadSeleccionada,
+    departamentoAgregadoActivo,
+    kpisProvinciaCompleta,
+  ])
 
   const baseLocalidadesKpis = localidadesFiltradas ?? payload.localidades
   const deptosPresentesKpis = useMemo(
@@ -245,14 +337,11 @@ export function VistaProvincia({
 
   return (
     <div className="space-y-4">
-      {localidadSeleccionada && (
-        <IndicadoresPrincipalesLocalidad
-          conteos={contarProgramasLocalidad(localidadSeleccionada)}
-          localidad={localidadSeleccionada}
-          departamentoAgregado={departamentoDeLocalidadSeleccionada}
-          kpisProvincia={kpisProvinciaCompleta}
-        />
-      )}
+      <IndicadoresPrincipales
+        titulo={tituloIndicadores}
+        conteos={conteosIndicadores}
+        comparativas={comparativasIndicadores}
+      />
 
       <div>
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
