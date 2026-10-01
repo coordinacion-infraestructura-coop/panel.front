@@ -441,7 +441,8 @@ export function ResumenTerritorialPage() {
     setFichaBusy(fmt)
     setFichaError(null)
     try {
-      const f = await armarFichaMunicipio(municipioSel.departamento ?? '', municipioSel.localidad)
+      const loc = payload?.localidades.find((l) => l.localidad === municipioSel.localidad)
+      const f = await armarFichaMunicipio(municipioSel.departamento ?? '', municipioSel.localidad, loc)
       if (fmt === 'pdf') await fichaMunicipioPdf(f)
       else fichaMunicipioXlsx(f)
     } catch {

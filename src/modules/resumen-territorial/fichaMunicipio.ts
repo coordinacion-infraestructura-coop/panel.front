@@ -15,6 +15,7 @@ const norm = (s: string) =>
   (s ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 
 const fmtNum = (n: number | null | undefined) => (n == null ? '—' : Number(n).toLocaleString('es-AR'))
+const fmtMoney = (n: number | null | undefined) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
 const fmtFecha = (s: string | null | undefined) => {
   if (!s) return '—'
   try { return new Date(s).toLocaleDateString('es-AR') } catch { return s }
@@ -110,6 +111,28 @@ interface AtpFila {
   entregas: { periodo: string; monto: number }[]
 }
 
+// Subset de ResumenLocalidad (svc-datos-externos, ADR-025) que necesita la
+// ficha — ambos callers (ResumenTerritorialPage y FichaLocalidadPage) ya
+// tienen el objeto completo en mano al pedir la ficha, así que se pasa acá
+// en vez de volver a pedir el snapshot entero dentro de armarFichaMunicipio.
+export interface DatosExternosLocalidad {
+  poblacion_2022: number | null
+  viviendas_2022: number | null
+  transferencias_periodo: string | null
+  transferencias_total: number | null
+  transferencias_per_capita: number | null
+  transferencias_por_concepto: Record<string, number> | null
+}
+
+const CONCEPTO_LABEL: Record<string, string> = {
+  coparticipacion_ley_8663: 'Coparticipación Ley Provincial N° 8663',
+  fasamu: 'FASAMU',
+  fofindes: 'FOFINDES',
+  fondo_compensacion: 'Fondo Compensación',
+  bono_consenso_fiscal: 'Bono Consenso Fiscal',
+}
+const CONCEPTO_ORDEN = ['coparticipacion_ley_8663', 'fasamu', 'fofindes', 'fondo_compensacion', 'bono_consenso_fiscal']
+
 export interface FichaMunicipio {
   departamento: string
   localidad: string
@@ -129,6 +152,14 @@ export interface FichaMunicipio {
   gestiones: { total: number; filas: GestionFila[] }
   gasifera: { total: number; filas: GasiferaFila[] }
   atp: { total: number; filas: AtpFila[] }
+  datosExternos: {
+    poblacion_2022: string
+    viviendas_2022: string
+    transferencias_periodo: string
+    transferencias_total: string
+    transferencias_per_capita: string
+    porConcepto: { concepto: string; monto: string }[]
+  }
 }
 
 async function catCategoriasMap(): Promise<Map<string, string>> {
@@ -180,8 +211,17 @@ function mismoMunicipio(departamento: string, nl: string, depto?: string | null,
   return !depto || norm(depto) === norm(departamento)
 }
 
-/** Junta toda la ficha para (departamento, localidad). */
-export async function armarFichaMunicipio(departamento: string, localidad: string): Promise<FichaMunicipio> {
+/** Junta toda la ficha para (departamento, localidad). `datosExternos` es
+ *  opcional — ambos callers ya tienen el `ResumenLocalidad` de esta
+ *  localidad en mano (snapshot de `resumen_territorial`), así que lo pasan
+ *  directo en vez de pedir el snapshot entero de nuevo acá adentro. Sin él
+ *  (ej. uso futuro sin ese contexto), la sección queda en "—", igual que el
+ *  resto de las secciones opcionales. */
+export async function armarFichaMunicipio(
+  departamento: string,
+  localidad: string,
+  datosExternos?: DatosExternosLocalidad | null,
+): Promise<FichaMunicipio> {
   const nl = norm(localidad)
   const [li, di, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
@@ -310,6 +350,16 @@ export async function armarFichaMunicipio(departamento: string, localidad: strin
         entregado: c.total_pagado != null ? Math.abs(c.total_pagado) : null,
         entregas: (atpCronogramas[i] ?? []).map((p) => ({ periodo: p.periodo, monto: p.monto })),
       })),
+    },
+    datosExternos: {
+      poblacion_2022: fmtNum(datosExternos?.poblacion_2022),
+      viviendas_2022: fmtNum(datosExternos?.viviendas_2022),
+      transferencias_periodo: datosExternos?.transferencias_periodo ?? '—',
+      transferencias_total: fmtMoney(datosExternos?.transferencias_total),
+      transferencias_per_capita: fmtMoney(datosExternos?.transferencias_per_capita),
+      porConcepto: CONCEPTO_ORDEN
+        .filter((c) => datosExternos?.transferencias_por_concepto?.[c] != null)
+        .map((c) => ({ concepto: CONCEPTO_LABEL[c], monto: fmtMoney(datosExternos!.transferencias_por_concepto![c]) })),
     },
   }
 }
@@ -547,6 +597,16 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
     })
   }
 
+  // ── Datos externos (Censo 2022 + Transferencias automáticas) ──
+  heading(`Datos Externos — Censo 2022 y Transferencias${f.datosExternos.transferencias_periodo !== '—' ? `  |  ${f.datosExternos.transferencias_periodo}` : ''}`)
+  kv('Población (Censo 2022)', f.datosExternos.poblacion_2022)
+  kv('Viviendas (Censo 2022)', f.datosExternos.viviendas_2022)
+  if (f.datosExternos.porConcepto.length) {
+    f.datosExternos.porConcepto.forEach((c) => kv(c.concepto, c.monto))
+  }
+  kv('Total transferencias', f.datosExternos.transferencias_total)
+  kv('Transferencias per cápita', f.datosExternos.transferencias_per_capita)
+
   // ── Pie de página en todas las hojas ──
   const total = doc.getNumberOfPages()
   const gen = new Date().toLocaleString('es-AR')
@@ -637,6 +697,16 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     {},
     { Campo: `ATP — Total ${f.atp.total}`, Valor: '' },
     ...atp,
+    {},
+    {
+      Campo: `Datos Externos — Censo 2022 y Transferencias${f.datosExternos.transferencias_periodo !== '—' ? ` (${f.datosExternos.transferencias_periodo})` : ''}`,
+      Valor: '',
+    },
+    { Campo: '  Población (Censo 2022)', Valor: f.datosExternos.poblacion_2022 },
+    { Campo: '  Viviendas (Censo 2022)', Valor: f.datosExternos.viviendas_2022 },
+    ...f.datosExternos.porConcepto.map((c) => ({ Campo: `  ${c.concepto}`, Valor: c.monto })),
+    { Campo: '  Total transferencias', Valor: f.datosExternos.transferencias_total },
+    { Campo: '  Transferencias per cápita', Valor: f.datosExternos.transferencias_per_capita },
   ]
   exportToXlsx(filas, 'Ficha municipio', `ficha_${norm(f.localidad).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

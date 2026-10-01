@@ -70,7 +70,7 @@ export function FichaLocalidadPage() {
   const habilitado = !!resumen?.departamento && !!resumen?.localidad
   const { data: ficha, isLoading: cargandoFicha, isError } = useQuery({
     queryKey: ['ficha-municipio', resumen?.departamento, resumen?.localidad],
-    queryFn: () => armarFichaMunicipio(resumen!.departamento!, resumen!.localidad),
+    queryFn: () => armarFichaMunicipio(resumen!.departamento!, resumen!.localidad, resumen),
     enabled: habilitado,
     staleTime: 2 * 60 * 1000,
   })
