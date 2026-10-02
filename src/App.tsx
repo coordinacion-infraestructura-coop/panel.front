@@ -50,7 +50,8 @@ export default function App() {
                 path="resumen-territorial"
                 element={
                   <ProtectedRoute
-                    roles={['Admin', 'Autoridad', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV']}
+                    roles={['Autoridad']}
+                    requiredSecretarias={['supervision']}
                   >
                     <ResumenTerritorialPage />
                   </ProtectedRoute>
@@ -60,7 +61,8 @@ export default function App() {
                 path="resumen-territorial/:departamento/:localidad"
                 element={
                   <ProtectedRoute
-                    roles={['Admin', 'Autoridad', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV']}
+                    roles={['Autoridad']}
+                    requiredSecretarias={['supervision']}
                   >
                     <FichaLocalidadPage />
                   </ProtectedRoute>

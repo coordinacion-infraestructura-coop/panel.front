@@ -166,6 +166,9 @@ export function DashboardPage() {
     return assigned.includes(sec.id)
   }
 
+  // Verificar acceso a Resumen Territorial: rol Autoridad OR secretaría 'supervision'
+  const canAccessResumenTerritorial = portalUser?.rol === 'Autoridad' || assigned.some(s => s.toLowerCase() === 'supervision')
+
   const visibleActivas = SECRETARIAS.filter((s) => s.activa && canSee(s))
   const visibleDesarrollo = SECRETARIAS.filter((s) => !s.activa && canSee(s))
 
@@ -204,7 +207,7 @@ export function DashboardPage() {
       )}
 
       {/* Sin acceso */}
-      {!isLoading && portalUser && (
+      {!isLoading && portalUser && canAccessResumenTerritorial && (
         <Link
           to="/resumen-territorial"
           className="block mb-4 rounded-lg border border-gov-cyan/40 bg-gradient-to-r from-gov-navy to-[#1e3a52] text-white px-5 py-4 hover:brightness-110 transition group focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"

@@ -66,6 +66,9 @@ export function Layout() {
   const navItems = activeSecretaria ? navItemsFor(activeSecretaria, portalUser?.rol) : []
   const isAdmin = portalUser?.rol === 'Admin'
   const isAdminPage = location.pathname.startsWith('/admin')
+  
+  // Verificar acceso a Resumen Territorial: rol Autoridad OR secretaría 'supervision'
+  const canAccessResumenTerritorial = portalUser?.rol === 'Autoridad' || (portalUser?.secretarias ?? []).some(s => s.toLowerCase() === 'supervision')
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -128,8 +131,8 @@ export function Layout() {
               Inicio
             </Link>
 
-            {/* Resumen Territorial — transversal, siempre visible para usuarios con perfil de portal */}
-            {portalUser && (
+            {/* Resumen Territorial — transversal, solo para usuarios Autoridad o con secretaría supervisión */}
+            {portalUser && canAccessResumenTerritorial && (
               <Link
                 to="/resumen-territorial"
                 aria-current={
