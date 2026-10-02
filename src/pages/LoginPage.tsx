@@ -1,14 +1,19 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../shared/auth/AuthContext'
+import { usePortalUser } from '../shared/hooks/usePortalUser'
 
 export function LoginPage() {
   const { user, loading, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+  const portalQuery = usePortalUser(!loading && !!user)
 
   useEffect(() => {
-    if (!loading && user) navigate('/', { replace: true })
-  }, [user, loading, navigate])
+    if (!loading && user && portalQuery.data) {
+      const redirectPath = portalQuery.data.rol === 'Autoridad' ? '/resumen-territorial' : '/'
+      navigate(redirectPath, { replace: true })
+    }
+  }, [user, loading, portalQuery.data, navigate])
 
   return (
     <div className="min-h-screen bg-gov-navy flex flex-col items-center justify-center px-4">
