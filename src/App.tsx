@@ -85,8 +85,22 @@ export default function App() {
               />
               <Route path="vivienda/mi-lugar" element={<MiLugarPage />} />
               <Route path="vivienda/checklist-tecnico" element={<ChecklistTecnicoPage />} />
-              <Route path="privada/gestiones" element={<GestionesListPage />} />
-              <Route path="privada/tablero" element={<TableroPage />} />
+              <Route
+                path="privada/gestiones"
+                element={
+                  <ProtectedRoute requiredSecretarias={['privada']}>
+                    <GestionesListPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="privada/tablero"
+                element={
+                  <ProtectedRoute requiredSecretarias={['privada']}>
+                    <TableroPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="gasifera/pit" element={<GasiferaPitPage />} />
               <Route path="gralgob/atp" element={<AtpPage />} />
               <Route
