@@ -33,10 +33,12 @@ export function ProtectedRoute({ children, roles, requiredSecretarias }: Protect
   let hasAccess = true
 
   if (roles || requiredSecretarias) {
-    const hasRole = roles && roles.includes(userRol)
-    const hasSecretaria = requiredSecretarias && requiredSecretarias.some((sec) =>
-      userSecretarias.some((userSec) => userSec.toLowerCase() === sec.toLowerCase())
-    )
+    const hasRole: boolean = roles ? roles.includes(userRol) : false
+    const hasSecretaria: boolean = requiredSecretarias
+      ? requiredSecretarias.some((sec) =>
+          userSecretarias.some((userSec) => userSec.toLowerCase() === sec.toLowerCase())
+        )
+      : false
 
     // Si se especifican ambos, es OR (basta cumplir una); si solo uno, se valida ese
     if (roles && requiredSecretarias) {
