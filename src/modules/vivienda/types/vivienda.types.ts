@@ -159,7 +159,6 @@ export interface MunicipioCCCreate {
   monto?: number
   ok_gob?: string
   ejuridico?: number
-  etecnico?: number
   efinanciero?: number
 }
 
@@ -193,7 +192,6 @@ export interface MunicipioCCUpdate {
   ok_gob?: string
   doc_exp?: string
   ejuridico?: number | null
-  etecnico?: number | null
   efinanciero?: number | null
   estado_general?: number | null
   cordon_cuneta_ml?: number | null
@@ -321,7 +319,6 @@ export interface LocalidadCHCreate {
   cantidad_casas?: number
   ok_gob?: string
   ejuridico?: number
-  etecnico?: number
   efinanciero?: number
 }
 
@@ -358,7 +355,6 @@ export interface LocalidadCHUpdate {
   ok_gob?: string
   doc_exp?: string
   ejuridico?: number | null
-  etecnico?: number | null
   efinanciero?: number | null
   estado_general?: number | null
   obs?: string
@@ -471,7 +467,6 @@ export interface ProyectoMLCreate {
   costo_total_infra?: number | null
   ok_gob?: string
   ejuridico?: number | null
-  etecnico?: number | null
   efinanciero?: number | null
   estado_general?: number | null
   obs?: string | null
@@ -495,7 +490,6 @@ export interface ProyectoMLUpdate {
   costo_total_infra?: number | null
   ok_gob?: string | null
   ejuridico?: number | null
-  etecnico?: number | null
   efinanciero?: number | null
   estado_general?: number | null
   obs?: string | null

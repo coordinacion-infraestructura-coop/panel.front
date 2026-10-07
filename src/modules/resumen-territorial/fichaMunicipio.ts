@@ -7,7 +7,7 @@ import { gasiferaPitApi } from '../gasifera/api/gasiferaPit.api'
 import type { AccionTerritorio } from '../gasifera/api/gasiferaPit.api'
 import { atpApi } from '../gralgob/api/atp.api'
 import type { Compromiso, CronogramaPago } from '../gralgob/api/atp.api'
-import { cordobaHogarApi, cordonCunetaApi, miLugarApi } from '../vivienda/api/vivienda.api'
+import { checklistTecnicoApi, cordobaHogarApi, cordonCunetaApi, miLugarApi } from '../vivienda/api/vivienda.api'
 import type { EstadoCC, EstadoCH, EstadoML } from '../vivienda/types/vivienda.types'
 import { fichaLocalidadApi } from './api/fichaLocalidad.api'
 
@@ -231,7 +231,7 @@ export async function armarFichaMunicipio(
   datosExternos?: DatosExternosLocalidad | null,
 ): Promise<FichaMunicipio> {
   const nl = norm(localidad)
-  const [li, di, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp] = await Promise.all([
+  const [li, di, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp, chkCatalogos] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
     fichaLocalidadApi.departamento(departamento).catch(() => null),
     cordobaHogarApi.getPanel().catch(() => null),
@@ -249,6 +249,7 @@ export async function armarFichaMunicipio(
     campoTrabajoMap().catch(() => new Map<number, string>()),
     gasiferaPitApi.accionesTerritorio().catch(() => ({ items: [] as AccionTerritorio[], total: 0 })),
     atpApi.compromisos().catch(() => ({ items: [] as Compromiso[], total: 0 })),
+    checklistTecnicoApi.getCatalogos().catch(() => null),
   ])
 
   const chEstados: EstadoCH[] = chPanel?.estados ?? []
@@ -310,7 +311,8 @@ export async function armarFichaMunicipio(
     miLugar: mlRows.map((p) => ({
       lotes: fmtNum(p.lotes),
       monto: fmtNum(p.monto),
-      etecnico: labelEstado(p.etecnico, mlEstados),
+      // El Técnico es el estado del expediente del Checklist Técnico, no del catálogo de Mi Lugar.
+      etecnico: labelEstado(p.etecnico, chkCatalogos?.estados_expediente ?? []),
       ejuridico: labelEstado(p.ejuridico, mlEstados),
       efinanciero: labelEstado(p.efinanciero, mlEstados),
       estado_general: labelEstado(p.estado_general, mlEstados),

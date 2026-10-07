@@ -4,11 +4,16 @@ import * as XLSX from 'xlsx'
 import { miLugarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { normalizeName } from '../../../shared/utils/normalizeName'
+import {
+  CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
+  useEstadosTecnico,
+} from '../estadoTecnico'
 import { MapaDualPuntos } from '../../../shared/components/informe/MapaDualPuntos'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
   EstadoMLCreate, EstadoMLUpdate, GeoPuntoMLCreate, GeoLocalidad, PuntoInforme,
+  CatalogoEstadoExpediente,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,7 +59,8 @@ const TIPO_CONFIG: Record<TipoProyectoML, { label: string; color: string }> = {
 
 const CAMPO_LABELS: Record<string, string> = {
   ejuridico:  'Jurídico',
-  etecnico:   'Técnico',
+  etecnico: 'Técnico (anterior)',
+  etecnico_checklist: 'Técnico',
   efinanciero:'Presupuestario',
 }
 
@@ -67,7 +73,7 @@ const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: 
 
 // ── avance ────────────────────────────────────────────────────────────────────
 
-function avancePct(p: ProyectoML, estados: EstadoML[]) {
+function avancePct(p: ProyectoML, estados: EstadoML[], estadosTecnico: CatalogoEstadoExpediente[]) {
   const tipoEstados = estados.filter((e) => e.tipo === p.tipo)
   const maxPos = Math.max(tipoEstados.length - 1, 1)
   const pos = (id: number | null) => {
@@ -75,7 +81,8 @@ function avancePct(p: ProyectoML, estados: EstadoML[]) {
     const i = tipoEstados.findIndex((e) => e.id === id)
     return i < 0 ? 0 : i
   }
-  return Math.round(((pos(p.ejuridico) + pos(p.etecnico) + pos(p.efinanciero)) / (maxPos * 3)) * 100)
+  const tecnico = avanceTecnico(p.etecnico, estadosTecnico)
+  return Math.round((((pos(p.ejuridico) + pos(p.efinanciero)) / maxPos + tecnico) / 3) * 100)
 }
 function avanceColor(pct: number) {
   if (pct === 0) return '#94a3b8'
@@ -88,7 +95,10 @@ function estadoLabel(id: number | null, estados: EstadoML[]): string {
   return estados.find((e) => e.id === id)?.label ?? '—'
 }
 
-function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProyectoML) {
+function exportXlsx(
+  proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProyectoML,
+  estadosTecnico: CatalogoEstadoExpediente[],
+) {
   const tipoEstados = estados.filter((e) => e.tipo === tipo)
   const rows = proyectos.map((p, i) => ({
     '#': i + 1,
@@ -106,10 +116,10 @@ function exportXlsx(proyectos: ProyectoML[], estados: EstadoML[], tipo: TipoProy
     'Convenio UNC ($)': p.convenio_unc ?? '',
     'Costo Total Infra ($)': p.costo_total_infra ?? '',
     'E. Jurídico': estadoLabel(p.ejuridico, tipoEstados),
-    'E. Técnico': estadoLabel(p.etecnico, tipoEstados),
+    'E. Técnico': tecnicoLabel(p.etecnico, estadosTecnico) || '—',
     'E. Presup.': estadoLabel(p.efinanciero, tipoEstados),
     'E. General': estadoLabel(p.estado_general, tipoEstados),
-    'Avance (%)': avancePct(p, tipoEstados),
+    'Avance (%)': avancePct(p, tipoEstados, estadosTecnico),
     'OK Gobernación': p.ok_gob,
     'Coordenadas': p.geo_puntos.map((g) => `${g.lat},${g.lng}`).join(' | '),
     'Observaciones': p.obs ?? '',
@@ -177,6 +187,7 @@ function GeoLinks({ puntos }: { puntos: ProyectoML['geo_puntos'] }) {
 // ── Historial de estados tab ───────────────────────────────────────────────────
 
 function HistorialEstadosTab({ proyectoId, estados }: { proyectoId: string; estados: EstadoML[] }) {
+  const estadosTecnico = useEstadosTecnico()
   const { data: historial = [], isLoading } = useQuery({
     queryKey: ['ml-historial', proyectoId],
     queryFn: () => miLugarApi.getHistorial(proyectoId),
@@ -204,10 +215,14 @@ function HistorialEstadosTab({ proyectoId, estados }: { proyectoId: string; esta
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {h.estado_anterior_id
-                ? <EstadoBadge id={h.estado_anterior_id} estados={estados} />
+                ? (h.campo === CAMPO_TECNICO_CHECKLIST
+                  ? <TecnicoBadge id={h.estado_anterior_id} estados={estadosTecnico} />
+                  : <EstadoBadge id={h.estado_anterior_id} estados={estados} />)
                 : <span className="text-gray-300 text-xs">Sin estado</span>}
               <IconChevronRight />
-              <EstadoBadge id={h.estado_nuevo_id} estados={estados} />
+              {h.campo === CAMPO_TECNICO_CHECKLIST
+                ? <TecnicoBadge id={h.estado_nuevo_id} estados={estadosTecnico} />
+                : <EstadoBadge id={h.estado_nuevo_id} estados={estados} />}
             </div>
           </div>
         </li>
@@ -388,6 +403,7 @@ function EditModal({
     [geoData, deptoGeo]
   )
 
+  const estadosTecnico = useEstadosTecnico()
   const [form, setForm] = useState<ProyectoMLUpdate>({
     nombre: proyecto.nombre,
     localidad_nombre: proyecto.localidad_nombre,
@@ -404,7 +420,6 @@ function EditModal({
     costo_total_infra: proyecto.costo_total_infra,
     ok_gob: proyecto.ok_gob,
     ejuridico: proyecto.ejuridico,
-    etecnico: proyecto.etecnico,
     efinanciero: proyecto.efinanciero,
     estado_general: proyecto.estado_general,
     obs: proyecto.obs ?? '',
@@ -565,7 +580,9 @@ function EditModal({
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
+              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => field === 'etecnico' ? (
+                <TecnicoSoloLectura key={field} id={proyecto.etecnico} estados={estadosTecnico} />
+              ) : (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
                   <label htmlFor={`${uid}-${field}`} className="block text-xs font-bold uppercase mb-2 text-gov-navy">
                     {CAMPO_LABELS[field]}
@@ -576,7 +593,7 @@ function EditModal({
                     onChange={(e) => set(field, e.target.value ? Number(e.target.value) : null)}>
                     <option value="">—</option>
                     {estados
-                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : field === 'etecnico' ? e.aplica_tecnico : e.aplica_financiero)
+                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
                       .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
                   </select>
                 </div>
@@ -1255,6 +1272,7 @@ export function MiLugarPage() {
   const [deptoFilter, setDeptoFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
   const [ejFilter, setEjFilter] = useState('')
+  const estadosTecnico = useEstadosTecnico()
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
   const [editTarget, setEditTarget] = useState<ProyectoML | null>(null)
@@ -1341,16 +1359,18 @@ export function MiLugarPage() {
     if (!sortCol) return filtered
     const dir = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => {
-      if (sortCol === 'avance') return dir * (avancePct(a, estados) - avancePct(b, estados))
-      const va = (a as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
-      const vb = (b as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
+      if (sortCol === 'avance') return dir * (avancePct(a, estados, estadosTecnico) - avancePct(b, estados, estadosTecnico))
+      const va = sortCol === 'etecnico' ? tecnicoOrden(a.etecnico, estadosTecnico)
+        : (a as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
+      const vb = sortCol === 'etecnico' ? tecnicoOrden(b.etecnico, estadosTecnico)
+        : (b as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
       if (va === null && vb === null) return 0
       if (va === null) return dir
       if (vb === null) return -dir
       if (typeof va === 'string') return dir * va.localeCompare(vb as string, 'es')
       return dir * (va - (vb as number))
     })
-  }, [filtered, sortCol, sortDir, estados])
+  }, [filtered, sortCol, sortDir, estados, estadosTecnico])
 
   const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter)
   const tieneFinanciero = tab === 'exp' || tab === 'prov'
@@ -1403,7 +1423,7 @@ export function MiLugarPage() {
           📊 Ver informe
         </button>
         <button
-          onClick={() => exportXlsx(sorted, estados, tab)}
+          onClick={() => exportXlsx(sorted, estados, tab, estadosTecnico)}
           disabled={!sorted.length}
           className="px-3 py-1.5 text-xs font-semibold rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-40"
           title={`Exportar ${sorted.length} registros a Excel`}>
@@ -1461,7 +1481,7 @@ export function MiLugarPage() {
           <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_tecnico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
         {tieneFinanciero && (
@@ -1549,7 +1569,7 @@ export function MiLugarPage() {
                 </tr>
               )}
               {sorted.map((p, idx) => {
-                const pct = avancePct(p, estados)
+                const pct = avancePct(p, estados, estadosTecnico)
                 const col = avanceColor(pct)
                 return (
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-sky-50/30 transition-colors">
@@ -1573,7 +1593,7 @@ export function MiLugarPage() {
                     <td className="px-2.5 py-1.5 text-gray-700" style={{ fontSize: '11px' }}>{p.superficie != null ? `${p.superficie}` : '—'}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-center" style={{ fontSize: '11px' }}>{p.lotes?.toLocaleString('es-AR') ?? '—'}</td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={p.ejuridico} estados={estados} /></td>
-                    <td className="px-2.5 py-1.5"><EstadoBadge id={p.etecnico} estados={estados} /></td>
+                    <td className="px-2.5 py-1.5"><TecnicoBadge id={p.etecnico} estados={estadosTecnico} /></td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={p.efinanciero} estados={estados} /></td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={p.estado_general} estados={estados} /></td>
                     <td className="px-2.5 py-1.5 font-semibold text-gov-blue whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.monto)}</td>
