@@ -184,6 +184,19 @@ export function ChecklistTecnicoPage() {
     if (data.programa === programa && data.entidad_id === entidad?.id) flashSaved()
   }
 
+  // El estado del expediente es el Estado Técnico de los paneles CC/CH/ML: al cambiarlo hay
+  // que refrescarlos (spec-estado-tecnico-desde-checklist.md §4.8).
+  const onEstadoSuccess = (data: ChecklistTecnico) => {
+    onMutationSuccess(data)
+    const [panel, historial] = {
+      cc: ['cordon-cuneta', 'cc-historial'],
+      ch: ['cordoba-hogar', 'ch-historial'],
+      ml: ['ml-proyectos', 'ml-historial'],
+    }[data.programa]
+    qc.invalidateQueries({ queryKey: [panel] })
+    qc.invalidateQueries({ queryKey: [historial, data.entidad_id] })
+  }
+
   const [mutationError, setMutationError] = useState<string | null>(null)
   const onMutationError = (err: unknown) => setMutationError(extractErrorMessage(err, 'No se pudo guardar el cambio.'))
 
@@ -193,7 +206,7 @@ export function ChecklistTecnicoPage() {
       fecha_radicacion?: string | null
       reparticion_id?: number | null
     }) => checklistTecnicoApi.updateChecklist(programa, entidad!.id, data),
-    onSuccess: onMutationSuccess,
+    onSuccess: onEstadoSuccess,
     onError: onMutationError,
   })
   const updateItemMut = useMutation({

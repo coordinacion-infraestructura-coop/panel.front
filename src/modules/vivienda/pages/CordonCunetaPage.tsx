@@ -3,11 +3,16 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi, checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import {
+  CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
+  useEstadosTecnico,
+} from '../estadoTecnico'
 import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
   EstadoCC, MunicipioCC, MunicipioCCUpdate, MunicipioCCCreate,
   EstadoCCCreate, EstadoCCUpdate, EstadoHistorialCC, PedidoCC,
+  CatalogoEstadoExpediente,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
@@ -29,14 +34,15 @@ function fmtTs(iso: string) {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
 }
-function avancePct(p: MunicipioCC, estados: EstadoCC[]) {
+function avancePct(p: MunicipioCC, estados: EstadoCC[], estadosTecnico: CatalogoEstadoExpediente[]) {
   const maxPos = Math.max(estados.length - 1, 1)
   const pos = (id: number | null) => {
     if (!id) return 0
     const i = estados.findIndex((e) => e.id === id)
     return i < 0 ? 0 : i
   }
-  return Math.round(((pos(p.ejuridico) + pos(p.etecnico) + pos(p.efinanciero)) / (maxPos * 3)) * 100)
+  const tecnico = avanceTecnico(p.etecnico, estadosTecnico)
+  return Math.round((((pos(p.ejuridico) + pos(p.efinanciero)) / maxPos + tecnico) / 3) * 100)
 }
 function extractErrorMessage(err: unknown, fallback: string) {
   const status = (err as { response?: { status?: number } })?.response?.status
@@ -57,7 +63,8 @@ function avanceColor(pct: number) {
 
 const CAMPO_LABELS: Record<string, string> = {
   ejuridico: 'Jurídico',
-  etecnico: 'Técnico',
+  etecnico: 'Técnico (anterior)',
+  etecnico_checklist: 'Técnico',
   efinanciero: 'Presupuestario',
 }
 
@@ -102,6 +109,7 @@ function EditModal({
 }) {
   const uid = useId()
   const today = new Date().toISOString().slice(0, 10)
+  const estadosTecnico = useEstadosTecnico()
   const [form, setForm] = useState<MunicipioCCUpdate>({
     municipio: municipio.municipio,
     departamento: municipio.departamento ?? undefined,
@@ -110,7 +118,6 @@ function EditModal({
     ok_gob: municipio.ok_gob,
     doc_exp: municipio.doc_exp ?? '',
     ejuridico: municipio.ejuridico,
-    etecnico: municipio.etecnico,
     efinanciero: municipio.efinanciero,
     estado_general: municipio.estado_general,
     cordon_cuneta_ml: municipio.cordon_cuneta_ml ?? undefined,
@@ -218,7 +225,9 @@ function EditModal({
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
+              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => field === 'etecnico' ? (
+                <TecnicoSoloLectura key={field} id={municipio.etecnico} estados={estadosTecnico} />
+              ) : (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
                   <label htmlFor={`${uid}-${field}`} className="block text-xs font-bold uppercase mb-2 text-gov-navy">
                     {CAMPO_LABELS[field]}
@@ -231,11 +240,7 @@ function EditModal({
                   >
                     <option value="">—</option>
                     {estados
-                      .filter((e) => {
-                        if (field === 'ejuridico') return e.aplica_juridico
-                        if (field === 'etecnico') return e.aplica_tecnico
-                        return e.aplica_financiero
-                      })
+                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
                       .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
                   </select>
                 </div>
@@ -283,6 +288,7 @@ function HistorialEstadosTab({
 }: {
   municipioId: string; estados: EstadoCC[]
 }) {
+  const estadosTecnico = useEstadosTecnico()
   const { data: historial = [], isLoading } = useQuery({
     queryKey: ['cc-historial', municipioId],
     queryFn: () => cordonCunetaApi.getHistorial(municipioId),
@@ -311,12 +317,16 @@ function HistorialEstadosTab({
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {h.estado_anterior_id
-                ? <EstadoBadge id={h.estado_anterior_id} estados={estados} />
+                ? (h.campo === CAMPO_TECNICO_CHECKLIST
+                  ? <TecnicoBadge id={h.estado_anterior_id} estados={estadosTecnico} />
+                  : <EstadoBadge id={h.estado_anterior_id} estados={estados} />)
                 : <span className="text-gray-300 text-xs">Sin estado</span>}
               <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-              <EstadoBadge id={h.estado_nuevo_id} estados={estados} />
+              {h.campo === CAMPO_TECNICO_CHECKLIST
+                ? <TecnicoBadge id={h.estado_nuevo_id} estados={estadosTecnico} />
+                : <EstadoBadge id={h.estado_nuevo_id} estados={estados} />}
             </div>
           </div>
         </li>
@@ -698,7 +708,6 @@ function GestionarEstadosModal({
                 <span className="text-xs text-gray-400 w-10 text-right">{e.orden}</span>
                 <div className="flex items-center gap-1 text-xs text-gray-400">
                   {e.aplica_juridico && <span title="Jurídico" className="px-1 bg-purple-100 text-purple-700 rounded text-[10px]">J</span>}
-                  {e.aplica_tecnico && <span title="Técnico" className="px-1 bg-blue-100 text-blue-700 rounded text-[10px]">T</span>}
                   {e.aplica_financiero && <span title="Presupuestario" className="px-1 bg-green-100 text-green-700 rounded text-[10px]">P</span>}
                 </div>
                 <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditSaveError(null); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
@@ -738,10 +747,10 @@ function GestionarEstadosModal({
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
-                      {(['aplica_juridico', 'aplica_tecnico', 'aplica_financiero'] as const).map((flag) => (
+                      {(['aplica_juridico', 'aplica_financiero'] as const).map((flag) => (
                         <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                           <input type="checkbox" checked={editForm[flag] ?? false} onChange={(e) => setEditForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
-                          {{aplica_juridico: 'Jurídico', aplica_tecnico: 'Técnico', aplica_financiero: 'Presupuestario'}[flag]}
+                          {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
                         </label>
                       ))}
                     </div>
@@ -795,10 +804,10 @@ function GestionarEstadosModal({
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
-                    {(['aplica_juridico', 'aplica_tecnico', 'aplica_financiero'] as const).map((flag) => (
+                    {(['aplica_juridico', 'aplica_financiero'] as const).map((flag) => (
                       <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                         <input type="checkbox" checked={newForm[flag] ?? true} onChange={(e) => setNewForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
-                        {{aplica_juridico: 'Jurídico', aplica_tecnico: 'Técnico', aplica_financiero: 'Presupuestario'}[flag]}
+                        {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
                       </label>
                     ))}
                   </div>
@@ -928,14 +937,14 @@ function AgregarMunicipioModal({
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-wide mb-2 text-gov-navy">Estados por Dimensión (opcional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(['ejuridico', 'etecnico', 'efinanciero'] as const).map((field) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(['ejuridico', 'efinanciero'] as const).map((field) => (
                 <div key={field} className="bg-slate-50 border border-slate-200 rounded-md p-3">
                   <label htmlFor={`${uid}-${field}`} className="block text-xs font-bold uppercase mb-2 text-gov-navy">{CAMPO_LABELS[field]}</label>
                   <select id={`${uid}-${field}`} className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan" value={form[field] ?? ''}
                     onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value ? Number(e.target.value) : undefined }))}>
                     <option value="">—</option>
-                    {estados.filter((e) => field === 'ejuridico' ? e.aplica_juridico : field === 'etecnico' ? e.aplica_tecnico : e.aplica_financiero)
+                    {estados.filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
                       .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
                   </select>
                 </div>
@@ -1008,6 +1017,7 @@ export function CordonCunetaPage() {
   const [okFilter, setOkFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
   const [ejFilter, setEjFilter] = useState('')
+  const estadosTecnico = useEstadosTecnico()
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
   const [editTarget, setEditTarget] = useState<MunicipioCC | null>(null)
@@ -1100,12 +1110,14 @@ export function CordonCunetaPage() {
   const sorted = useMemo(() => {
     if (!sortCol) return filtered
     const dir = sortDir === 'asc' ? 1 : -1
-    const ESTADO_KEYS = ['ejuridico', 'etecnico', 'efinanciero', 'estado_general']
+    const ESTADO_KEYS = ['ejuridico', 'efinanciero', 'estado_general']
     return [...filtered].sort((a, b) => {
       let va: string | number | null
       let vb: string | number | null
       if (sortCol === 'avance') {
-        va = avancePct(a, estados); vb = avancePct(b, estados)
+        va = avancePct(a, estados, estadosTecnico); vb = avancePct(b, estados, estadosTecnico)
+      } else if (sortCol === 'etecnico') {
+        va = tecnicoOrden(a.etecnico, estadosTecnico); vb = tecnicoOrden(b.etecnico, estadosTecnico)
       } else if (ESTADO_KEYS.includes(sortCol)) {
         const keyA = (a as unknown as Record<string, unknown>)[sortCol] as number | null
         const keyB = (b as unknown as Record<string, unknown>)[sortCol] as number | null
@@ -1121,7 +1133,7 @@ export function CordonCunetaPage() {
       if (typeof va === 'string') return dir * va.localeCompare(vb as string, 'es')
       return dir * (va - (vb as number))
     })
-  }, [filtered, sortCol, sortDir, estados])
+  }, [filtered, sortCol, sortDir, estados, estadosTecnico])
 
   if (isLoading) return <p role="status" aria-live="polite" className="text-center py-12 text-gray-500">Cargando...</p>
   if (error) return <p role="alert" className="text-red-600 py-4">Error al cargar el panel.</p>
@@ -1183,9 +1195,9 @@ export function CordonCunetaPage() {
               'Últ. modif.': fmtDate(m.updated_at),
               'Estado General': estados.find((e) => e.id === m.estado_general)?.label ?? '',
               'Est. Jurídico': estados.find((e) => e.id === m.ejuridico)?.label ?? '',
-              'Est. Técnico': estados.find((e) => e.id === m.etecnico)?.label ?? '',
+              'Est. Técnico': tecnicoLabel(m.etecnico, estadosTecnico),
               'Est. Presup.': estados.find((e) => e.id === m.efinanciero)?.label ?? '',
-              'Avance (%)': avancePct(m, estados),
+              'Avance (%)': avancePct(m, estados, estadosTecnico),
               'Observaciones': m.obs ?? '',
             }))
             exportToXlsx(rows, 'Cordón Cuneta', `cordon_cuneta_${new Date().toISOString().split('T')[0]}.xlsx`)
@@ -1252,7 +1264,7 @@ export function CordonCunetaPage() {
           <label htmlFor={etId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Técnico</label>
           <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_tecnico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1321,7 +1333,7 @@ export function CordonCunetaPage() {
                 </tr>
               )}
               {sorted.map((m) => {
-                const pct = avancePct(m, estados)
+                const pct = avancePct(m, estados, estadosTecnico)
                 const col = avanceColor(pct)
                 return (
                   <tr key={m.id} className="border-b border-slate-100 hover:bg-sky-50/30 transition-colors">
@@ -1358,7 +1370,7 @@ export function CordonCunetaPage() {
                       <EstadoBadge id={m.estado_general} estados={estados} />
                     </td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={m.ejuridico} estados={estados} /></td>
-                    <td className="px-2.5 py-1.5"><EstadoBadge id={m.etecnico} estados={estados} /></td>
+                    <td className="px-2.5 py-1.5"><TecnicoBadge id={m.etecnico} estados={estadosTecnico} /></td>
                     <td className="px-2.5 py-1.5"><EstadoBadge id={m.efinanciero} estados={estados} /></td>
                     <td className="px-2.5 py-1.5 min-w-[90px]">
                       <div className="flex items-center gap-1.5">
