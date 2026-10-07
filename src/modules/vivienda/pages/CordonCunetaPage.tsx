@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi, checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { normalizeName } from '../../../shared/utils/normalizeName'
 import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
@@ -159,7 +160,7 @@ function EditModal({
                 id={`${uid}-municipio`}
                 className={inp}
                 disabled={!deptoCascade || geoLoading}
-                value={geoList.find((g) => g.localidad === form.municipio && g.departamento === deptoCascade)?.id_geo ?? ''}
+                value={geoList.find((g) => normalizeName(g.localidad) === normalizeName(form.municipio) && g.departamento === deptoCascade)?.id_geo ?? ''}
                 onChange={(e) => {
                   const g = geoList.find((x) => x.id_geo === e.target.value)
                   if (g) setForm((p) => ({ ...p, municipio: g.localidad, departamento: g.departamento }))
@@ -899,7 +900,7 @@ function AgregarMunicipioModal({
                 id={`${uid}-loc`}
                 className={inp}
                 disabled={!form.departamento || geoLoading}
-                value={geoList.find((g) => g.localidad === form.municipio && g.departamento === form.departamento)?.id_geo ?? ''}
+                value={geoList.find((g) => normalizeName(g.localidad) === normalizeName(form.municipio) && g.departamento === form.departamento)?.id_geo ?? ''}
                 onChange={(e) => {
                   const g = geoList.find((x) => x.id_geo === e.target.value)
                   if (g) setForm((p) => ({ ...p, municipio: g.localidad, departamento: g.departamento }))

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import { miLugarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { normalizeName } from '../../../shared/utils/normalizeName'
 import { MapaDualPuntos } from '../../../shared/components/informe/MapaDualPuntos'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
@@ -454,7 +455,7 @@ function EditModal({
             <div>
               <label htmlFor={`${uid}-loc`} className={lbl}>Localidad *</label>
               <select id={`${uid}-loc`} className={inp}
-                value={geoData.find((g) => g.localidad === form.localidad_nombre && g.departamento === deptoGeo)?.id_geo ?? ''}
+                value={geoData.find((g) => normalizeName(g.localidad) === normalizeName(form.localidad_nombre) && g.departamento === deptoGeo)?.id_geo ?? ''}
                 onChange={(e) => {
                   const loc = geoData.find((g) => g.id_geo === e.target.value)
                   if (!loc) return

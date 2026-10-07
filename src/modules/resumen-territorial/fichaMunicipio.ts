@@ -236,7 +236,9 @@ export async function armarFichaMunicipio(
     fichaLocalidadApi.departamento(departamento).catch(() => null),
     cordobaHogarApi.getPanel().catch(() => null),
     cordonCunetaApi.getPanel().catch(() => null),
-    miLugarApi.getProyectos({ localidad_nombre: localidad }).catch(() => [] as Awaited<ReturnType<typeof miLugarApi.getProyectos>>),
+    // Sin filtro del servidor: compara el nombre por igualdad exacta y Mi Lugar
+    // guarda su propia grafía. Se filtra abajo sin tildes/mayúsculas, como CH/CC.
+    miLugarApi.getProyectos().catch(() => [] as Awaited<ReturnType<typeof miLugarApi.getProyectos>>),
     miLugarApi.getEstados().catch(() => [] as EstadoML[]),
     apiClient.get<{ items: GestionApiItem[]; total: number }>('/api/v1/privada/gestiones', {
       params: { departamento, localidad, limit: 200 },
