@@ -26,6 +26,7 @@ import {
   IndicadoresPrincipales,
   contarProgramasAgregado,
   type ComparativaPerCapita,
+  type EnlacesListado,
 } from './IndicadoresPrincipalesLocalidad'
 
 type MetricaProvincia = 'promedio_programas' | 'gestiones_10k_hab' | 'pct_cobertura' | 'focalizacion_atp'
@@ -81,6 +82,7 @@ export function VistaProvincia({
   kpisTabla,
   kpisFiltrados,
   localidadSeleccionada,
+  enlacesIndicadores,
 }: {
   payload: ResumenTerritorialPayload
   departamentoSeleccionado: string | null
@@ -105,6 +107,9 @@ export function VistaProvincia({
    * `departamentoSeleccionado` está puesto sin localidad, o esta localidad
    * puntual si está presente. */
   localidadSeleccionada?: ResumenLocalidad | null
+  /** Links al listado de cada indicador de conteo, ya armados para la escala
+   * activa por el padre (que es quien conoce al usuario). */
+  enlacesIndicadores?: EnlacesListado
 }) {
   const [metrica, setMetrica] = useState<MetricaProvincia>('promedio_programas')
   // Switch del gráfico de ATP (pedido 2026-10-01) — nominal ($ en millones)
@@ -367,6 +372,7 @@ export function VistaProvincia({
         comparativas={comparativasIndicadores}
         transferenciasTotal={transferenciasTotalActivo}
         atpTotal={atpTotalActivo}
+        enlaces={enlacesIndicadores}
       />
 
       <div>

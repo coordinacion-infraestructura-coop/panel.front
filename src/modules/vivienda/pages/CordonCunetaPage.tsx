@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi, checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
 import type {
   EstadoCC, MunicipioCC, MunicipioCCUpdate, MunicipioCCCreate,
@@ -1057,6 +1058,14 @@ export function CordonCunetaPage() {
     () => [...new Set(geoForFilter.map((g) => g.departamento))].sort(),
     [geoForFilter]
   )
+
+  // La localidad entra por el buscador — este panel no tiene filtro de localidad.
+  useFiltroTerritorialUrl({
+    departamentos: deptos,
+    localidades: municipios.map((m) => m.municipio),
+    setDepartamento: setDeptoFilter,
+    setLocalidad: setSearch,
+  })
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()

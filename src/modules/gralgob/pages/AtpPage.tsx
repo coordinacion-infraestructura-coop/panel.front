@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { atpApi, type Compromiso, type CronogramaPago } from '../api/atp.api'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
+import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 
 // Panel preliminar de solo lectura (spec-sync-atp-compromiso-gobernador.md
 // §12) — espeja atp_compromisos tal cual está sincronizado desde la hoja
@@ -214,6 +215,13 @@ export function AtpPage() {
     () => [...new Set(compromisos.map((c) => c.ministerio_destino).filter((m): m is string => !!m))].sort(),
     [compromisos],
   )
+
+  useFiltroTerritorialUrl({
+    departamentos,
+    localidades,
+    setDepartamento: setDeptoFilter,
+    setLocalidad: setLocalidadFilter,
+  })
 
   // Si cambia el departamento y la localidad elegida ya no pertenece a él, se limpia.
   useEffect(() => {

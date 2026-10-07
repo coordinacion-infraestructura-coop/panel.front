@@ -12,12 +12,14 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
-import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
+import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx, textoVisitaGobernador } from '../fichaMunicipio'
+import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { useState, useMemo } from 'react'
 import { calcularDepartamentos, calcularKpisProvincia } from '../utils/departamentoAgregados'
 import {
   IndicadoresPrincipales,
   contarProgramasLocalidad,
+  enlacesListados,
   type ComparativaPerCapita,
 } from '../components/IndicadoresPrincipalesLocalidad'
 
@@ -60,6 +62,7 @@ function EstadoChip({ label, bg }: { label: string; bg?: string | null }) {
 
 export function FichaLocalidadPage() {
   const { departamento: departamentoUrl, localidad: localidadUrl } = useParams<{ departamento: string; localidad: string }>()
+  const { data: portalUser } = usePortalUser()
 
   const { data: snapshot, isLoading: cargandoSnapshot } = useQuery({
     queryKey: ['resumen-territorial'],
@@ -190,6 +193,16 @@ export function FichaLocalidadPage() {
   }
 
   const semLabel = ficha?.demografica.color_semaforo
+  // Visita del gobernador = figurar en la planilla de ATP (mismo criterio que
+  // el filtro del Resumen Territorial). Sale del snapshot para no esperar a
+  // la ficha; las fechas de anuncio se suman cuando ésta termina de cargar.
+  // Si el snapshot de este usuario no trae ATP (visibilidad por área) no se
+  // puede afirmar ni sí ni no — no se muestra el indicador.
+  const puedeVerAtp = snapshot.payload.generado_para_areas.includes('gralgob')
+  const visitaGob = ficha?.visitaGobernador ?? {
+    visitado: resumen.programas.some((p) => p.area === 'gralgob'),
+    fechas: [] as string[],
+  }
   const transferenciasPorConcepto = resumen.transferencias_por_concepto ?? {}
   const conceptosTraidos = CONCEPTO_ORDEN.filter((c) => transferenciasPorConcepto[c] != null)
   const hayTransferencias = conceptosTraidos.length > 0 || resumen.transferencias_total != null
@@ -216,6 +229,7 @@ export function FichaLocalidadPage() {
             comparativas={comparativasPerCapita}
             transferenciasTotal={{ valor: resumen.transferencias_total, periodo: resumen.transferencias_periodo }}
             atpTotal={atpTotalLocalidad}
+            enlaces={enlacesListados(portalUser, { departamento: resumen.departamento, localidad: resumen.localidad })}
           />
         </div>
       )}
@@ -237,6 +251,18 @@ export function FichaLocalidadPage() {
             {resumen.categoria && (
               <span className="text-sm bg-white/15 px-2.5 py-1 rounded-full">
                 {resumen.categoria === 'MU' ? 'Municipio' : 'Comuna'}
+              </span>
+            )}
+            {puedeVerAtp && (
+              <span
+                title="Figura en la planilla de ATP — Compromiso Gobernador"
+                className={`text-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
+                  visitaGob.visitado ? 'bg-gov-cyan text-white font-semibold' : 'bg-white/15'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${visitaGob.visitado ? 'bg-white' : 'bg-gray-400'}`} />
+                {visitaGob.visitado ? 'Visitada por el gobernador' : 'Sin visita del gobernador'}
+                {visitaGob.fechas.length > 0 && ` · ${visitaGob.fechas.join(', ')}`}
               </span>
             )}
           </div>
@@ -315,6 +341,9 @@ export function FichaLocalidadPage() {
                 <div><dt className="text-xs text-gray-400 uppercase">Electores</dt><dd className="font-semibold text-gov-navy">{ficha.demografica.electores}</dd></div>
                 <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Intendente / Jefe comunal</dt><dd className="text-slate-700">{ficha.demografica.intendente}{ficha.demografica.partido !== '—' ? ` · ${ficha.demografica.partido}` : ''}</dd></div>
                 <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Tipo de localidad</dt><dd className="text-slate-700">{ficha.demografica.tipo_localidad}</dd></div>
+                {puedeVerAtp && (
+                  <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Visita del gobernador</dt><dd className="text-slate-700">{textoVisitaGobernador(ficha)}</dd></div>
+                )}
                 <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Legislador departamental</dt><dd className="text-slate-700">{ficha.demografica.legislador_departamental}{ficha.demografica.partido_legislador !== '—' ? ` · ${ficha.demografica.partido_legislador}` : ''}</dd></div>
               </dl>
             </div>

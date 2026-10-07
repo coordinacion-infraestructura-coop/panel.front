@@ -22,6 +22,7 @@
 // Sin dependencia de íconos nueva — badges de 2-3 letras en vez de un set de
 // SVG, mismo criterio de "no agregar dependencias" que el resto del proyecto
 // (ver `lineaReferenciaPlugin` de BarChart.tsx).
+import { Link } from 'react-router-dom'
 import type { ResumenLocalidad } from '../types/resumenTerritorial.types'
 
 export interface ConteosPrincipalesLocalidad {
@@ -68,6 +69,43 @@ export function contarProgramasLocalidad(loc: ResumenLocalidad): ConteosPrincipa
   return contarProgramasAgregado([loc])
 }
 
+/** Ruta al listado (panel) de cada indicador de conteo — ausente si el
+ * usuario no tiene ese panel. */
+export type EnlacesListado = Partial<Record<keyof ConteosPrincipalesLocalidad, string>>
+
+const LISTADOS: { id: keyof ConteosPrincipalesLocalidad; secretaria: string; ruta: string }[] = [
+  { id: 'cc', secretaria: 'vivienda', ruta: '/vivienda/cordon-cuneta' },
+  { id: 'ch', secretaria: 'vivienda', ruta: '/vivienda/cordoba-hogar' },
+  { id: 'gas', secretaria: 'gasifera', ruta: '/gasifera/pit' },
+  { id: 'atp', secretaria: 'gralgob', ruta: '/gralgob/atp' },
+  { id: 'demandasGenerales', secretaria: 'privada', ruta: '/privada/gestiones' },
+]
+
+/** Arma los links "ir al listado" de los indicadores para la escala activa
+ * (provincia sin filtro, departamento, o localidad) — viajan como
+ * `?departamento=&localidad=`, que cada panel destino usa para precargar sus
+ * filtros (`useFiltroTerritorialUrl`; Privada ya los leía). Sólo navegación:
+ * se omiten los paneles que el usuario no tiene asignados (mismo criterio que
+ * `DashboardPage.canSee`, más el recorte de `TecnicoDGV` de `Layout.tsx`); el
+ * backend sigue siendo quien responde 403. */
+export function enlacesListados(
+  usuario: { rol: string; secretarias: string[] } | null | undefined,
+  ambito: { departamento?: string | null; localidad?: string | null },
+): EnlacesListado {
+  if (!usuario) return {}
+  const params = new URLSearchParams()
+  if (ambito.departamento) params.set('departamento', ambito.departamento)
+  if (ambito.localidad) params.set('localidad', ambito.localidad)
+  const qs = params.toString()
+  const enlaces: EnlacesListado = {}
+  for (const l of LISTADOS) {
+    const asignada = usuario.rol === 'Admin' || usuario.secretarias.includes(l.secretaria)
+    if (!asignada || (l.secretaria === 'vivienda' && usuario.rol === 'TecnicoDGV')) continue
+    enlaces[l.id] = qs ? `${l.ruta}?${qs}` : l.ruta
+  }
+  return enlaces
+}
+
 export interface ComparativaPerCapita {
   label: string
   valor: number | null
@@ -105,6 +143,7 @@ function TarjetaIndicador({
   value,
   nd,
   hint,
+  to,
 }: {
   badge: string
   color: string
@@ -112,12 +151,13 @@ function TarjetaIndicador({
   value: string | number
   nd?: boolean
   hint?: string
+  /** Ruta al listado del indicador — la tarjeta entera pasa a ser un link. */
+  to?: string
 }) {
-  return (
-    <div
-      title={hint}
-      className="group relative flex-1 min-w-[140px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-    >
+  const className =
+    'group relative flex-1 min-w-[140px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md'
+  const contenido = (
+    <>
       <div
         className="pointer-events-none absolute -right-5 -top-5 h-16 w-16 rounded-full opacity-[0.08] transition-opacity group-hover:opacity-[0.14]"
         style={{ backgroundColor: color }}
@@ -137,6 +177,27 @@ function TarjetaIndicador({
       >
         {value}
       </b>
+      {to && (
+        <span className="absolute bottom-2 right-3 text-[10px] font-semibold text-gov-blue opacity-60 transition-opacity group-hover:opacity-100">
+          Ver listado →
+        </span>
+      )}
+    </>
+  )
+  if (to) {
+    return (
+      <Link
+        to={to}
+        title={hint ?? `Ir al listado de ${label}`}
+        className={`${className} cursor-pointer hover:border-gov-cyan focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan`}
+      >
+        {contenido}
+      </Link>
+    )
+  }
+  return (
+    <div title={hint} className={className}>
+      {contenido}
     </div>
   )
 }
@@ -227,6 +288,7 @@ export function IndicadoresPrincipales({
   comparativas,
   transferenciasTotal,
   atpTotal,
+  enlaces = {},
 }: {
   /** Ej. "Toda la provincia" / "Departamento Colón" / "Localidad Jesús María". */
   titulo: string
@@ -240,6 +302,9 @@ export function IndicadoresPrincipales({
    * `monto_entregado`) de la escala activa, como figuran en
    * /gralgob/atp — pedido 2026-10-01 (ADR-025). */
   atpTotal: { anunciado: number | null; entregado: number | null }
+  /** Links al listado de cada conteo (`enlacesListados`) — sin esto las
+   * tarjetas quedan como indicadores planos. */
+  enlaces?: EnlacesListado
 }) {
   return (
     <div className="space-y-3">
@@ -252,10 +317,10 @@ export function IndicadoresPrincipales({
           </span>
         </p>
         <div className="flex flex-wrap gap-3">
-          <TarjetaIndicador badge="CC" color={COLOR.cc} label="Cordón Cuneta" value={conteos.cc} />
-          <TarjetaIndicador badge="CH" color={COLOR.ch} label="Córdoba Hogar" value={conteos.ch} />
-          <TarjetaIndicador badge="GAS" color={COLOR.gas} label="Gas" value={conteos.gas} />
-          <TarjetaIndicador badge="ATP" color={COLOR.atp} label="Compromisos Gobernador" value={conteos.atp} />
+          <TarjetaIndicador badge="CC" color={COLOR.cc} label="Cordón Cuneta" value={conteos.cc} to={enlaces.cc} />
+          <TarjetaIndicador badge="CH" color={COLOR.ch} label="Córdoba Hogar" value={conteos.ch} to={enlaces.ch} />
+          <TarjetaIndicador badge="GAS" color={COLOR.gas} label="Gas" value={conteos.gas} to={enlaces.gas} />
+          <TarjetaIndicador badge="ATP" color={COLOR.atp} label="Compromisos Gobernador" value={conteos.atp} to={enlaces.atp} />
           <TarjetaIndicador
             badge="CR"
             color={COLOR.comRegionales}
@@ -264,7 +329,13 @@ export function IndicadoresPrincipales({
             nd
             hint="Todavía sin fuente de datos — será un filtro del panel de gestiones de Privada"
           />
-          <TarjetaIndicador badge="DG" color={COLOR.demandas} label="Demandas Generales" value={conteos.demandasGenerales} />
+          <TarjetaIndicador
+            badge="DG"
+            color={COLOR.demandas}
+            label="Demandas Generales"
+            value={conteos.demandasGenerales}
+            to={enlaces.demandasGenerales}
+          />
           <TarjetaIndicador
             badge="$"
             color={COLOR.transferencias}

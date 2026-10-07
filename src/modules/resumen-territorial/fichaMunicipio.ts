@@ -18,7 +18,8 @@ const fmtNum = (n: number | null | undefined) => (n == null ? '—' : Number(n).
 const fmtMoney = (n: number | null | undefined) => (n == null ? '—' : `$ ${Math.round(n).toLocaleString('es-AR')}`)
 const fmtFecha = (s: string | null | undefined) => {
   if (!s) return '—'
-  try { return new Date(s).toLocaleDateString('es-AR') } catch { return s }
+  // Una fecha sin hora ("2026-03-12") se parsea como UTC y en Argentina cae el día anterior.
+  try { return new Date(s.length <= 10 ? `${s}T12:00` : s).toLocaleDateString('es-AR') } catch { return s }
 }
 const semLabel = (c?: string | null) =>
   c ? ({ verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' } as Record<string, string>)[c.toLowerCase()] ?? c : '—'
@@ -122,6 +123,8 @@ export interface DatosExternosLocalidad {
   transferencias_total: number | null
   transferencias_per_capita: number | null
   transferencias_por_concepto: Record<string, number> | null
+  /** Líneas del snapshot — sólo se mira si hay alguna de `gralgob` (ATP). */
+  programas?: { area: string }[]
 }
 
 const CONCEPTO_LABEL: Record<string, string> = {
@@ -152,6 +155,11 @@ export interface FichaMunicipio {
   gestiones: { total: number; filas: GestionFila[] }
   gasifera: { total: number; filas: GasiferaFila[] }
   atp: { total: number; filas: AtpFila[] }
+  /** Figurar en la planilla de ATP implica que el gobernador visitó la
+   *  localidad y anunció algo — mismo criterio que el filtro "Visita del
+   *  gobernador" del Resumen Territorial (E5d). `fechas` = fechas de anuncio
+   *  distintas, de la más vieja a la más nueva. */
+  visitaGobernador: { visitado: boolean; fechas: string[] }
   datosExternos: {
     poblacion_2022: string
     viviendas_2022: string
@@ -351,6 +359,14 @@ export async function armarFichaMunicipio(
         entregas: (atpCronogramas[i] ?? []).map((p) => ({ periodo: p.periodo, monto: p.monto })),
       })),
     },
+    visitaGobernador: {
+      // El snapshot manda (es lo que usa el filtro del RT); los compromisos
+      // traídos recién cubren el caso de un snapshot todavía sin recalcular.
+      visitado: atpItems.length > 0 || (datosExternos?.programas ?? []).some((p) => p.area === 'gralgob'),
+      fechas: [...new Set(atpItems.map((c) => c.fecha_anuncio).filter((x): x is string => !!x))]
+        .sort()
+        .map((x) => fmtFecha(x)),
+    },
     datosExternos: {
       poblacion_2022: fmtNum(datosExternos?.poblacion_2022),
       viviendas_2022: fmtNum(datosExternos?.viviendas_2022),
@@ -362,6 +378,13 @@ export async function armarFichaMunicipio(
         .map((c) => ({ concepto: CONCEPTO_LABEL[c], monto: fmtMoney(datosExternos!.transferencias_por_concepto![c]) })),
     },
   }
+}
+
+/** "Sí · 12/3/2026" / "No" — texto único para la ficha en pantalla, PDF y Excel. */
+export function textoVisitaGobernador(f: Pick<FichaMunicipio, 'visitaGobernador'>): string {
+  const { visitado, fechas } = f.visitaGobernador
+  if (!visitado) return 'No'
+  return fechas.length ? `Sí · ${fechas.join(', ')}` : 'Sí'
 }
 
 // ── PDF ─────────────────────────────────────────────────────────────────────
@@ -470,6 +493,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   kv('Intendente / Jefe Comunal', f.demografica.intendente)
   kv('Partido Político', f.demografica.partido)
   kv('Legislador Departamental', f.demografica.legislador_departamental)
+  kv('Visita del gobernador', textoVisitaGobernador(f))
 
   heading('Córdoba Hogar · DGV')
   if (f.cordobaHogar) {
@@ -633,6 +657,7 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     { Campo: 'Intendente / Jefe Comunal', Valor: f.demografica.intendente },
     { Campo: 'Partido Político', Valor: f.demografica.partido },
     { Campo: 'Legislador Departamental', Valor: f.demografica.legislador_departamental },
+    { Campo: 'Visita del gobernador', Valor: textoVisitaGobernador(f) },
     {},
     { Campo: 'Córdoba Hogar', Valor: f.cordobaHogar ? '' : '—' },
     ...(f.cordobaHogar ? [

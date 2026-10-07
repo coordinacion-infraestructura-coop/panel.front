@@ -6,6 +6,7 @@ import { fetchPrivadaPorLocalidad } from '../api/privadaGestiones'
 import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx } from '../fichaMunicipio'
 import { exportarResumenXlsx } from '../exportResumen'
 import { VistaProvincia } from '../components/VistaProvincia'
+import { enlacesListados } from '../components/IndicadoresPrincipalesLocalidad'
 import type {
   ResumenLocalidad,
   ResumenPrograma,
@@ -616,6 +617,7 @@ export function ResumenTerritorialPage() {
               localidadSeleccionada={
                 fLocActivo ? payload.localidades.find((l) => l.localidad === fLocActivo) ?? null : null
               }
+              enlacesIndicadores={enlacesListados(portalUser, { departamento: fDep, localidad: fLocActivo })}
             />
 
             <button

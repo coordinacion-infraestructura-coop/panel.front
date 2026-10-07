@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { gasiferaPitApi } from '../api/gasiferaPit.api'
 import { KpiStrip, type Kpi } from '../../../shared/components/informe/KpiStrip'
+import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 
 // Panel preliminar de solo lectura (spec-sync-gasifera-pit.md §12) — espeja
 // gas_pit_obras / gas_pit_acciones_territorio tal cual están sincronizadas desde
@@ -87,6 +88,13 @@ export function GasiferaPitPage() {
     () => [...new Set(acciones.map((a) => a.estado))].sort(),
     [acciones],
   )
+
+  useFiltroTerritorialUrl({
+    departamentos,
+    localidades,
+    setDepartamento: setDeptoFilter,
+    setLocalidad: setLocalidadFilter,
+  })
 
   const accionesFiltradas = useMemo(() => {
     return acciones.filter((a) => {
