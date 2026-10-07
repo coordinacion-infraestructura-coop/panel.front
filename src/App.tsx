@@ -23,6 +23,7 @@ import { FichaLocalidadPage } from './modules/resumen-territorial/pages/FichaLoc
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
+import { LocalidadesSinResolverPage } from './modules/admin/pages/LocalidadesSinResolverPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,6 +117,14 @@ export default function App() {
                 element={
                   <ProtectedRoute roles={['Admin']}>
                     <AdminCatalogosChecklistPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/localidades-sin-resolver"
+                element={
+                  <ProtectedRoute roles={['Admin']}>
+                    <LocalidadesSinResolverPage />
                   </ProtectedRoute>
                 }
               />

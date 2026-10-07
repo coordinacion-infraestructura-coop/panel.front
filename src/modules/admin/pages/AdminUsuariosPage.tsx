@@ -279,6 +279,12 @@ export function AdminUsuariosPage() {
           >
             Catálogos Checklist Técnico
           </Link>
+          <Link
+            to="/admin/localidades-sin-resolver"
+            className="text-sm text-gov-navy border border-gray-200 px-4 py-2 rounded hover:bg-slate-50 transition-colors"
+          >
+            Localidades sin resolver
+          </Link>
           <button
             onClick={() => { setModalUsuario('nuevo'); setError(null) }}
             className="bg-gov-navy text-white text-sm px-4 py-2 rounded hover:bg-gov-navy/90 transition-colors"
