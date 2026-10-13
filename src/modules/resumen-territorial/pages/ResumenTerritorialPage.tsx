@@ -227,6 +227,7 @@ export function ResumenTerritorialPage() {
       total_programas: locs.reduce((n, l) => n + l.programas.length, 0),
       localidades: locs,
       total_localidades_por_departamento: base.total_localidades_por_departamento,
+      zonas_rurales: base.zonas_rurales,
     }
   }, [snapshot, privadaQuery.data])
 
@@ -364,6 +365,7 @@ export function ResumenTerritorialPage() {
       total_localidades_por_departamento: Object.fromEntries(
         Object.entries(payload?.total_localidades_por_departamento ?? {}).filter(([d]) => deptosPresentesFiltrados.has(d)),
       ),
+      zonas_rurales: (payload?.zonas_rurales ?? []).filter((z) => deptosPresentesFiltrados.has(z.departamento)),
     }),
     [payload, localidadesFiltradas, deptosPresentesFiltrados],
   )

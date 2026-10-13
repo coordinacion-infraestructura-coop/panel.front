@@ -20,6 +20,8 @@ import {
   calcularFocalizacionPorLocalidad,
   calcularKpisProvincia,
   type KpisProvincia,
+  fmtCrecimiento,
+  fmtDensidad,
 } from '../utils/departamentoAgregados'
 import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
 import {
@@ -289,8 +291,17 @@ export function VistaProvincia({
 
   const kpiItems: Kpi[] = [
     { value: fmtInt(kpisFiltrados.poblacion_2022), label: 'Población (Censo 2022)', accent: 'navy' },
-    { value: 'N/D', label: 'Densidad — falta superficie', accent: 'cyan' },
-    { value: 'N/D', label: 'Crecim. intercensal — falta Censo 2010', accent: 'orange' },
+    { value: fmtDensidad(kpisFiltrados.densidad), label: 'Densidad en el radio municipal (hab/km²)', accent: 'cyan' },
+    { value: fmtCrecimiento(kpisFiltrados.crecimiento_intercensal), label: 'Crecim. intercensal 2010–2022', accent: 'orange' },
+    // La zona rural es de un departamento, no de una localidad: con una
+    // localidad puntual elegida no se muestra. Nunca se suma a "Población".
+    ...(!localidadSeleccionada && kpisFiltrados.poblacion_rural_2022 != null
+      ? [{
+          value: fmtInt(kpisFiltrados.poblacion_rural_2022),
+          label: 'Población en zona rural (sin gobierno local) — estimación de Gobierno',
+          accent: 'navy' as const,
+        }]
+      : []),
   ]
 
   const kpiGlosario: { label: string; explicacion: string }[] = [
@@ -307,8 +318,18 @@ export function VistaProvincia({
     { label: 'Transferencias per cápita', explicacion: 'Transferencias totales ÷ población de la zona.' },
     { label: 'Inversión ATP per cápita', explicacion: 'Monto total comprometido en ATP ÷ población de la zona.' },
     {
-      label: 'Densidad / Crecim. intercensal',
-      explicacion: 'No disponibles todavía — falta la fuente de superficie por departamento y el Censo 2010.',
+      label: 'Densidad en el radio municipal',
+      explicacion:
+        'Población (Censo 2022) ÷ superficie del radio municipal en km² (polígono según IDECOR, informado por Gobierno). No es la densidad del departamento: sólo cuenta el radio de cada gobierno local.',
+    },
+    {
+      label: 'Crecim. intercensal 2010–2022',
+      explicacion: 'Variación de la población entre el Censo 2010 y el Censo 2022, sobre las localidades con ambos datos.',
+    },
+    {
+      label: 'Población en zona rural',
+      explicacion:
+        'Población sin gobierno local. Es una estimación del área de Gobierno: el Censo 2022 no la desagrega por departamento. No está incluida en "Población" ni en la densidad.',
     },
   ]
 

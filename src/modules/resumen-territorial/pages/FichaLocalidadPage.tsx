@@ -12,7 +12,13 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { resumenTerritorialApi } from '../api/resumenTerritorial.api'
-import { armarFichaMunicipio, fichaMunicipioPdf, fichaMunicipioXlsx, textoVisitaGobernador } from '../fichaMunicipio'
+import {
+  TITULO_FICHA_GOBIERNO,
+  armarFichaMunicipio,
+  fichaMunicipioPdf,
+  fichaMunicipioXlsx,
+  textoVisitaGobernador,
+} from '../fichaMunicipio'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { useState, useMemo } from 'react'
 import { calcularDepartamentos, calcularKpisProvincia } from '../utils/departamentoAgregados'
@@ -331,6 +337,14 @@ export function FichaLocalidadPage() {
                   </div>
                 </div>
               )}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 min-w-[100px]">
+                <div className="text-xl font-extrabold text-gov-navy leading-none">{ficha.datosExternos.densidad}</div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400 mt-1">Densidad en el radio municipal (hab/km²)</div>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 min-w-[100px]">
+                <div className="text-xl font-extrabold text-gov-navy leading-none">{ficha.datosExternos.crecimiento_intercensal}</div>
+                <div className="text-[10px] uppercase tracking-wide text-gray-400 mt-1">Crecim. intercensal 2010–2022</div>
+              </div>
             </div>
 
             {/* Demográfica y política */}
@@ -481,6 +495,25 @@ export function FichaLocalidadPage() {
                 </div>
               )}
             </div>
+
+            {/* Datos institucionales de Gobierno — sólo si el backend los envió (roles Admin y Autoridad) */}
+            {ficha.fichaGobierno && (
+              <div className="px-6 py-5">
+                <SectionHeader icon="🏛️" title={TITULO_FICHA_GOBIERNO} badge="Acceso restringido" />
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-base">
+                  {ficha.fichaGobierno.map((r) => (
+                    <div key={r.campo}>
+                      <dt className="text-xs text-gray-400 uppercase">{r.campo}</dt>
+                      <dd className="text-slate-700">{r.valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="text-[11px] text-gray-400 mt-3">
+                  Fuente: Secretaría General de Gobierno. Superficie {ficha.datosExternos.superficie_km2} · Población Censo 2010{' '}
+                  {ficha.datosExternos.poblacion_2010}.
+                </p>
+              </div>
+            )}
 
             {/* Datos externos: transferencias */}
             <div className="px-6 py-5">

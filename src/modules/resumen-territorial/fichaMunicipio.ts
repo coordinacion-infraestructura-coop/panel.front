@@ -10,6 +10,8 @@ import type { Compromiso, CronogramaPago } from '../gralgob/api/atp.api'
 import { checklistTecnicoApi, cordobaHogarApi, cordonCunetaApi, miLugarApi } from '../vivienda/api/vivienda.api'
 import type { EstadoCC, EstadoCH, EstadoML } from '../vivienda/types/vivienda.types'
 import { fichaLocalidadApi } from './api/fichaLocalidad.api'
+import type { FichaGobierno } from './types/resumenTerritorial.types'
+import { calcularDemografia, fmtCrecimiento, fmtDensidad } from './utils/departamentoAgregados'
 
 const norm = (s: string) =>
   (s ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
@@ -123,9 +125,37 @@ export interface DatosExternosLocalidad {
   transferencias_total: number | null
   transferencias_per_capita: number | null
   transferencias_por_concepto: Record<string, number> | null
+  superficie_km2?: number | null
+  poblacion_2010?: number | null
+  /** Restringido: el backend sólo lo envía a los roles `Admin` y `Autoridad`. */
+  ficha_gobierno?: FichaGobierno | null
   /** Líneas del snapshot — sólo se mira si hay alguna de `gralgob` (ATP). */
   programas?: { area: string }[]
 }
+
+const siNo = (v: boolean | null | undefined) => (v == null ? '—' : v ? 'Sí' : 'No')
+
+/** Filas "etiqueta / valor" del bloque "Datos institucionales (Gobierno)" —
+ * una sola definición para pantalla, PDF y Excel. `null` si la respuesta no
+ * trajo la ficha (cualquier rol que no sea `Admin` o `Autoridad`): el bloque no se
+ * dibuja. */
+export function filasFichaGobierno(fg: FichaGobierno | null | undefined): { campo: string; valor: string }[] | null {
+  if (!fg) return null
+  return [
+    { campo: 'Intendente / Jefe comunal', valor: fg.intendente ?? '—' },
+    { campo: 'Partido', valor: fg.partido ?? '—' },
+    { campo: 'Reelecto', valor: siNo(fg.reelecto) },
+    { campo: 'Continuidad', valor: siNo(fg.continuidad) },
+    { campo: 'Contacto del intendente', valor: fg.contacto_intendente ?? '—' },
+    { campo: 'Legislador departamental', valor: fg.legislador ?? '—' },
+    { campo: 'Partido del legislador', valor: fg.partido_legislador ?? '—' },
+    { campo: 'Electores', valor: fmtNum(fg.electores) },
+    { campo: 'Empleados municipales', valor: fmtNum(fg.empleados) },
+    { campo: 'Masa salarial', valor: fmtMoney(fg.masa_salarial) },
+  ]
+}
+
+export const TITULO_FICHA_GOBIERNO = 'Datos institucionales (Gobierno)'
 
 const CONCEPTO_LABEL: Record<string, string> = {
   coparticipacion_ley_8663: 'Coparticipación Ley Provincial N° 8663',
@@ -167,7 +197,13 @@ export interface FichaMunicipio {
     transferencias_total: string
     transferencias_per_capita: string
     porConcepto: { concepto: string; monto: string }[]
+    superficie_km2: string
+    densidad: string
+    poblacion_2010: string
+    crecimiento_intercensal: string
   }
+  /** `null` salvo para los roles `Admin` y `Autoridad` (lo decide el backend). */
+  fichaGobierno: { campo: string; valor: string }[] | null
 }
 
 async function catCategoriasMap(): Promise<Map<string, string>> {
@@ -231,6 +267,15 @@ export async function armarFichaMunicipio(
   datosExternos?: DatosExternosLocalidad | null,
 ): Promise<FichaMunicipio> {
   const nl = norm(localidad)
+  const demografia = calcularDemografia(
+    datosExternos
+      ? [{
+          poblacion_2022: datosExternos.poblacion_2022,
+          poblacion_2010: datosExternos.poblacion_2010,
+          superficie_km2: datosExternos.superficie_km2,
+        }]
+      : [],
+  )
   const [li, di, chPanel, ccPanel, mlProyectos, mlEstados, gestResp, catMap, minMap, tipoMap, campoMap, gasResp, atpResp, chkCatalogos] = await Promise.all([
     fichaLocalidadApi.localidad(departamento, localidad).catch(() => null),
     fichaLocalidadApi.departamento(departamento).catch(() => null),
@@ -380,7 +425,15 @@ export async function armarFichaMunicipio(
       porConcepto: CONCEPTO_ORDEN
         .filter((c) => datosExternos?.transferencias_por_concepto?.[c] != null)
         .map((c) => ({ concepto: CONCEPTO_LABEL[c], monto: fmtMoney(datosExternos!.transferencias_por_concepto![c]) })),
+      superficie_km2:
+        datosExternos?.superficie_km2 == null
+          ? '—'
+          : `${datosExternos.superficie_km2.toLocaleString('es-AR', { maximumFractionDigits: 2 })} km²`,
+      densidad: fmtDensidad(demografia.densidad),
+      poblacion_2010: fmtNum(datosExternos?.poblacion_2010),
+      crecimiento_intercensal: fmtCrecimiento(demografia.crecimiento_intercensal),
     },
+    fichaGobierno: filasFichaGobierno(datosExternos?.ficha_gobierno),
   }
 }
 
@@ -634,6 +687,16 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   }
   kv('Total transferencias', f.datosExternos.transferencias_total)
   kv('Transferencias per cápita', f.datosExternos.transferencias_per_capita)
+  kv('Superficie del radio municipal', f.datosExternos.superficie_km2)
+  kv('Densidad en el radio municipal (hab/km²)', f.datosExternos.densidad)
+  kv('Población (Censo 2010)', f.datosExternos.poblacion_2010)
+  kv('Crecimiento intercensal 2010–2022', f.datosExternos.crecimiento_intercensal)
+
+  // ── Datos institucionales de Gobierno — sólo si la respuesta los trajo (roles Admin y Autoridad) ──
+  if (f.fichaGobierno) {
+    heading(`${TITULO_FICHA_GOBIERNO} — acceso restringido`)
+    f.fichaGobierno.forEach((r) => kv(r.campo, r.valor))
+  }
 
   // ── Pie de página en todas las hojas ──
   const total = doc.getNumberOfPages()
@@ -736,6 +799,17 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     ...f.datosExternos.porConcepto.map((c) => ({ Campo: `  ${c.concepto}`, Valor: c.monto })),
     { Campo: '  Total transferencias', Valor: f.datosExternos.transferencias_total },
     { Campo: '  Transferencias per cápita', Valor: f.datosExternos.transferencias_per_capita },
+    { Campo: '  Superficie del radio municipal', Valor: f.datosExternos.superficie_km2 },
+    { Campo: '  Densidad en el radio municipal (hab/km²)', Valor: f.datosExternos.densidad },
+    { Campo: '  Población (Censo 2010)', Valor: f.datosExternos.poblacion_2010 },
+    { Campo: '  Crecimiento intercensal 2010–2022', Valor: f.datosExternos.crecimiento_intercensal },
+    ...(f.fichaGobierno
+      ? [
+          {},
+          { Campo: `${TITULO_FICHA_GOBIERNO} — acceso restringido`, Valor: '' },
+          ...f.fichaGobierno.map((r) => ({ Campo: `  ${r.campo}`, Valor: r.valor })),
+        ]
+      : []),
   ]
   exportToXlsx(filas, 'Ficha municipio', `ficha_${norm(f.localidad).replace(/\s+/g, '-')}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

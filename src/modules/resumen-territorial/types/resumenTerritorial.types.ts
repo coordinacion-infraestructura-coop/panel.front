@@ -43,6 +43,31 @@ export interface ResumenPrograma {
   privada_conteos: PrivadaConteos | null
 }
 
+// Datos institucionales de la localidad que mantiene la Secretaría General de
+// Gobierno. Restringido: el backend sólo lo envía a los roles `Admin` y `Autoridad`; para el
+// resto llega `null`. El frontend no decide quién lo ve
+// (spec-datos-externos-fase1-nomenclador-demografia.md §7).
+export interface FichaGobierno {
+  electores: number | null
+  empleados: number | null
+  masa_salarial: number | null
+  intendente: string | null
+  reelecto: boolean | null
+  partido: string | null
+  continuidad: boolean | null
+  legislador: string | null
+  partido_legislador: string | null
+  contacto_intendente: string | null
+}
+
+// Población sin gobierno local de un departamento. Estimación del área de
+// Gobierno (el Censo 2022 no la desagrega por departamento).
+export interface ZonaRural {
+  departamento: string
+  poblacion_2022: number | null
+  poblacion_2010: number | null
+}
+
 export interface ResumenLocalidad {
   id_geo: string | null // ADR-024 — llave de join con svc-datos-externos
   localidad: string
@@ -59,6 +84,11 @@ export interface ResumenLocalidad {
   transferencias_por_concepto: Record<string, number> | null
   transferencias_per_capita: number | null
   atp_monto_per_capita: number | null
+  // Fase 1 del Tablero de Gobierno. Opcionales: un snapshot anterior al
+  // deploy no los trae.
+  superficie_km2?: number | null // radio municipal (IDECOR), no el departamento
+  poblacion_2010?: number | null
+  ficha_gobierno?: FichaGobierno | null
   programas: ResumenPrograma[]
 }
 
@@ -70,6 +100,7 @@ export interface ResumenTerritorialPayload {
   // Denominador de "% cobertura" por departamento (padrón viv_geo_localidades,
   // ADR-024) — `localidades` sólo trae las que tienen al menos un programa.
   total_localidades_por_departamento: Record<string, number>
+  zonas_rurales?: ZonaRural[]
 }
 
 export interface ResumenSnapshot {

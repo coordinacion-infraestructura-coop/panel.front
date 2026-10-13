@@ -10,7 +10,43 @@
 // nuevo campo en el payload sólo para esto.
 //
 // Spec: docs/files/spec-resumen-territorial-tablero-v2.md §4 (Etapa 3)
-import type { ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
+import type { ResumenLocalidad, ResumenTerritorialPayload } from '../types/resumenTerritorial.types'
+
+/** Densidad (hab/km²) y crecimiento intercensal 2010–2022 (%) de un conjunto
+ * de localidades. La superficie es la del radio municipal, no la del
+ * departamento. Cada indicador usa sólo las localidades que tienen sus dos
+ * datos; si ninguna los tiene, `null` ("N/D"). Sirve igual para una localidad
+ * sola. Spec: spec-datos-externos-fase1-nomenclador-demografia.md §8. */
+export function calcularDemografia(
+  localidades: Pick<ResumenLocalidad, 'poblacion_2022' | 'poblacion_2010' | 'superficie_km2'>[],
+): { densidad: number | null; crecimiento_intercensal: number | null } {
+  let pobDens = 0
+  let superficie = 0
+  let pob2022 = 0
+  let pob2010 = 0
+  for (const l of localidades) {
+    if (l.poblacion_2022 && l.superficie_km2 && l.superficie_km2 > 0) {
+      pobDens += l.poblacion_2022
+      superficie += l.superficie_km2
+    }
+    if (l.poblacion_2022 && l.poblacion_2010 && l.poblacion_2010 > 0) {
+      pob2022 += l.poblacion_2022
+      pob2010 += l.poblacion_2010
+    }
+  }
+  return {
+    densidad: superficie > 0 ? pobDens / superficie : null,
+    crecimiento_intercensal: pob2010 > 0 ? (pob2022 / pob2010 - 1) * 100 : null,
+  }
+}
+
+export const fmtDensidad = (n: number | null | undefined) =>
+  n == null ? 'N/D' : n.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+
+export const fmtCrecimiento = (n: number | null | undefined) =>
+  n == null
+    ? 'N/D'
+    : `${n > 0 ? '+' : ''}${n.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
 
 export interface DepartamentoAgregado {
   departamento: string
@@ -173,12 +209,14 @@ export interface KpisProvincia {
   atp_monto_entregado_total: number // "entregado a la fecha" (ADR-025, 2026-10-01)
   atp_monto_per_capita: number | null
   total_monto_per_capita: number | null // (transferencias + ATP) / población — "Total per cápita"
+  densidad: number | null // hab/km² en el radio municipal
+  crecimiento_intercensal: number | null // % 2010–2022
+  poblacion_rural_2022: number | null // zona rural de los departamentos del payload; nunca sumada a `poblacion_2022`
 }
 
 /** KPIs de cabecera a nivel provincia — misma fuente que `calcularDepartamentos`,
- * agregada una vez más. Densidad y crecimiento intercensal quedan fuera a
- * propósito: sin superficie ni Censo 2010 (huecos de datos bloqueados,
- * spec §5), no se fabrican. */
+ * agregada una vez más. Densidad y crecimiento intercensal salen de la
+ * superficie y la población 2010 que aporta Gobierno (`calcularDemografia`). */
 export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisProvincia {
   const deptos = calcularDepartamentos(payload)
 
@@ -192,8 +230,11 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
   const pctCobertura = localidadesTotales > 0 ? Math.round((localidadesConDatos / localidadesTotales) * 1000) / 10 : null
 
   const periodo = payload.localidades.find((l) => l.transferencias_periodo)?.transferencias_periodo ?? null
+  const poblacionRural = (payload.zonas_rurales ?? []).reduce((s, z) => s + (z.poblacion_2022 ?? 0), 0) || null
 
   return {
+    ...calcularDemografia(payload.localidades),
+    poblacion_rural_2022: poblacionRural,
     poblacion_2022: poblacion,
     transferencias_total: transferenciasTotal,
     transferencias_per_capita:
