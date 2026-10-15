@@ -1,6 +1,7 @@
 import { useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { checklistTecnicoApi } from '../api/vivienda.api'
+import { AvanceBar } from '../avanceObra'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import type {
   CatalogoItemEstado,
@@ -186,15 +187,21 @@ export function ChecklistTecnicoPage() {
 
   // El estado del expediente es el Estado Técnico de los paneles CC/CH/ML: al cambiarlo hay
   // que refrescarlos (spec-estado-tecnico-desde-checklist.md §4.8).
+  const PANEL_QUERY: Record<ProgramaChecklist, [string, string]> = {
+    cc: ['cordon-cuneta', 'cc-historial'],
+    ch: ['cordoba-hogar', 'ch-historial'],
+    ml: ['ml-proyectos', 'ml-historial'],
+  }
+  // Avance, fin de obra e hitos también se muestran en los paneles (spec v1.6.0 §6-bis).
+  const invalidarPanel = (p: ProgramaChecklist) => qc.invalidateQueries({ queryKey: [PANEL_QUERY[p][0]] })
   const onEstadoSuccess = (data: ChecklistTecnico) => {
     onMutationSuccess(data)
-    const [panel, historial] = {
-      cc: ['cordon-cuneta', 'cc-historial'],
-      ch: ['cordoba-hogar', 'ch-historial'],
-      ml: ['ml-proyectos', 'ml-historial'],
-    }[data.programa]
-    qc.invalidateQueries({ queryKey: [panel] })
-    qc.invalidateQueries({ queryKey: [historial, data.entidad_id] })
+    invalidarPanel(data.programa)
+    qc.invalidateQueries({ queryKey: [PANEL_QUERY[data.programa][1], data.entidad_id] })
+  }
+  const onHitoSuccess = (data: ChecklistTecnico) => {
+    onMutationSuccess(data)
+    invalidarPanel(data.programa)
   }
 
   const [mutationError, setMutationError] = useState<string | null>(null)
@@ -205,6 +212,7 @@ export function ChecklistTecnicoPage() {
       estado_expediente_id?: number | null
       fecha_radicacion?: string | null
       reparticion_id?: number | null
+      fecha_fin_obra?: string | null
     }) => checklistTecnicoApi.updateChecklist(programa, entidad!.id, data),
     onSuccess: onEstadoSuccess,
     onError: onMutationError,
@@ -221,7 +229,7 @@ export function ChecklistTecnicoPage() {
   const updateHitoMut = useMutation({
     mutationFn: (vars: { tipo: TipoHitoChecklist; fecha: string | null }) =>
       checklistTecnicoApi.updateHito(programa, entidad!.id, vars.tipo, { fecha_acreditado: vars.fecha }),
-    onSuccess: onMutationSuccess,
+    onSuccess: onHitoSuccess,
     onError: onMutationError,
   })
 
@@ -383,13 +391,17 @@ export function ChecklistTecnicoPage() {
                     updateItemMut.mutate({ itemNum, subItemNum, itemEstadoId })
                   }
                 />
-                {checklist.hitos && (
-                  <HitosCard
-                    hitos={checklist.hitos}
-                    canEdit={canEdit}
-                    onChangeFecha={(tipo, fecha) => updateHitoMut.mutate({ tipo, fecha })}
-                  />
-                )}
+                <ObraCard
+                  key={`obra-card-${programa}-${entidad.id}`}
+                  checklist={checklist}
+                  canEdit={canEdit}
+                  onChangeFechaPago={(tipo, fecha) => updateHitoMut.mutate({ tipo, fecha })}
+                  onChangeFin={(fecha_fin_obra) => updateChecklistMut.mutate({ fecha_fin_obra })}
+                  onAvanceChanged={() => {
+                    qc.invalidateQueries({ queryKey: ['checklist-tecnico', programa, entidad.id] })
+                    invalidarPanel(programa)
+                  }}
+                />
                 <BitacoraCard
                   key={`obra-${programa}-${entidad.id}`}
                   titulo="Observaciones de obra"
@@ -633,6 +645,20 @@ function StatusPill({
   )
 }
 
+// Completitud (spec v1.6.0 §5.4-bis): los ítems en un estado `excluye_completitud`
+// ("No Proyectado / No Aplica") no cuentan en el total ni como faltantes.
+function contarDocumentacion(items: ChecklistItemDetalle[], itemEstados: CatalogoItemEstado[]) {
+  const meta = new Map(itemEstados.map((e) => [e.id, e]))
+  let completos = 0
+  let noAplica = 0
+  for (const i of items) {
+    const e = meta.get(i.item_estado_id)
+    if (e?.excluye_completitud) noAplica++
+    else if (e?.es_completo) completos++
+  }
+  return { total: items.length - noAplica, completos, noAplica }
+}
+
 function findItem(items: ChecklistItemDetalle[], itemNum: number, subItemNum: number | null) {
   return items.find((i) => i.item_num === itemNum && i.sub_item_num === subItemNum)
 }
@@ -648,10 +674,17 @@ function ChecklistCard({
 }) {
   const [openDisclosure, setOpenDisclosure] = useState<Record<number, boolean>>({})
   const leyenda = itemEstados.filter((e) => e.activo)
+  const cuenta = contarDocumentacion(checklist.items, itemEstados)
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-100">
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Documentación a presentar</h3>
+        <span className="text-[11px] text-gray-500 text-right">
+          {cuenta.total === 0
+            ? 'Sin documentación aplicable'
+            : `${cuenta.completos} de ${cuenta.total} completos`}
+          {cuenta.noAplica > 0 && <span className="text-gray-400"> · {cuenta.noAplica} no aplican</span>}
+        </span>
       </div>
       <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap">
         {leyenda.map((e) => (
@@ -713,45 +746,159 @@ function ChecklistCard({
   )
 }
 
-function HitosCard({
-  hitos, canEdit, onChangeFecha,
+// Ejecución de obra (spec v1.6.0 §5.5/§5.6): barra con el avance vigente + historial de
+// mediciones (botón "Agregar", es bitácora) + fecha de fin (autosave) + hitos, cada uno con su
+// fecha de MEDICIÓN (derivada del historial, área técnica) y de PAGO (área económica).
+function ObraCard({
+  checklist, canEdit, onChangeFechaPago, onChangeFin, onAvanceChanged,
 }: {
-  hitos: NonNullable<ChecklistTecnico['hitos']>
+  checklist: ChecklistTecnico
   canEdit: boolean
-  onChangeFecha: (tipo: TipoHitoChecklist, fecha: string | null) => void
+  onChangeFechaPago: (tipo: TipoHitoChecklist, fecha: string | null) => void
+  onChangeFin: (fecha: string | null) => void
+  onAvanceChanged: () => void
 }) {
+  const { programa, entidad_id: entidadId } = checklist
+  const qc = useQueryClient()
+  const listKey = ['checklist-tecnico-avance', programa, entidadId]
+  const { data: mediciones = [] } = useQuery({
+    queryKey: listKey,
+    queryFn: () => checklistTecnicoApi.getAvance(programa, entidadId),
+  })
+  const [fecha, setFecha] = useState(todayISO())
+  const [pct, setPct] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const refrescar = () => {
+    qc.invalidateQueries({ queryKey: listKey })
+    onAvanceChanged()
+  }
+  const createMut = useMutation({
+    mutationFn: () => checklistTecnicoApi.createAvance(programa, entidadId, { fecha_medicion: fecha, porcentaje: Number(pct) }),
+    onSuccess: () => { setPct(''); setError(null); refrescar() },
+    onError: (err) => setError(extractErrorMessage(err, 'No se pudo guardar la medición.')),
+  })
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => checklistTecnicoApi.deleteAvance(programa, entidadId, id),
+    onSuccess: refrescar,
+    onError: (err) => setError(extractErrorMessage(err, 'No se pudo borrar la medición.')),
+  })
+
+  const vigente = checklist.avance
+  const pctNum = pct === '' ? null : Number(pct)
+  const pctValido = pctNum !== null && Number.isInteger(pctNum) && pctNum >= 0 && pctNum <= 100
+  const fechaValida = !!fecha && fecha <= todayISO()
+  const bajaRespectoVigente = pctValido && vigente && fecha >= vigente.fecha_medicion && pctNum! < vigente.porcentaje
+  const finSinCien = !!checklist.fecha_fin_obra && (vigente?.porcentaje ?? 0) < 100
+
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Ejecución de obra</h3>
-        <span className="text-[11px] text-gray-400">las fechas se cargan tras la visita de obra</span>
+        <span className="text-[11px] text-gray-400">medición: área técnica · pago: área económica</span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-        {hitos.map((h) => {
-          const paid = !!h.fecha_acreditado
-          return (
-            <div key={h.tipo} className="p-3">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${paid ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-gray-500'}`}>
-                  {paid ? '✓' : HITO_LABEL[h.tipo].charAt(0)}
-                </span>
-                <span className="text-xs font-semibold text-gray-700">{h.label}</span>
+
+      {/* Avance físico */}
+      <div className="p-4 grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-4 border-b border-slate-100">
+        <div className="min-w-0 space-y-3">
+          <AvanceBar pct={vigente?.porcentaje} fecha={vigente?.fecha_medicion} />
+          {canEdit && (
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-gray-400 mb-0.5">Fecha de medición</label>
+                <input type="date" max={todayISO()} className="border border-gray-200 rounded-md px-2 py-1 text-xs"
+                  value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </div>
-              <div className="text-base font-bold text-gov-navy font-mono">{h.monto !== null ? fmtMonto(h.monto) : '—'}</div>
-              <input
-                type="date"
-                className="mt-2 w-full border border-gray-200 rounded-md px-2 py-1 text-xs disabled:opacity-60"
-                value={h.fecha_acreditado ?? ''}
-                disabled={!canEdit}
-                onChange={(e) => onChangeFecha(h.tipo, e.target.value || null)}
-              />
-              <div className={`text-[11px] mt-1 font-semibold ${paid ? 'text-green-600' : 'text-gray-400'}`}>
-                {paid ? `Acreditado ${fmtFecha(h.fecha_acreditado)}` : 'Pendiente de pago'}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-gray-400 mb-0.5">Avance %</label>
+                <input type="number" min={0} max={100} step={1} className="w-20 border border-gray-200 rounded-md px-2 py-1 text-xs"
+                  value={pct} onChange={(e) => setPct(e.target.value)} />
               </div>
+              <button
+                type="button"
+                disabled={!pctValido || !fechaValida || createMut.isPending}
+                onClick={() => createMut.mutate()}
+                className="px-3 py-1.5 text-xs font-semibold rounded bg-gov-navy text-white disabled:opacity-40"
+              >
+                {createMut.isPending ? 'Guardando…' : 'Agregar'}
+              </button>
             </div>
-          )
-        })}
+          )}
+          {bajaRespectoVigente && (
+            <p className="text-[11px] text-amber-600">
+              ⚠ Menor que la medición del {fmtFecha(vigente!.fecha_medicion)} ({vigente!.porcentaje}%). Se acepta si es una re-medición.
+            </p>
+          )}
+          {error && <p className="text-[11px] text-red-600">{error}</p>}
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-gray-400 mb-0.5">Fecha de finalización de obra (100%)</label>
+            <input type="date" className="border border-gray-200 rounded-md px-2 py-1 text-xs disabled:opacity-60"
+              value={checklist.fecha_fin_obra ?? ''} disabled={!canEdit}
+              onChange={(e) => onChangeFin(e.target.value || null)} />
+            {finSinCien && (
+              <p className="text-[11px] text-amber-600 mt-1">⚠ Hay fecha de fin pero la última medición es menor a 100%.</p>
+            )}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase text-gray-400 mb-1">Mediciones</p>
+          {mediciones.length === 0 && <p className="text-xs text-gray-400">Todavía no hay mediciones.</p>}
+          <ul className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+            {mediciones.map((m) => (
+              <li key={m.id} className="flex items-center gap-2 py-1 text-xs">
+                <span className="text-gray-500 w-24 flex-shrink-0">{fmtFecha(m.fecha_medicion)}</span>
+                <span className="font-bold text-gov-navy w-10">{m.porcentaje}%</span>
+                <span className="text-gray-400 truncate flex-1" title={m.created_by ?? ''}>{m.created_by_nombre ?? m.created_by ?? ''}</span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className="text-gray-300 hover:text-red-500"
+                    title="Borrar medición"
+                    onClick={() => { if (window.confirm(`¿Borrar la medición del ${fmtFecha(m.fecha_medicion)} (${m.porcentaje}%)?`)) deleteMut.mutate(m.id) }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
+
+      {/* Hitos */}
+      {checklist.hitos && (
+        <div className="grid grid-cols-1 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+          {checklist.hitos.map((h) => {
+            const paid = !!h.fecha_acreditado
+            const medido = !!h.fecha_medicion
+            return (
+              <div key={h.tipo} className="p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${paid ? 'bg-green-100 text-green-700' : medido ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-gray-500'}`}>
+                    {paid ? '✓' : HITO_LABEL[h.tipo].charAt(0)}
+                  </span>
+                  <span className="text-xs font-semibold text-gray-700">{h.label}</span>
+                </div>
+                {h.tipo !== 'anticipo' && (
+                  <div className={`text-[11px] mb-1 font-semibold ${medido ? 'text-amber-700' : 'text-gray-400'}`}>
+                    {medido ? `Medido ${fmtFecha(h.fecha_medicion)}` : 'Pendiente de medición'}
+                  </div>
+                )}
+                <div className="text-base font-bold text-gov-navy font-mono">{h.monto !== null ? fmtMonto(h.monto) : '—'}</div>
+                <input
+                  type="date"
+                  className="mt-2 w-full border border-gray-200 rounded-md px-2 py-1 text-xs disabled:opacity-60"
+                  value={h.fecha_acreditado ?? ''}
+                  disabled={!canEdit}
+                  onChange={(e) => onChangeFechaPago(h.tipo, e.target.value || null)}
+                />
+                <div className={`text-[11px] mt-1 font-semibold ${paid ? 'text-green-600' : 'text-gray-400'}`}>
+                  {paid ? `Acreditado ${fmtFecha(h.fecha_acreditado)}` : 'Pendiente de pago'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

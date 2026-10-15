@@ -132,7 +132,7 @@ export interface EstadoCCUpdate {
   aplica_financiero?: boolean
 }
 
-export interface MunicipioCC {
+export interface MunicipioCC extends ObraPanel {
   id: string
   orden: number
   municipio: string
@@ -290,7 +290,7 @@ export interface EstadoCHUpdate {
   aplica_financiero?: boolean
 }
 
-export interface LocalidadCH {
+export interface LocalidadCH extends ObraPanel {
   id: string
   orden: number
   localidad: string
@@ -420,7 +420,7 @@ export interface GeoPuntoMLCreate {
   lng: number
 }
 
-export interface ProyectoML {
+export interface ProyectoML extends ObraPanel {
   id: string
   tipo: TipoProyectoML
   nombre: string
@@ -718,6 +718,8 @@ export interface CatalogoItemEstado {
   bg: string
   text_color: string
   es_completo: boolean
+  /** "No Proyectado / No Aplica" (spec v1.6.0): fuera del total y de los faltantes. */
+  excluye_completitud: boolean
 }
 
 export interface CatalogoItemEstadoCreate {
@@ -727,6 +729,7 @@ export interface CatalogoItemEstadoCreate {
   bg?: string
   text_color?: string
   es_completo?: boolean
+  excluye_completitud?: boolean
 }
 
 export interface CatalogoItemEstadoUpdate {
@@ -736,6 +739,7 @@ export interface CatalogoItemEstadoUpdate {
   bg?: string
   text_color?: string
   es_completo?: boolean
+  excluye_completitud?: boolean
 }
 
 export interface ItemSubDefinicion {
@@ -784,7 +788,45 @@ export interface HitoChecklist {
   tipo: TipoHitoChecklist
   label: string
   monto: number | null
+  /** Fecha de pago (área económica). */
   fecha_acreditado: string | null
+  /** Derivada del historial de avance: primera medición >= umbral. Siempre null en 'anticipo'. */
+  fecha_medicion: string | null
+}
+
+/** Hito de obra tal como lo ven los paneles CC/CH/ML — solo lectura (spec v1.6.0 §6-bis). */
+export interface HitoObraPanel {
+  tipo: TipoHitoChecklist
+  monto: number | null
+  fecha_medicion: string | null
+  fecha_acreditado: string | null
+}
+
+/** Avance + hitos de obra que los paneles leen del Checklist Técnico (solo lectura). */
+export interface ObraPanel {
+  avance_obra_pct?: number | null
+  avance_obra_fecha?: string | null
+  fecha_fin_obra?: string | null
+  hitos_obra?: HitoObraPanel[] | null
+}
+
+export interface AvanceVigente {
+  porcentaje: number
+  fecha_medicion: string
+}
+
+export interface AvanceMedicion {
+  id: string
+  fecha_medicion: string
+  porcentaje: number
+  created_at: string
+  created_by: string | null
+  created_by_nombre: string | null
+}
+
+export interface AvanceMedicionCreate {
+  fecha_medicion: string
+  porcentaje: number
 }
 
 export interface HitoChecklistUpdate {
@@ -803,6 +845,8 @@ export interface ChecklistTecnico {
   estados_visitados: number[]
   items: ChecklistItemDetalle[]
   hitos: HitoChecklist[] | null
+  fecha_fin_obra: string | null
+  avance: AvanceVigente | null
   updated_at: string
   updated_by: string | null
 }
@@ -811,4 +855,5 @@ export interface ChecklistTecnicoUpdate {
   estado_expediente_id?: number | null
   fecha_radicacion?: string | null
   reparticion_id?: number | null
+  fecha_fin_obra?: string | null
 }

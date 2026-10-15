@@ -10,6 +10,10 @@ import {
 } from '../estadoTecnico'
 import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
+import {
+  AvanceCelda, HitosChips, ObraResumen, SITUACION_OBRA_LABEL, obraColumnasExcel, situacionObra,
+  type SituacionObra,
+} from '../avanceObra'
 import type {
   EstadoCC, MunicipioCC, MunicipioCCUpdate, MunicipioCCCreate,
   EstadoCCCreate, EstadoCCUpdate, EstadoHistorialCC, PedidoCC,
@@ -352,6 +356,20 @@ function fmtSincronizado(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Completitud (spec-checklist-tecnico-dgv v1.6.0 §5.4-bis): "No Proyectado / No Aplica" no
+// cuenta en el total ni como faltante.
+function resumenDocumentacion(
+  items: { item_estado_id: number }[],
+  itemEstados: { id: number; es_completo: boolean; excluye_completitud: boolean }[],
+) {
+  const meta = new Map(itemEstados.map((e) => [e.id, e]))
+  const noAplica = items.filter((i) => meta.get(i.item_estado_id)?.excluye_completitud).length
+  const completos = items.filter((i) => meta.get(i.item_estado_id)?.es_completo).length
+  const total = items.length - noAplica
+  if (total === 0) return 'sin documentación aplicable'
+  return `${completos} de ${total} completos` + (noAplica ? ` · ${noAplica} no aplican` : '')
+}
+
 function ChecklistTecnicoResumenTab({ municipioId }: { municipioId: string }) {
   const { data: checklist, isLoading } = useQuery({
     queryKey: ['checklist-tecnico-resumen', 'cc', municipioId],
@@ -411,7 +429,10 @@ function ChecklistTecnicoResumenTab({ municipioId }: { municipioId: string }) {
       )}
 
       <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Documentación a presentar</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">
+          Documentación a presentar
+          <span className="ml-2 normal-case font-normal text-gray-400">{resumenDocumentacion(checklist.items, catalogos?.items_estado ?? [])}</span>
+        </p>
         <ul className="space-y-1">
           {checklist.items.map((item) => (
             <li key={`${item.item_num}-${item.sub_item_num ?? ''}`} className="flex items-center justify-between gap-2 text-xs">
@@ -429,22 +450,19 @@ function ChecklistTecnicoResumenTab({ municipioId }: { municipioId: string }) {
         </ul>
       </div>
 
-      {checklist.hitos && (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Ejecución de obra</p>
-          <div className="grid grid-cols-2 gap-2">
-            {checklist.hitos.map((h) => (
-              <div key={h.tipo} className="bg-slate-50 rounded px-2.5 py-2 text-xs">
-                <div className="text-gray-400 uppercase text-[10px] font-bold">{h.label}</div>
-                <div className="font-semibold text-gov-blue">{h.monto !== null ? fmtMonto(h.monto) : '—'}</div>
-                <div className={`text-[10px] mt-0.5 ${h.fecha_acreditado ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
-                  {h.fecha_acreditado ? `Acreditado ${new Date(h.fecha_acreditado + 'T00:00:00').toLocaleDateString('es-AR')}` : 'Pendiente'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Ejecución de obra</p>
+        <ObraResumen
+          o={{
+            avance_obra_pct: checklist.avance?.porcentaje ?? null,
+            avance_obra_fecha: checklist.avance?.fecha_medicion ?? null,
+            fecha_fin_obra: checklist.fecha_fin_obra,
+            hitos_obra: checklist.hitos?.map(({ tipo, monto, fecha_medicion, fecha_acreditado }) => ({
+              tipo, monto, fecha_medicion, fecha_acreditado,
+            })) ?? null,
+          }}
+        />
+      </div>
 
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-gov-navy mb-1.5">Observaciones de obra</p>
@@ -990,6 +1008,8 @@ const CC_COLS: Array<{ label: string | [string, string]; sort: string | null }> 
   { label: ['Estado', 'Técnico'], sort: 'etecnico' },
   { label: ['Estado', 'Presup.'], sort: 'efinanciero' },
   { label: 'Avance', sort: 'avance' },
+  { label: ['Avance', 'obra'], sort: 'avance_obra' },
+  { label: 'Hitos', sort: null },
   { label: 'Acciones', sort: null },
 ]
 
@@ -1021,6 +1041,8 @@ export function CordonCunetaPage() {
   const estadosTecnico = useEstadosTecnico()
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
+  const [obraFilter, setObraFilter] = useState<SituacionObra | ''>('')
+  const obraId = useId()
   const [editTarget, setEditTarget] = useState<MunicipioCC | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<MunicipioCC | null>(null)
@@ -1088,9 +1110,10 @@ export function CordonCunetaPage() {
       if (ejFilter && String(m.ejuridico) !== ejFilter) return false
       if (etFilter && String(m.etecnico) !== etFilter) return false
       if (efFilter && String(m.efinanciero) !== efFilter) return false
+      if (obraFilter && situacionObra(m) !== obraFilter) return false
       return true
     })
-  }, [municipios, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter])
+  }, [municipios, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter])
 
   const montoTotal = municipios.reduce((s, m) => s + (m.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
@@ -1098,7 +1121,7 @@ export function CordonCunetaPage() {
   const sinDoc = municipios.filter((m) => !m.doc_exp).length
   const ccMlTotal = municipios.reduce((s, m) => s + (m.cordon_cuneta_ml ?? 0), 0)
   const adM2Total = municipios.reduce((s, m) => s + (m.adoquinado_m2 ?? 0), 0)
-  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter)
+  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter)
 
   const [sortCol, setSortCol] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1117,6 +1140,8 @@ export function CordonCunetaPage() {
       let vb: string | number | null
       if (sortCol === 'avance') {
         va = avancePct(a, estados, estadosTecnico); vb = avancePct(b, estados, estadosTecnico)
+      } else if (sortCol === 'avance_obra') {
+        va = a.avance_obra_pct ?? null; vb = b.avance_obra_pct ?? null
       } else if (sortCol === 'etecnico') {
         va = tecnicoOrden(a.etecnico, estadosTecnico); vb = tecnicoOrden(b.etecnico, estadosTecnico)
       } else if (ESTADO_KEYS.includes(sortCol)) {
@@ -1199,6 +1224,7 @@ export function CordonCunetaPage() {
               'Est. Técnico': tecnicoLabel(m.etecnico, estadosTecnico),
               'Est. Presup.': estados.find((e) => e.id === m.efinanciero)?.label ?? '',
               'Avance (%)': avancePct(m, estados, estadosTecnico),
+              ...obraColumnasExcel(m),
               'Observaciones': m.obs ?? '',
             }))
             exportToXlsx(rows, 'Cordón Cuneta', `cordon_cuneta_${new Date().toISOString().split('T')[0]}.xlsx`)
@@ -1275,8 +1301,15 @@ export function CordonCunetaPage() {
             {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={obraId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Obra</label>
+          <select id={obraId} value={obraFilter} onChange={(e) => setObraFilter(e.target.value as SituacionObra | '')} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todas —</option>
+            {(Object.keys(SITUACION_OBRA_LABEL) as SituacionObra[]).map((k) => <option key={k} value={k}>{SITUACION_OBRA_LABEL[k]}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}
@@ -1330,7 +1363,7 @@ export function CordonCunetaPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={16} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
+                  <td colSpan={18} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
               {sorted.map((m) => {
@@ -1381,6 +1414,8 @@ export function CordonCunetaPage() {
                         <span className="text-gray-500 w-7 text-right" style={{ fontSize: '11px' }}>{pct}%</span>
                       </div>
                     </td>
+                    <td className="px-2.5 py-1.5"><AvanceCelda o={m} /></td>
+                    <td className="px-2.5 py-1.5"><HitosChips o={m} /></td>
                     <td className="px-2.5 py-1.5 whitespace-nowrap">
                       <button onClick={() => setDetailTarget(m)} className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors" aria-label={`Ver historial de ${m.municipio}`} title="Ver historial / comunicaciones">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>

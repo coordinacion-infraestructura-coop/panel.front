@@ -1,5 +1,7 @@
 import apiClient from '../../../shared/api/client'
 import type {
+  AvanceMedicion,
+  AvanceMedicionCreate,
   Programa,
   TableroVivienda,
   Beneficiario,
@@ -343,6 +345,21 @@ export const checklistTecnicoApi = {
     apiClient
       .patch<ChecklistTecnico>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/hitos/${tipo}`, data)
       .then((r) => r.data),
+
+  getAvance: (programa: ProgramaChecklist, entidadId: string) =>
+    apiClient
+      .get<AvanceMedicion[]>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/avance`)
+      .then((r) => r.data),
+
+  createAvance: (programa: ProgramaChecklist, entidadId: string, data: AvanceMedicionCreate) =>
+    apiClient
+      .post<AvanceMedicion>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/avance`, data)
+      .then((r) => r.data),
+
+  deleteAvance: (programa: ProgramaChecklist, entidadId: string, medicionId: string) =>
+    apiClient
+      .delete(`${BASE}/checklist-tecnico/${programa}/${entidadId}/avance/${medicionId}`)
+      .then(() => undefined),
 
   // Admin de catálogos (solo Admin)
   createEstadoExpediente: (data: CatalogoEstadoExpedienteCreate) =>

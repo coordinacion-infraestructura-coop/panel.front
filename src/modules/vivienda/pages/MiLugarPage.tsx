@@ -9,6 +9,10 @@ import {
   useEstadosTecnico,
 } from '../estadoTecnico'
 import { MapaDualPuntos } from '../../../shared/components/informe/MapaDualPuntos'
+import {
+  AvanceCelda, HitosChips, ObraResumen, SITUACION_OBRA_LABEL, obraColumnasExcel, situacionObra,
+  type SituacionObra,
+} from '../avanceObra'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
@@ -120,6 +124,7 @@ function exportXlsx(
     'E. Presup.': estadoLabel(p.efinanciero, tipoEstados),
     'E. General': estadoLabel(p.estado_general, tipoEstados),
     'Avance (%)': avancePct(p, tipoEstados, estadosTecnico),
+    ...obraColumnasExcel(p),
     'OK Gobernación': p.ok_gob,
     'Coordenadas': p.geo_puntos.map((g) => `${g.lat},${g.lng}`).join(' | '),
     'Observaciones': p.obs ?? '',
@@ -241,7 +246,7 @@ function DetailPanel({
   const uid = useId()
   const qc = useQueryClient()
   const today = new Date().toISOString().split('T')[0]
-  const [tab, setTab] = useState<'comunicaciones' | 'historial'>('comunicaciones')
+  const [tab, setTab] = useState<'comunicaciones' | 'historial' | 'obra'>('comunicaciones')
   const [showForm, setShowForm] = useState(false)
   const [desc, setDesc] = useState('')
   const [fecha, setFecha] = useState(today)
@@ -300,7 +305,13 @@ function DetailPanel({
         <div className="flex border-b border-slate-200 bg-slate-50">
           <button className={tabCls('comunicaciones')} onClick={() => setTab('comunicaciones')}>Comunicaciones</button>
           <button className={tabCls('historial')} onClick={() => setTab('historial')}>Cambios de estado</button>
+          <button className={tabCls('obra')} onClick={() => setTab('obra')}>Avance de obra</button>
         </div>
+        {tab === 'obra' && (
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            <ObraResumen o={proyecto} />
+          </div>
+        )}
 
         {tab === 'comunicaciones' && (
           <>
@@ -1266,6 +1277,7 @@ export function MiLugarPage() {
   const ejId = useId()
   const etId = useId()
   const efId = useId()
+  const obraId = useId()
 
   const [tab, setTab] = useState<TipoProyectoML>('exp')
   const [search, setSearch] = useState('')
@@ -1275,6 +1287,7 @@ export function MiLugarPage() {
   const estadosTecnico = useEstadosTecnico()
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
+  const [obraFilter, setObraFilter] = useState<SituacionObra | ''>('')
   const [editTarget, setEditTarget] = useState<ProyectoML | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<ProyectoML | null>(null)
@@ -1343,9 +1356,10 @@ export function MiLugarPage() {
       if (ejFilter && String(p.ejuridico) !== ejFilter) return false
       if (etFilter && String(p.etecnico) !== etFilter) return false
       if (efFilter && String(p.efinanciero) !== efFilter) return false
+      if (obraFilter && situacionObra(p) !== obraFilter) return false
       return true
     })
-  }, [proyectos, search, deptoFilter, egFilter, ejFilter, etFilter, efFilter])
+  }, [proyectos, search, deptoFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter])
 
   const handleSort = (key: string) => {
     setSortDir((prev) => (sortCol === key && prev === 'asc' ? 'desc' : 'asc'))
@@ -1372,7 +1386,7 @@ export function MiLugarPage() {
     })
   }, [filtered, sortCol, sortDir, estados, estadosTecnico])
 
-  const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter)
+  const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter)
   const tieneFinanciero = tab === 'exp' || tab === 'prov'
   const { label: tabLabel } = TIPO_CONFIG[tab]
 
@@ -1408,7 +1422,7 @@ export function MiLugarPage() {
       {/* Tabs por tipo */}
       <div className="flex gap-0 mb-0 border-b border-slate-200">
         {(['exp', 'muni', 'prov'] as TipoProyectoML[]).map((t) => (
-          <button key={t} type="button" onClick={() => { setTab(t); setSortCol(''); setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }}
+          <button key={t} type="button" onClick={() => { setTab(t); setSortCol(''); setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }}
             className={`px-5 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${tab === t ? 'border-current' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
             style={tab === t ? { color: TIPO_CONFIG[t].color, borderColor: TIPO_CONFIG[t].color } : undefined}>
             {TIPO_CONFIG[t].label}
@@ -1494,8 +1508,16 @@ export function MiLugarPage() {
             </select>
           </div>
         )}
+        <div className="flex items-center gap-2">
+          <label htmlFor={obraId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Obra</label>
+          <select id={obraId} value={obraFilter} onChange={(e) => setObraFilter(e.target.value as SituacionObra | '')}
+            className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todas —</option>
+            {(Object.keys(SITUACION_OBRA_LABEL) as SituacionObra[]).map((k) => <option key={k} value={k}>{SITUACION_OBRA_LABEL[k]}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }}
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }}
             className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
@@ -1556,13 +1578,17 @@ export function MiLugarPage() {
                 <th scope="col" className={th} onClick={() => handleSort('avance')} style={{ fontSize: '11px' }}>
                   <span className="flex items-center gap-0.5">Avance {sortIndicator('avance')}</span>
                 </th>
+                <th scope="col" className={th} onClick={() => handleSort('avance_obra_pct')} style={{ fontSize: '11px' }}>
+                  <span className="flex items-center gap-0.5">Avance obra {sortIndicator('avance_obra_pct')}</span>
+                </th>
+                <th scope="col" className={thFixed} style={{ fontSize: '11px' }}>Hitos</th>
                 <th scope="col" className={thFixed} style={{ fontSize: '11px' }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {!filtered.length && (
                 <tr>
-                  <td colSpan={tieneFinanciero ? (tab === 'exp' ? 19 : 18) : 15}
+                  <td colSpan={tieneFinanciero ? (tab === 'exp' ? 21 : 20) : 17}
                     className="text-center py-10 text-gray-400">
                     Sin resultados para los filtros aplicados.
                   </td>
@@ -1612,6 +1638,8 @@ export function MiLugarPage() {
                         <span className="text-gray-500 w-7 text-right" style={{ fontSize: '11px' }}>{pct}%</span>
                       </div>
                     </td>
+                    <td className="px-2.5 py-1.5"><AvanceCelda o={p} /></td>
+                    <td className="px-2.5 py-1.5"><HitosChips o={p} /></td>
                     <td className="px-2.5 py-1.5 whitespace-nowrap">
                       <button onClick={() => setDetailTarget(p)} className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors" aria-label={`Ver historial de ${p.nombre}`} title="Ver historial / comunicaciones">
                         <IconClipboard />

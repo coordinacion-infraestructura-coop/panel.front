@@ -147,7 +147,7 @@ function EstadoExpedienteTable({
 function ItemEstadoTable({
   itemsEstado, onSaved, onError,
 }: {
-  itemsEstado: { id: number; label: string; orden: number; activo: boolean; bg: string; text_color: string; es_completo: boolean }[]
+  itemsEstado: { id: number; label: string; orden: number; activo: boolean; bg: string; text_color: string; es_completo: boolean; excluye_completitud: boolean }[]
   onSaved: () => void
   onError: (err: unknown) => void
 }) {
@@ -159,8 +159,10 @@ function ItemEstadoTable({
     onError,
   })
   const updateMut = useMutation({
-    mutationFn: (vars: { id: number; activo?: boolean; label?: string; es_completo?: boolean }) =>
-      checklistTecnicoApi.updateItemEstado(vars.id, { activo: vars.activo, label: vars.label, es_completo: vars.es_completo }),
+    mutationFn: (vars: { id: number; activo?: boolean; label?: string; es_completo?: boolean; excluye_completitud?: boolean }) =>
+      checklistTecnicoApi.updateItemEstado(vars.id, {
+        activo: vars.activo, label: vars.label, es_completo: vars.es_completo, excluye_completitud: vars.excluye_completitud,
+      }),
     onSuccess: onSaved,
     onError,
   })
@@ -171,7 +173,8 @@ function ItemEstadoTable({
         <h3 className="text-sm font-semibold text-gov-navy">Estado de la documentación</h3>
         <p className="text-xs text-gray-400">
           Valor de cada ítem del checklist "Documentación a presentar". "Terminado" marca el estado que
-          cuenta como documentación completa en el Resumen Territorial y el Tablero.
+          cuenta como documentación completa en el Resumen Territorial y el Tablero. "No aplica" marca
+          el estado que se descarta al medir completitud (no suma al total ni a los faltantes).
         </p>
       </div>
       <table className="w-full text-sm">
@@ -180,6 +183,7 @@ function ItemEstadoTable({
             <th className="px-4 py-2 font-semibold">Orden</th>
             <th className="px-4 py-2 font-semibold">Label</th>
             <th className="px-4 py-2 font-semibold">Terminado</th>
+            <th className="px-4 py-2 font-semibold">No aplica</th>
             <th className="px-4 py-2 font-semibold">Activo</th>
           </tr>
         </thead>
@@ -204,7 +208,17 @@ function ItemEstadoTable({
                 <input
                   type="checkbox"
                   checked={e.es_completo}
+                  disabled={e.excluye_completitud}
                   onChange={(ev) => updateMut.mutate({ id: e.id, es_completo: ev.target.checked })}
+                />
+              </td>
+              <td className="px-4 py-2">
+                <input
+                  type="checkbox"
+                  checked={e.excluye_completitud}
+                  disabled={e.es_completo}
+                  title={e.es_completo ? 'Un estado "Terminado" no puede ser "No aplica"' : undefined}
+                  onChange={(ev) => updateMut.mutate({ id: e.id, excluye_completitud: ev.target.checked })}
                 />
               </td>
               <td className="px-4 py-2">

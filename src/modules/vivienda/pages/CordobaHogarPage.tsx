@@ -10,6 +10,10 @@ import {
 } from '../estadoTecnico'
 import { useFiltroTerritorialUrl } from '../../../shared/hooks/useFiltroTerritorialUrl'
 import { exportToXlsx } from '../../../shared/utils/exportTable'
+import {
+  AvanceCelda, HitosChips, ObraResumen, SITUACION_OBRA_LABEL, obraColumnasExcel, situacionObra,
+  type SituacionObra,
+} from '../avanceObra'
 import type {
   EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
   EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, PedidoCH,
@@ -79,6 +83,8 @@ const CH_COLS: Array<{ label: string | [string, string]; sort: string | null }> 
   { label: ['Estado', 'Técnico'], sort: 'etecnico' },
   { label: ['Estado', 'Presup.'], sort: 'efinanciero' },
   { label: 'Avance', sort: 'avance' },
+  { label: ['Avance', 'obra'], sort: 'avance_obra' },
+  { label: 'Hitos', sort: null },
   { label: 'Acciones', sort: null },
 ]
 
@@ -393,7 +399,7 @@ function DetailPanel({
   const uid = useId()
   const queryClient = useQueryClient()
   const today = new Date().toISOString().split('T')[0]
-  const [tab, setTab] = useState<'comunicaciones' | 'historial'>('comunicaciones')
+  const [tab, setTab] = useState<'comunicaciones' | 'historial' | 'obra'>('comunicaciones')
   const [showForm, setShowForm] = useState(false)
   const [desc, setDesc] = useState('')
   const [fecha, setFecha] = useState(today)
@@ -459,7 +465,13 @@ function DetailPanel({
         <div className="flex border-b border-slate-200 bg-slate-50">
           <button className={tabCls('comunicaciones')} onClick={() => setTab('comunicaciones')}>Comunicaciones</button>
           <button className={tabCls('historial')} onClick={() => setTab('historial')}>Cambios de estado</button>
+          <button className={tabCls('obra')} onClick={() => setTab('obra')}>Avance de obra</button>
         </div>
+        {tab === 'obra' && (
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            <ObraResumen o={localidad} />
+          </div>
+        )}
         {/* Tab: Comunicaciones */}
         {tab === 'comunicaciones' && (
           <>
@@ -1024,6 +1036,8 @@ export function CordobaHogarPage() {
   const estadosTecnico = useEstadosTecnico()
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
+  const [obraFilter, setObraFilter] = useState<SituacionObra | ''>('')
+  const obraId = useId()
   const [editTarget, setEditTarget] = useState<LocalidadCH | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<LocalidadCH | null>(null)
@@ -1092,9 +1106,10 @@ export function CordobaHogarPage() {
       if (ejFilter && String(l.ejuridico) !== ejFilter) return false
       if (etFilter && String(l.etecnico) !== etFilter) return false
       if (efFilter && String(l.efinanciero) !== efFilter) return false
+      if (obraFilter && situacionObra(l) !== obraFilter) return false
       return true
     })
-  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter])
+  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter])
 
   const montoTotal = localidades.reduce((s, l) => s + (l.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
@@ -1104,7 +1119,7 @@ export function CordobaHogarPage() {
     const e = estados.find((s) => s.id === l.ejuridico)
     return e?.label === 'Convenio Firmado'
   }).length
-  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter)
+  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter)
 
   const [sortCol, setSortCol] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1123,6 +1138,8 @@ export function CordobaHogarPage() {
       let vb: string | number | null
       if (sortCol === 'avance') {
         va = avancePct(a, estados, estadosTecnico); vb = avancePct(b, estados, estadosTecnico)
+      } else if (sortCol === 'avance_obra') {
+        va = a.avance_obra_pct ?? null; vb = b.avance_obra_pct ?? null
       } else if (sortCol === 'etecnico') {
         va = tecnicoOrden(a.etecnico, estadosTecnico); vb = tecnicoOrden(b.etecnico, estadosTecnico)
       } else if (ESTADO_KEYS.includes(sortCol)) {
@@ -1204,6 +1221,7 @@ export function CordobaHogarPage() {
               'Est. Técnico': tecnicoLabel(l.etecnico, estadosTecnico),
               'Est. Presup.': estados.find((e) => e.id === l.efinanciero)?.label ?? '',
               'Avance (%)': avancePct(l, estados, estadosTecnico),
+              ...obraColumnasExcel(l),
               'Observaciones': l.obs ?? '',
             }))
             exportToXlsx(rows, 'Córdoba Hogar', `cordoba_hogar_${new Date().toISOString().split('T')[0]}.xlsx`)
@@ -1281,8 +1299,15 @@ export function CordobaHogarPage() {
             {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={obraId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Obra</label>
+          <select id={obraId} value={obraFilter} onChange={(e) => setObraFilter(e.target.value as SituacionObra | '')} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todas —</option>
+            {(Object.keys(SITUACION_OBRA_LABEL) as SituacionObra[]).map((k) => <option key={k} value={k}>{SITUACION_OBRA_LABEL[k]}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}
@@ -1336,7 +1361,7 @@ export function CordobaHogarPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={16} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
+                  <td colSpan={18} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
               {sorted.map((l) => {
@@ -1387,6 +1412,8 @@ export function CordobaHogarPage() {
                         <span className="text-gray-500 w-7 text-right" style={{ fontSize: '11px' }}>{pct}%</span>
                       </div>
                     </td>
+                    <td className="px-2.5 py-1.5"><AvanceCelda o={l} /></td>
+                    <td className="px-2.5 py-1.5"><HitosChips o={l} /></td>
                     <td className="px-2.5 py-1.5 whitespace-nowrap">
                       <button onClick={() => setDetailTarget(l)} className="p-1 rounded text-gray-500 hover:text-gov-cyan hover:bg-sky-50 transition-colors" aria-label={`Ver historial de ${l.localidad}`} title="Ver historial / comunicaciones">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
