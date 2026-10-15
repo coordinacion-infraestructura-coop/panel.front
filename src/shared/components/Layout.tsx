@@ -11,6 +11,7 @@ interface NavItem {
 const SECRETARIA_NAV: Record<string, NavItem[]> = {
   vivienda: [
     { to: '/vivienda/programas', label: 'Tablero' },
+    { to: '/vivienda/tablero-analitico', label: 'Tablero analítico' },
     { to: '/vivienda/cordoba-hogar', label: 'Córdoba Hogar' },
     { to: '/vivienda/cordon-cuneta', label: 'Cordón Cuneta' },
     { to: '/vivienda/mi-lugar', label: 'Mi Lugar' },
@@ -34,10 +35,13 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
 // completos de Cordón Cuneta / Córdoba Hogar / Mi Lugar (aprobado por el área,
 // ver docs/files/spec-checklist-tecnico-dgv.md §8). El backend ya bloquea el acceso
 // (403) a esos paneles para este rol; este filtro es solo la capa de navegación.
+// + Tablero analítico (spec-vivienda-tablero-analitico.md §5), que el backend también le abre.
+const TECNICO_DGV_RUTAS = ['/vivienda/programas', '/vivienda/tablero-analitico', '/vivienda/checklist-tecnico']
+
 function navItemsFor(secretaria: string, rol: string | undefined): NavItem[] {
   const items = SECRETARIA_NAV[secretaria] ?? []
   if (secretaria === 'vivienda' && rol === 'TecnicoDGV') {
-    return items.filter((i) => i.to === '/vivienda/programas' || i.to === '/vivienda/checklist-tecnico')
+    return items.filter((i) => TECNICO_DGV_RUTAS.includes(i.to))
   }
   return items
 }

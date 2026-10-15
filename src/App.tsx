@@ -13,6 +13,7 @@ import { CordonCunetaPage } from './modules/vivienda/pages/CordonCunetaPage'
 import { CordobaHogarPage } from './modules/vivienda/pages/CordobaHogarPage'
 import { MiLugarPage } from './modules/vivienda/pages/MiLugarPage'
 import { ChecklistTecnicoPage } from './modules/vivienda/pages/ChecklistTecnicoPage'
+import { TableroAnaliticoPage } from './modules/vivienda/tablero-analitico/TableroAnaliticoPage'
 import { ProgramaInformePage } from './modules/vivienda/pages/informe/ProgramaInformePage'
 import { GestionesListPage } from './modules/privada/pages/GestionesListPage'
 import { TableroPage } from './modules/privada/pages/TableroPage'
@@ -86,6 +87,7 @@ export default function App() {
               />
               <Route path="vivienda/mi-lugar" element={<MiLugarPage />} />
               <Route path="vivienda/checklist-tecnico" element={<ChecklistTecnicoPage />} />
+              <Route path="vivienda/tablero-analitico" element={<TableroAnaliticoPage />} />
               <Route
                 path="privada/gestiones"
                 element={

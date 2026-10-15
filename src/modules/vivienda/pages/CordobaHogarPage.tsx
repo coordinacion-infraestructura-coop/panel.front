@@ -14,6 +14,10 @@ import {
   AvanceCelda, HitosChips, ObraResumen, SITUACION_OBRA_LABEL, obraColumnasExcel, situacionObra,
   type SituacionObra,
 } from '../avanceObra'
+import {
+  AreaBadge, AreaResponsableSelect, DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
+  type DocumentacionPanel,
+} from '../areaEstado'
 import type {
   EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
   EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, PedidoCH,
@@ -125,7 +129,7 @@ function EstadoBadge({ id, estados }: { id: number | null; estados: EstadoCH[] }
   const e = estados.find((s) => s.id === id)
   if (!e) return <span className="text-gray-400 text-xs">—</span>
   return (
-    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" style={{ background: e.bg, color: e.text_color }}>
+    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" style={{ background: e.bg, color: e.text_color }} title={tituloConArea(e)}>
       {e.label}
     </span>
   )
@@ -192,7 +196,7 @@ function EditModal({
                       setForm((p) => ({ ...p, departamento: e.target.value || undefined, localidad: '' }))
                     }}>
                     <option value="">— Todos los departamentos —</option>
-                    {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
+                    {[...new Set(geoList.map((g) => g.departamento))].sort((a, b) => a.localeCompare(b, 'es')).map((d) => (
                       <option key={d} value={d}>{d.toUpperCase()}</option>
                     ))}
                   </select>
@@ -297,7 +301,7 @@ function EditModal({
                     <option value="">—</option>
                     {estados
                       .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
-                      .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                      .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
               ))}
@@ -311,7 +315,7 @@ function EditModal({
                 onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">— Sin estado —</option>
-                {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                {estados.map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
               </select>
             </div>
           </div>
@@ -700,8 +704,9 @@ function GestionarParametrosModal({
                 <div className="flex items-center gap-1 text-xs text-gray-400">
                   {e.aplica_juridico && <span title="Jurídico" className="px-1 bg-purple-100 text-purple-700 rounded text-[10px]">J</span>}
                   {e.aplica_financiero && <span title="Presupuestario" className="px-1 bg-green-100 text-green-700 rounded text-[10px]">P</span>}
+                  <AreaBadge area={e.area_responsable} />
                 </div>
-                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditSaveError(null); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
+                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditSaveError(null); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero, area_responsable: e.area_responsable ?? null }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                 </button>
                 <button onClick={() => { setDeleteError((p) => { const n = { ...p }; delete n[e.id]; return n }); deleteMut.mutate(e.id) }} disabled={deleteMut.isPending} className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Eliminar">
@@ -744,6 +749,9 @@ function GestionarParametrosModal({
                           {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
                         </label>
                       ))}
+                    </div>
+                    <div className="col-span-2">
+                      <AreaResponsableSelect value={editForm.area_responsable} onChange={(v) => setEditForm((p) => ({ ...p, area_responsable: v }))} />
                     </div>
                     <div className="col-span-2 flex justify-end gap-2 pt-1">
                       <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: editForm.bg ?? '#e2e8f0', color: editForm.text_color ?? '#1e293b' }}>Vista previa</span>
@@ -800,6 +808,9 @@ function GestionarParametrosModal({
                         {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
                       </label>
                     ))}
+                  </div>
+                  <div className="col-span-2">
+                    <AreaResponsableSelect value={newForm.area_responsable} onChange={(v) => setNewForm((p) => ({ ...p, area_responsable: v }))} />
                   </div>
                   <div className="col-span-2 flex items-center gap-3">
                     <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: newForm.bg, color: newForm.text_color }}>{newForm.label || 'Vista previa'}</span>
@@ -889,7 +900,7 @@ function AgregarLocalidadModal({
                     }}
                   >
                     <option value="">— Seleccioná un departamento —</option>
-                    {[...new Set(geoList.map((g) => g.departamento))].sort().map((d) => (
+                    {[...new Set(geoList.map((g) => g.departamento))].sort((a, b) => a.localeCompare(b, 'es')).map((d) => (
                       <option key={d} value={d}>{d.toUpperCase()}</option>
                     ))}
                   </select>
@@ -971,7 +982,7 @@ function AgregarLocalidadModal({
                     onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value ? Number(e.target.value) : undefined }))}>
                     <option value="">—</option>
                     {estados.filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
-                      .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                      .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
               ))}
@@ -1037,6 +1048,8 @@ export function CordobaHogarPage() {
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
   const [obraFilter, setObraFilter] = useState<SituacionObra | ''>('')
+  const [docFilter, setDocFilter] = useState<DocumentacionPanel | ''>('')
+  const docId = useId()
   const obraId = useId()
   const [editTarget, setEditTarget] = useState<LocalidadCH | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
@@ -1084,7 +1097,7 @@ export function CordobaHogarPage() {
   })
 
   const deptos = useMemo(
-    () => [...new Set(geoForFilter.map((g) => g.departamento))].sort(),
+    () => [...new Set(geoForFilter.map((g) => g.departamento))].sort((a, b) => a.localeCompare(b, 'es')),
     [geoForFilter]
   )
 
@@ -1107,9 +1120,10 @@ export function CordobaHogarPage() {
       if (etFilter && String(l.etecnico) !== etFilter) return false
       if (efFilter && String(l.efinanciero) !== efFilter) return false
       if (obraFilter && situacionObra(l) !== obraFilter) return false
+      if (docFilter && documentacionPanel(l) !== docFilter) return false
       return true
     })
-  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter])
+  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter, docFilter])
 
   const montoTotal = localidades.reduce((s, l) => s + (l.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
@@ -1119,9 +1133,9 @@ export function CordobaHogarPage() {
     const e = estados.find((s) => s.id === l.ejuridico)
     return e?.label === 'Convenio Firmado'
   }).length
-  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter)
+  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter || docFilter)
 
-  const [sortCol, setSortCol] = useState('')
+  const [sortCol, setSortCol] = useState('localidad') // alfabético por defecto (spec-vivienda-tablero-analitico §8.1)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const handleSort = (key: string) => {
@@ -1275,28 +1289,28 @@ export function CordobaHogarPage() {
           <label htmlFor={egId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. General</label>
           <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estados.map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor={ejId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Jurídico</label>
           <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor={etId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Técnico</label>
           <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor={efId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Presup.</label>
           <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1306,8 +1320,15 @@ export function CordobaHogarPage() {
             {(Object.keys(SITUACION_OBRA_LABEL) as SituacionObra[]).map((k) => <option key={k} value={k}>{SITUACION_OBRA_LABEL[k]}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={docId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Documentación</label>
+          <select id={docId} value={docFilter} onChange={(e) => setDocFilter(e.target.value as DocumentacionPanel | '')} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todas —</option>
+            {(Object.keys(DOCUMENTACION_PANEL_LABEL) as DocumentacionPanel[]).map((k) => <option key={k} value={k}>{DOCUMENTACION_PANEL_LABEL[k]}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter(''); setDocFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}

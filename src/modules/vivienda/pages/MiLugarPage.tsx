@@ -13,6 +13,10 @@ import {
   AvanceCelda, HitosChips, ObraResumen, SITUACION_OBRA_LABEL, obraColumnasExcel, situacionObra,
   type SituacionObra,
 } from '../avanceObra'
+import {
+  AreaBadge, AreaResponsableSelect, DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
+  type DocumentacionPanel,
+} from '../areaEstado'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
@@ -165,7 +169,7 @@ function EstadoBadge({ id, estados }: { id: number | null; estados: EstadoML[] }
   if (!e) return <span className="text-gray-400 text-xs">—</span>
   return (
     <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-      style={{ background: e.bg, color: e.text_color }}>
+      style={{ background: e.bg, color: e.text_color }} title={tituloConArea(e)}>
       {e.label}
     </span>
   )
@@ -408,7 +412,7 @@ function EditModal({
 
   const geoQuery = useQuery({ queryKey: ['ml-geo'], queryFn: miLugarApi.getGeo, staleTime: 15 * 60_000 })
   const geoData: GeoLocalidad[] = geoQuery.data ?? []
-  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort(), [geoData])
+  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort((a, b) => a.localeCompare(b, 'es')), [geoData])
   const localidadesFiltradas = useMemo(
     () => geoData.filter((g) => !deptoGeo || g.departamento === deptoGeo),
     [geoData, deptoGeo]
@@ -605,7 +609,7 @@ function EditModal({
                     <option value="">—</option>
                     {estados
                       .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
-                      .map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                      .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
               ))}
@@ -617,7 +621,7 @@ function EditModal({
                 value={form.estado_general ?? ''}
                 onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">— Sin estado —</option>
-                {estados.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                {estados.map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
               </select>
             </div>
           </div>
@@ -671,7 +675,7 @@ function AgregarProyectoModal({
 
   const geoQuery = useQuery({ queryKey: ['ml-geo'], queryFn: miLugarApi.getGeo, staleTime: 15 * 60_000 })
   const geoData: GeoLocalidad[] = geoQuery.data ?? []
-  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort(), [geoData])
+  const deptosGeo = useMemo(() => [...new Set(geoData.map((g) => g.departamento))].sort((a, b) => a.localeCompare(b, 'es')), [geoData])
   const localidadesFiltradas = useMemo(
     () => geoData.filter((g) => !deptoGeo || g.departamento === deptoGeo),
     [geoData, deptoGeo]
@@ -929,6 +933,10 @@ function EstadosCatalogPanel({
                   </div>
                 </div>
               </div>
+              <AreaResponsableSelect
+                value={editForm.area_responsable !== undefined ? editForm.area_responsable : e.area_responsable}
+                onChange={(v) => setEditForm((p) => ({ ...p, area_responsable: v }))}
+              />
               {editSaveError && <p role="alert" className="text-xs text-red-600">{editSaveError}</p>}
               <div className="flex gap-2 justify-end">
                 <button onClick={() => { setEditId(null); setEditForm({}); setEditSaveError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
@@ -943,6 +951,7 @@ function EstadosCatalogPanel({
             <div className="flex items-center gap-2 border border-slate-100 rounded px-3 py-2 bg-white">
               <span className="w-5 text-xs text-gray-400 text-center">{e.orden}</span>
               <span className="flex-1 text-sm">{e.label}</span>
+              <AreaBadge area={e.area_responsable} />
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: e.bg, color: e.text_color }}>{e.label}</span>
               <button onClick={() => { setEditId(e.id); setEditForm({}) }} className="p-1 rounded text-gray-400 hover:text-gov-navy hover:bg-sky-50 transition-colors" aria-label="Editar estado">
                 <IconEdit />
@@ -990,6 +999,7 @@ function EstadosCatalogPanel({
                 onChange={(e) => setNewForm((p) => ({ ...p, orden: parseInt(e.target.value) }))} />
             </div>
           </div>
+          <AreaResponsableSelect value={newForm.area_responsable} onChange={(v) => setNewForm((p) => ({ ...p, area_responsable: v }))} />
           {createError && <p role="alert" className="text-xs text-red-600">{createError}</p>}
           <div className="flex gap-2 justify-end">
             <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
@@ -1288,6 +1298,8 @@ export function MiLugarPage() {
   const [etFilter, setEtFilter] = useState('')
   const [efFilter, setEfFilter] = useState('')
   const [obraFilter, setObraFilter] = useState<SituacionObra | ''>('')
+  const [docFilter, setDocFilter] = useState<DocumentacionPanel | ''>('')
+  const docId = useId()
   const [editTarget, setEditTarget] = useState<ProyectoML | null>(null)
   const [editError, setEditError] = useState<string | null>(null)
   const [detailTarget, setDetailTarget] = useState<ProyectoML | null>(null)
@@ -1296,7 +1308,7 @@ export function MiLugarPage() {
   const [showInforme, setShowInforme] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [sortCol, setSortCol] = useState('')
+  const [sortCol, setSortCol] = useState('localidad_nombre') // alfabético por defecto (spec-vivienda-tablero-analitico §8.1)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const estadosExpQuery = useQuery({ queryKey: ['ml-estados', 'exp'], queryFn: () => miLugarApi.getEstados({ tipo: 'exp' }) })
@@ -1343,7 +1355,7 @@ export function MiLugarPage() {
   })
 
   const deptos = useMemo(
-    () => [...new Set(proyectos.map((p) => p.departamento).filter(Boolean) as string[])].sort(),
+    () => [...new Set(proyectos.map((p) => p.departamento).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'es')),
     [proyectos]
   )
 
@@ -1357,9 +1369,10 @@ export function MiLugarPage() {
       if (etFilter && String(p.etecnico) !== etFilter) return false
       if (efFilter && String(p.efinanciero) !== efFilter) return false
       if (obraFilter && situacionObra(p) !== obraFilter) return false
+      if (docFilter && documentacionPanel(p) !== docFilter) return false
       return true
     })
-  }, [proyectos, search, deptoFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter])
+  }, [proyectos, search, deptoFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter, docFilter])
 
   const handleSort = (key: string) => {
     setSortDir((prev) => (sortCol === key && prev === 'asc' ? 'desc' : 'asc'))
@@ -1386,7 +1399,7 @@ export function MiLugarPage() {
     })
   }, [filtered, sortCol, sortDir, estados, estadosTecnico])
 
-  const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter)
+  const hasFilters = !!(search || deptoFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter || docFilter)
   const tieneFinanciero = tab === 'exp' || tab === 'prov'
   const { label: tabLabel } = TIPO_CONFIG[tab]
 
@@ -1422,7 +1435,7 @@ export function MiLugarPage() {
       {/* Tabs por tipo */}
       <div className="flex gap-0 mb-0 border-b border-slate-200">
         {(['exp', 'muni', 'prov'] as TipoProyectoML[]).map((t) => (
-          <button key={t} type="button" onClick={() => { setTab(t); setSortCol(''); setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }}
+          <button key={t} type="button" onClick={() => { setTab(t); setSortCol('localidad_nombre'); setSortDir('asc'); setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter(''); setDocFilter('') }}
             className={`px-5 py-2.5 text-sm font-semibold transition-colors border-b-2 -mb-px ${tab === t ? 'border-current' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
             style={tab === t ? { color: TIPO_CONFIG[t].color, borderColor: TIPO_CONFIG[t].color } : undefined}>
             {TIPO_CONFIG[t].label}
@@ -1479,7 +1492,7 @@ export function MiLugarPage() {
           <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estados.map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1487,7 +1500,7 @@ export function MiLugarPage() {
           <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1495,7 +1508,7 @@ export function MiLugarPage() {
           <select id={etId} value={etFilter} onChange={(e) => setEtFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+            {estadosTecnico.filter((e) => e.activo).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         {tieneFinanciero && (
@@ -1504,7 +1517,7 @@ export function MiLugarPage() {
             <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)}
               className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
               <option value="">— Todos —</option>
-              {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{e.label}</option>)}
+              {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
             </select>
           </div>
         )}
@@ -1516,8 +1529,15 @@ export function MiLugarPage() {
             {(Object.keys(SITUACION_OBRA_LABEL) as SituacionObra[]).map((k) => <option key={k} value={k}>{SITUACION_OBRA_LABEL[k]}</option>)}
           </select>
         </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor={docId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Documentación</label>
+          <select id={docId} value={docFilter} onChange={(e) => setDocFilter(e.target.value as DocumentacionPanel | '')} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todas —</option>
+            {(Object.keys(DOCUMENTACION_PANEL_LABEL) as DocumentacionPanel[]).map((k) => <option key={k} value={k}>{DOCUMENTACION_PANEL_LABEL[k]}</option>)}
+          </select>
+        </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter('') }}
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter(''); setDocFilter('') }}
             className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>

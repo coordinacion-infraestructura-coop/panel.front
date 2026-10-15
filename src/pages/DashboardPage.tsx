@@ -25,6 +25,7 @@ const SECRETARIAS: Secretaria[] = [
     activa: true,
     modulos: [
       { label: 'Tablero de Programas', desc: 'KPIs y estado de todos los programas activos', to: '/vivienda/programas' },
+      { label: 'Tablero analítico', desc: 'Filtros cruzados, mapa, distancias y recorridos, tendencias', to: '/vivienda/tablero-analitico' },
       { label: 'Córdoba Hogar', desc: 'Panel provisorio — seguimiento de localidades', to: '/vivienda/cordoba-hogar' },
       { label: 'Cordón Cuneta y Adoquinado', desc: 'Seguimiento de convenios con municipios', to: '/vivienda/cordon-cuneta' },
       { label: 'Mi Lugar', desc: 'Adquisición de tierras — expropiaciones, municipios, provincia', to: '/vivienda/mi-lugar' },
@@ -104,7 +105,7 @@ function SecretariaCard({ sec, fullWidth, rol }: { sec: Secretaria; fullWidth?: 
   const esTecnicoDgv = sec.id === 'vivienda' && rol === 'TecnicoDGV'
   const visibleModulos = sec.modulos.filter((m) => {
     if (m.hidden) return false
-    if (esTecnicoDgv) return m.to === '/vivienda/programas' || m.to === '/vivienda/checklist-tecnico'
+    if (esTecnicoDgv) return ['/vivienda/programas', '/vivienda/tablero-analitico', '/vivienda/checklist-tecnico'].includes(m.to)
     return true
   })
   return (

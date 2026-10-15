@@ -110,6 +110,7 @@ export interface EstadoCC {
   aplica_juridico: boolean
   aplica_tecnico: boolean
   aplica_financiero: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoCCCreate {
@@ -120,6 +121,7 @@ export interface EstadoCCCreate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoCCUpdate {
@@ -130,6 +132,7 @@ export interface EstadoCCUpdate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface MunicipioCC extends ObraPanel {
@@ -268,6 +271,7 @@ export interface EstadoCH {
   aplica_juridico: boolean
   aplica_tecnico: boolean
   aplica_financiero: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoCHCreate {
@@ -278,6 +282,7 @@ export interface EstadoCHCreate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoCHUpdate {
@@ -288,6 +293,7 @@ export interface EstadoCHUpdate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface LocalidadCH extends ObraPanel {
@@ -385,6 +391,7 @@ export interface EstadoML {
   aplica_juridico: boolean
   aplica_tecnico: boolean
   aplica_financiero: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoMLCreate {
@@ -396,6 +403,7 @@ export interface EstadoMLCreate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface EstadoMLUpdate {
@@ -406,6 +414,7 @@ export interface EstadoMLUpdate {
   aplica_juridico?: boolean
   aplica_tecnico?: boolean
   aplica_financiero?: boolean
+  area_responsable?: AreaResponsable | null
 }
 
 export interface GeoPuntoML {
@@ -808,7 +817,14 @@ export interface ObraPanel {
   avance_obra_fecha?: string | null
   fecha_fin_obra?: string | null
   hitos_obra?: HitoObraPanel[] | null
+  // Documentación del checklist sin los "No Aplica" (spec-vivienda-tablero-analitico §4.5)
+  doc_completos?: number | null
+  doc_total?: number | null
+  doc_iniciado?: boolean
 }
+
+/** Área que lleva cada estado del catálogo (spec-vivienda-tablero-analitico §4.4). */
+export type AreaResponsable = 'juridica' | 'tecnica' | 'financiera' | 'externa'
 
 export interface AvanceVigente {
   porcentaje: number
