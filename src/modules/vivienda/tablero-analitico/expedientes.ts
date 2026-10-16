@@ -87,6 +87,12 @@ export function aplicarFiltros(exps: ExpedienteTablero[], f: Filtros, origen: Co
   return out
 }
 
+/** Ruta al Checklist Técnico de un expediente (spec v1.1.0 §5.4). */
+const CHECKLIST_PROGRAMA: Record<ProgramaTablero, string> = { cordon_cuneta: 'cc', cordoba_hogar: 'ch', mi_lugar: 'ml' }
+export function urlChecklist(e: Pick<ExpedienteTablero, 'programa' | 'entidad_id'>): string {
+  return `/vivienda/checklist-tecnico?programa=${CHECKLIST_PROGRAMA[e.programa]}&entidad=${encodeURIComponent(e.entidad_id)}`
+}
+
 /** Valores presentes en los datos, en orden alfabético — opciones de los desplegables (§9). */
 export function opciones(exps: ExpedienteTablero[], valor: (e: ExpedienteTablero) => string | null | undefined): string[] {
   return [...new Set(exps.map(valor).filter((v): v is string => !!v))].sort(compararEs)
@@ -115,6 +121,7 @@ export function comunicacionReciente(e: ExpedienteTablero, hoy = hoyIso()): bool
 /** Mismas definiciones que `aggregations.kpis_por_area` del backend, para que el delta compare igual. */
 export function kpisDe(rows: ExpedienteTablero[]): KpisDia {
   const locs = new Set<string>()
+  const locsFaltantes = new Set<string>()
   const deptos = new Set<string>()
   const porPrograma: Record<string, number> = {}
   let faltantes = 0
@@ -126,7 +133,10 @@ export function kpisDe(rows: ExpedienteTablero[]): KpisDia {
     locs.add(claveLocalidad(e))
     if (e.departamento) deptos.add(e.departamento)
     porPrograma[e.programa] = (porPrograma[e.programa] ?? 0) + 1
-    if (e.checklist_faltan > 0) faltantes++
+    if (e.checklist_faltan > 0) {
+      faltantes++
+      locsFaltantes.add(claveLocalidad(e))
+    }
     if (comunicacionReciente(e, hoy)) comunicaciones++
     if (e.monto !== null) monto += e.monto
     if (e.avance_obra_pct !== null) avances.push(e.avance_obra_pct)
@@ -137,6 +147,7 @@ export function kpisDe(rows: ExpedienteTablero[]): KpisDia {
     programas_activos: rows.length,
     programas_por_programa: porPrograma,
     items_faltantes: faltantes,
+    localidades_items_faltantes: locsFaltantes.size,
     comunicaciones_30d: comunicaciones,
     monto_total: monto,
     avance_obra_promedio: avances.length ? Math.round((avances.reduce((a, b) => a + b, 0) / avances.length) * 10) / 10 : null,
@@ -153,6 +164,8 @@ export function coberturaPorPrograma(rows: ExpedienteTablero[]) {
       localidades: new Set(delPrograma.map(claveLocalidad)).size,
       departamentos: new Set(delPrograma.map((e) => e.departamento).filter(Boolean)).size,
       conFaltantes: delPrograma.filter((e) => e.checklist_faltan > 0).length,
+      /** Localidades del programa con al menos un expediente con ítems faltantes (spec v1.1.0 §5.2). */
+      localidadesConFaltantes: new Set(delPrograma.filter((e) => e.checklist_faltan > 0).map(claveLocalidad)).size,
     }
   })
 }

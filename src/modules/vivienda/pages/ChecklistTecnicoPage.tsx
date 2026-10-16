@@ -1,4 +1,5 @@
-import { useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
+import { useEffect, useMemo, useState, useId, useRef, useLayoutEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { checklistTecnicoApi } from '../api/vivienda.api'
 import { AvanceBar } from '../avanceObra'
@@ -96,7 +97,9 @@ interface LocalidadGroup {
   key: string
   nombre: string
   departamento: string | null
-  programs: Partial<Record<ProgramaChecklist, EntidadRef>>
+  // Lista: una localidad puede tener varios expedientes del mismo programa (ej. 8 proyectos de Mi
+  // Lugar en Córdoba Capital). Antes se guardaba uno solo y el resto quedaba inaccesible.
+  programs: Partial<Record<ProgramaChecklist, EntidadRef[]>>
 }
 
 // ── Página ───────────────────────────────────────────────────────────────────────
@@ -129,7 +132,9 @@ export function ChecklistTecnicoPage() {
         g = { key, nombre, departamento, programs: {} }
         map.set(key, g)
       }
-      g.programs[programa] = { id, nombre }
+      const lista = g.programs[programa] ?? []
+      lista.push({ id, nombre })
+      g.programs[programa] = lista
     }
     for (const e of entidades ?? []) upsert(e.programa, e.id, e.nombre, e.departamento, e.id_geo)
     return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
@@ -140,10 +145,32 @@ export function ChecklistTecnicoPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [recent, setRecent] = useState<string[]>([])
   const [programa, setPrograma] = useState<ProgramaChecklist>('cc')
+  // Expediente elegido dentro del programa cuando la localidad tiene más de uno (null = el primero).
+  const [entidadSel, setEntidadSel] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
+  // Enlace desde el Tablero analítico: ?programa=cc|ch|ml&entidad=<id> abre ese expediente
+  // (spec-vivienda-tablero-analitico.md v1.1.0 §5.4). Se aplica una sola vez, cuando llegan las
+  // entidades; un programa o id que no existe se ignora y la página queda como siempre.
+  const [searchParams] = useSearchParams()
+  const deepLinkAplicado = useRef(false)
+  useEffect(() => {
+    if (deepLinkAplicado.current || !grupos.length) return
+    deepLinkAplicado.current = true
+    const p = searchParams.get('programa') as ProgramaChecklist | null
+    const id = searchParams.get('entidad')
+    if (!p || !id || !(p in PROGRAMA_LABEL)) return
+    const g = grupos.find((x) => x.programs[p]?.some((e) => e.id === id))
+    if (!g) return
+    setSelectedKey(g.key)
+    setPrograma(p)
+    setEntidadSel(id)
+    setRecent((r) => [g.key, ...r.filter((k) => k !== g.key)].slice(0, 5))
+  }, [grupos, searchParams])
+
   const selectedGroup = grupos.find((g) => g.key === selectedKey) ?? null
-  const entidad = selectedGroup?.programs[programa] ?? null
+  const entidadesPrograma = selectedGroup?.programs[programa] ?? []
+  const entidad = entidadesPrograma.find((e) => e.id === entidadSel) ?? entidadesPrograma[0] ?? null
 
   const filtered = useMemo(() => {
     const q = normalize(search)
@@ -160,6 +187,7 @@ export function ChecklistTecnicoPage() {
     const g = grupos.find((x) => x.key === key)
     if (!g) return
     setSelectedKey(key)
+    setEntidadSel(null)
     setSearch('')
     setComboOpen(false)
     setRecent((r) => [key, ...r.filter((k) => k !== key)].slice(0, 5))
@@ -349,7 +377,7 @@ export function ChecklistTecnicoPage() {
                 <button
                   key={p}
                   type="button"
-                  onClick={() => setPrograma(p)}
+                  onClick={() => { setPrograma(p); setEntidadSel(null) }}
                   className={`flex-1 min-w-[9rem] flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-semibold transition-colors ${
                     active
                       ? 'bg-gov-navy border-gov-navy text-white shadow'
@@ -358,10 +386,36 @@ export function ChecklistTecnicoPage() {
                 >
                   <span className={`w-2 h-2 rounded-full ${has ? 'bg-gov-cyan' : 'bg-gray-300'}`} />
                   {PROGRAMA_LABEL[p]}
+                  {(selectedGroup.programs[p]?.length ?? 0) > 1 && (
+                    <span className={`text-[10px] px-1.5 rounded-full ${active ? 'bg-white/20' : 'bg-slate-100'}`}>
+                      {selectedGroup.programs[p]!.length}
+                    </span>
+                  )}
                 </button>
               )
             })}
           </div>
+
+          {entidadesPrograma.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={`Expedientes de ${PROGRAMA_LABEL[programa]} en ${selectedGroup.nombre}`}>
+              <span className="text-[11px] text-gray-400 font-semibold mr-1">
+                {entidadesPrograma.length} expedientes en esta localidad:
+              </span>
+              {entidadesPrograma.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => setEntidadSel(e.id)}
+                  aria-pressed={e.id === entidad?.id}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                    e.id === entidad?.id ? 'bg-gov-cyan border-gov-cyan text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-sky-200'
+                  }`}
+                >
+                  {e.nombre}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ── Panel ─────────────────────────────────────────────────────── */}
           {!entidad && (

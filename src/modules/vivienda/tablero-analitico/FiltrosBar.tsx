@@ -1,4 +1,6 @@
 import { useId, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { checklistTecnicoApi } from '../api/vivienda.api'
 import { SITUACION_OBRA_LABEL, type SituacionObra } from '../avanceObra'
 import {
   DOCUMENTACION_LABEL,
@@ -86,7 +88,14 @@ export function FiltrosBar({
   }, [expedientes, filtros.departamento])
   const estadosGenerales = useMemo(() => opciones(expedientes, (e) => e.estado_general_label), [expedientes])
   const juridicos = useMemo(() => opciones(expedientes, (e) => e.subestados?.juridico), [expedientes])
-  const tecnicos = useMemo(() => opciones(expedientes, (e) => e.subestados?.tecnico), [expedientes])
+  // Est. técnico = estado del expediente del Checklist Técnico: se ofrece el catálogo completo, aunque
+  // ningún expediente tenga hoy ese estado (spec v1.1.0 §5.1). Se suman los valores presentes en los
+  // datos por si alguno quedó en un estado dado de baja del catálogo.
+  const { data: catalogos } = useQuery({ queryKey: ['checklist-catalogos'], queryFn: checklistTecnicoApi.getCatalogos })
+  const tecnicos = useMemo(() => {
+    const delCatalogo = (catalogos?.estados_expediente ?? []).filter((c) => c.activo).map((c) => c.label)
+    return [...new Set([...delCatalogo, ...opciones(expedientes, (e) => e.subestados?.tecnico)])].sort(compararEs)
+  }, [catalogos, expedientes])
   const financieros = useMemo(() => opciones(expedientes, (e) => e.subestados?.financiero), [expedientes])
   const refs = useMemo(() => localidadesConCoordenadas(expedientes), [expedientes])
 

@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react'
 import { AvanceCelda, fmtFechaObra } from '../avanceObra'
-import { COLOR_PROGRAMA, documentacionDe, textoChecklist, type GrupoLocalidad } from './expedientes'
+import { COLOR_PROGRAMA, documentacionDe, textoChecklist, urlChecklist, type GrupoLocalidad } from './expedientes'
 
 const DOC_CLS = {
   completa: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -120,9 +120,15 @@ export function TablaExpedientes({
                       </div>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] ${DOC_CLS[doc]}`}>
-                        {textoChecklist(e)}
-                      </span>
+                      <a
+                        href={urlChecklist(e)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir el Checklist Técnico de este expediente (pestaña nueva)"
+                        className={`inline-block rounded-full border px-2 py-0.5 text-[11px] hover:underline hover:shadow-sm ${DOC_CLS[doc]}`}
+                      >
+                        {textoChecklist(e)} ↗
+                      </a>
                     </td>
                     <td className="px-3 py-2"><AvanceCelda o={e} /></td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-600">

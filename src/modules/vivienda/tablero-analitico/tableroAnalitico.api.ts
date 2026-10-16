@@ -47,6 +47,8 @@ export interface KpisDia {
   programas_activos: number
   programas_por_programa: Record<string, number>
   items_faltantes: number
+  /** v1.1.0 — ausente en la historia anterior al backfill `--completar-claves`. */
+  localidades_items_faltantes?: number
   comunicaciones_30d: number
   monto_total: number
   avance_obra_promedio: number | null

@@ -116,24 +116,31 @@ export function KpisTablero({
         <Leyenda items={cob.map((c) => ({ label: c.label, valor: c.departamentos, color: c.color }))} />
       </Tarjeta>
 
-      <Tarjeta titulo="Con ítems faltantes" delta={<Delta actual={kpis.items_faltantes} previo={previo?.items_faltantes} />}>
+      <Tarjeta
+        titulo="Localidades con ítems faltantes"
+        delta={<Delta actual={kpis.localidades_items_faltantes ?? 0} previo={previo?.localidades_items_faltantes} />}
+      >
         <p className="text-3xl font-extrabold text-rose-600 leading-none">
-          {kpis.items_faltantes} <span className="text-sm font-normal text-gray-400">de {kpis.programas_activos}</span>
+          {kpis.localidades_items_faltantes ?? 0} <span className="text-sm font-normal text-gray-400">de {kpis.localidades}</span>
         </p>
-        <div className="flex items-end gap-2 h-20" role="img" aria-label="Expedientes con ítems faltantes por programa">
-          {cob.map((c) => {
-            const alto = c.expedientes ? (c.conFaltantes / c.expedientes) * 100 : 0
-            return (
-              <div key={c.id} className="flex-1 flex flex-col items-center gap-0.5" title={`${c.label}: ${c.conFaltantes} de ${c.expedientes}`}>
-                <span className="text-[10px] font-semibold text-gov-navy">{c.conFaltantes}</span>
-                <div className="w-full rounded-t bg-slate-100 h-14 flex items-end">
-                  <div className="w-full rounded-t" style={{ height: `${alto}%`, backgroundColor: c.color }} />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <p className="text-[10px] text-gray-400">Barra = % del programa con documentación faltante</p>
+        <ul className="space-y-1.5" aria-label="Localidades con ítems faltantes por programa">
+          {cob.map((c) => (
+            <li key={c.id} title={`${c.label}: ${c.localidadesConFaltantes} de ${c.localidades} localidades con ítems faltantes`}>
+              <span className="flex items-center justify-between gap-2 text-[11px] text-gray-600">
+                <span className="truncate">{c.label}</span>
+                <b className="text-gov-navy whitespace-nowrap">
+                  {c.localidadesConFaltantes} <span className="font-normal text-gray-400">de {c.localidades}</span>
+                </b>
+              </span>
+              <span className="flex h-2.5 rounded-full overflow-hidden bg-slate-200">
+                <span
+                  style={{ width: c.localidades ? `${(c.localidadesConFaltantes / c.localidades) * 100}%` : '0%', backgroundColor: c.color }}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[10px] text-gray-400">Gris = localidades del programa sin ítems faltantes</p>
       </Tarjeta>
 
       <Tarjeta titulo="Comunicaciones · 30 días" delta={<Delta actual={kpis.comunicaciones_30d} previo={previo?.comunicaciones_30d} />}>

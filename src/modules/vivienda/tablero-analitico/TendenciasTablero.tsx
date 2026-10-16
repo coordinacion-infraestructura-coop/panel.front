@@ -7,7 +7,7 @@ const SERIES: { clave: keyof KpisDia; titulo: string; color: string; escala?: nu
   { clave: 'programas_activos', titulo: 'Expedientes activos', color: '#398ebd' },
   { clave: 'localidades', titulo: 'Localidades', color: '#0d9488' },
   { clave: 'departamentos', titulo: 'Departamentos', color: '#7c3aed' },
-  { clave: 'items_faltantes', titulo: 'Con ítems faltantes', color: '#e11d48' },
+  { clave: 'localidades_items_faltantes', titulo: 'Localidades con ítems faltantes', color: '#e11d48' },
   { clave: 'comunicaciones_30d', titulo: 'Comunicaciones · 30 días', color: '#16a34a' },
   { clave: 'monto_total', titulo: 'Monto total (millones de $)', color: '#d17612', escala: 1e6 },
   { clave: 'avance_obra_promedio', titulo: 'Avance de obra promedio (%)', color: '#172c3f' },
