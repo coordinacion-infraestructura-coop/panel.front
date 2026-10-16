@@ -10,6 +10,7 @@ import type {
   ChecklistTecnico,
   ItemDefinicion,
   ProgramaChecklist,
+  SeccionChecklist,
   TipoHitoChecklist,
 } from '../types/vivienda.types'
 
@@ -55,7 +56,12 @@ interface BitacoraEntry {
   created_at: string
   created_by: string | null
   created_by_nombre: string | null
+  secretaria: string | null
+  editado_at: string | null
+  editado_por: string | null
+  editado_por_nombre: string | null
 }
+const SECRETARIAS_NO_CORREGIBLES = ['infraestructura', 'supervision']
 function toBitacora(
   rows: Array<{
     id: string
@@ -65,6 +71,10 @@ function toBitacora(
     created_at: string
     created_by: string | null
     created_by_nombre: string | null
+    secretaria?: string | null
+    editado_at?: string | null
+    editado_por?: string | null
+    editado_por_nombre?: string | null
   }>,
 ): BitacoraEntry[] {
   return rows.map((r) => ({
@@ -74,6 +84,10 @@ function toBitacora(
     created_at: r.created_at,
     created_by: r.created_by,
     created_by_nombre: r.created_by_nombre,
+    secretaria: r.secretaria ?? null,
+    editado_at: r.editado_at ?? null,
+    editado_por: r.editado_por ?? null,
+    editado_por_nombre: r.editado_por_nombre ?? null,
   }))
 }
 
@@ -464,6 +478,7 @@ export function ChecklistTecnicoPage() {
                   queryKey={['checklist-tecnico-obs-obra', programa, entidad.id]}
                   fetchFn={() => checklistTecnicoApi.getObsObra(programa, entidad.id).then(toBitacora)}
                   createFn={(descripcion, fecha) => checklistTecnicoApi.createObsObra(programa, entidad.id, { descripcion, fecha })}
+                  updateFn={(id, descripcion, fecha) => checklistTecnicoApi.corregirObsObra(programa, entidad.id, id, { descripcion, fecha })}
                 />
               </div>
               <div className="space-y-4 min-w-0">
@@ -482,6 +497,7 @@ export function ChecklistTecnicoPage() {
                   queryKey={['checklist-tecnico-pedidos', programa, entidad.id]}
                   fetchFn={() => checklistTecnicoApi.getPedidos(programa, entidad.id).then(toBitacora)}
                   createFn={(descripcion, fecha) => checklistTecnicoApi.createPedido(programa, entidad.id, { descripcion, fecha_pedido: fecha })}
+                  updateFn={(id, descripcion, fecha) => checklistTecnicoApi.corregirPedido(programa, entidad.id, id, { descripcion, fecha_pedido: fecha })}
                 />
               </div>
             </div>
@@ -717,6 +733,25 @@ function findItem(items: ChecklistItemDetalle[], itemNum: number, subItemNum: nu
   return items.find((i) => i.item_num === itemNum && i.sub_item_num === subItemNum)
 }
 
+const SECCION_LABEL: Record<SeccionChecklist, string> = {
+  tecnica: 'Checklist técnico',
+  legal_financiera: 'Checklist legal y financiero',
+}
+const SECCION_AYUDA: Record<SeccionChecklist, string> = {
+  tecnica: 'Lo carga el área técnica',
+  legal_financiera: 'Lo carga el área legal y financiera',
+}
+
+/** Claves "item:sub" de una sección (spec v1.7.0 §6-ter.1). */
+function clavesDeSeccion(itemsDef: ItemDefinicion[], seccion: SeccionChecklist): Set<string> {
+  const claves = new Set<string>()
+  for (const def of itemsDef) {
+    if (def.seccion === seccion) claves.add(`${def.item_num}:`)
+    for (const sub of def.sub_items ?? []) if (sub.seccion === seccion) claves.add(`${def.item_num}:${sub.sub_item_num}`)
+  }
+  return claves
+}
+
 function ChecklistCard({
   checklist, itemsDef, itemEstados, canEdit, onChangeItem,
 }: {
@@ -727,19 +762,94 @@ function ChecklistCard({
   onChangeItem: (itemNum: number, subItemNum: number | null, itemEstadoId: number) => void
 }) {
   const [openDisclosure, setOpenDisclosure] = useState<Record<number, boolean>>({})
+  // Dos botones cuando el programa clasifica sus ítems (hoy, solo Cordón Cuneta): los editan
+  // personas distintas, el área técnica y el área legal y financiera (spec v1.7.0 §6-ter.1).
+  const haySecciones = itemsDef.some((d) => d.seccion || d.sub_items?.some((s) => s.seccion))
+  const [seccion, setSeccion] = useState<SeccionChecklist>('tecnica')
   const leyenda = itemEstados.filter((e) => e.activo)
   const cuenta = contarDocumentacion(checklist.items, itemEstados)
+  const cuentaDe = (s: SeccionChecklist) => {
+    const claves = clavesDeSeccion(itemsDef, s)
+    return contarDocumentacion(
+      checklist.items.filter((i) => claves.has(`${i.item_num}:${i.sub_item_num ?? ''}`)),
+      itemEstados,
+    )
+  }
+  const textoCuenta = (c: ReturnType<typeof contarDocumentacion>) =>
+    c.total === 0 ? 'Sin documentación aplicable' : `${c.completos} de ${c.total} completos`
+
+  const fila = (itemNum: number, subItemNum: number | null, label: string, sangria: boolean) => {
+    const item = findItem(checklist.items, itemNum, subItemNum)
+    return (
+      <div
+        key={`${itemNum}:${subItemNum ?? ''}`}
+        className={`flex items-center justify-between gap-3 ${sangria ? 'pl-8' : 'pl-4'} pr-4 py-2 border-t border-slate-50 first:border-t-0`}
+      >
+        <span className={`text-sm min-w-0 flex-1 break-words ${sangria ? 'text-gray-600' : 'text-gray-700'}`}>{label}</span>
+        {item && (
+          <StatusPill
+            estadoId={item.item_estado_id}
+            itemEstados={itemEstados}
+            canEdit={canEdit}
+            onChange={(id) => onChangeItem(itemNum, subItemNum, id)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  const filasDeSeccion = () =>
+    itemsDef.flatMap((def) => {
+      const filas = []
+      if (def.seccion === seccion) filas.push(fila(def.item_num, null, `${def.item_num}. ${def.label}`, false))
+      const subs = (def.sub_items ?? []).filter((s) => s.seccion === seccion)
+      if (subs.length) {
+        // El detalle técnico va abierto, con el ítem que lo agrupa como título.
+        filas.push(
+          <p key={`titulo-${def.item_num}`} className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gov-blue border-t border-slate-50 first:border-t-0">
+            {def.item_num}. {def.label} — detalle técnico
+          </p>,
+        )
+        for (const sub of subs) filas.push(fila(def.item_num, sub.sub_item_num, `${def.item_num}.${sub.sub_item_num} ${sub.label}`, true))
+      }
+      return filas
+    })
+
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy">Documentación a presentar</h3>
         <span className="text-[11px] text-gray-500 text-right">
-          {cuenta.total === 0
-            ? 'Sin documentación aplicable'
-            : `${cuenta.completos} de ${cuenta.total} completos`}
+          {textoCuenta(cuenta)}
           {cuenta.noAplica > 0 && <span className="text-gray-400"> · {cuenta.noAplica} no aplican</span>}
         </span>
       </div>
+      {haySecciones && (
+        <div className="px-4 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2" role="tablist" aria-label="Sección del checklist">
+          {(['tecnica', 'legal_financiera'] as SeccionChecklist[]).map((s) => {
+            const activa = seccion === s
+            const c = cuentaDe(s)
+            return (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={activa}
+                onClick={() => setSeccion(s)}
+                className={`rounded-xl border-2 px-3 py-2 text-left transition-colors ${
+                  activa ? 'bg-gov-navy border-gov-navy text-white shadow' : 'bg-white border-gray-200 text-gov-navy hover:border-sky-200'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{SECCION_LABEL[s]}</span>
+                <span className={`block text-[11px] ${activa ? 'text-white/80' : 'text-gray-500'}`}>
+                  {SECCION_AYUDA[s]} · {textoCuenta(c)}
+                  {c.noAplica > 0 && ` · ${c.noAplica} no aplican`}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap">
         {leyenda.map((e) => (
           <span key={e.id} className="flex items-center gap-1.5 text-[11px] text-gray-500">
@@ -748,53 +858,27 @@ function ChecklistCard({
           </span>
         ))}
       </div>
-      <div className="pb-2">
-        {itemsDef.map((def) => {
-          const item = findItem(checklist.items, def.item_num, null)
-          return (
-            <div key={def.item_num}>
-              <div className="flex items-center justify-between gap-3 px-4 py-2 border-t border-slate-50 first:border-t-0">
-                <span className="text-sm text-gray-700 min-w-0 flex-1 break-words">{def.item_num}. {def.label}</span>
-                {item && (
-                  <StatusPill
-                    estadoId={item.item_estado_id}
-                    itemEstados={itemEstados}
-                    canEdit={canEdit}
-                    onChange={(id) => onChangeItem(def.item_num, null, id)}
-                  />
+      <div className="pb-2" role={haySecciones ? 'tabpanel' : undefined}>
+        {haySecciones
+          ? filasDeSeccion()
+          : itemsDef.map((def) => (
+              <div key={def.item_num}>
+                {fila(def.item_num, null, `${def.item_num}. ${def.label}`, false)}
+                {def.sub_items && (
+                  <>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-1.5 px-4 py-2 border-t border-slate-50 text-xs font-semibold text-gov-blue text-left"
+                      onClick={() => setOpenDisclosure((o) => ({ ...o, [def.item_num]: !o[def.item_num] }))}
+                    >
+                      <span className={`inline-block transition-transform ${openDisclosure[def.item_num] ? 'rotate-90' : ''}`}>▸</span>
+                      Detalle técnico ({def.sub_items.length} ítems{def.sub_items.length ? ', cada uno independiente' : ''})
+                    </button>
+                    {openDisclosure[def.item_num] && def.sub_items.map((sub) => fila(def.item_num, sub.sub_item_num, sub.label, true))}
+                  </>
                 )}
               </div>
-              {def.sub_items && (
-                <>
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-1.5 px-4 py-2 border-t border-slate-50 text-xs font-semibold text-gov-blue text-left"
-                    onClick={() => setOpenDisclosure((o) => ({ ...o, [def.item_num]: !o[def.item_num] }))}
-                  >
-                    <span className={`inline-block transition-transform ${openDisclosure[def.item_num] ? 'rotate-90' : ''}`}>▸</span>
-                    Detalle técnico ({def.sub_items.length} ítems{def.sub_items.length ? ', cada uno independiente' : ''})
-                  </button>
-                  {openDisclosure[def.item_num] && def.sub_items.map((sub) => {
-                    const subItem = findItem(checklist.items, def.item_num, sub.sub_item_num)
-                    return (
-                      <div key={sub.sub_item_num} className="flex items-center justify-between gap-3 pl-8 pr-4 py-2 border-t border-slate-50">
-                        <span className="text-sm text-gray-600 min-w-0 flex-1 break-words">{sub.label}</span>
-                        {subItem && (
-                          <StatusPill
-                            estadoId={subItem.item_estado_id}
-                            itemEstados={itemEstados}
-                            canEdit={canEdit}
-                            onChange={(id) => onChangeItem(def.item_num, sub.sub_item_num, id)}
-                          />
-                        )}
-                      </div>
-                    )
-                  })}
-                </>
-              )}
-            </div>
-          )
-        })}
+            ))}
       </div>
     </div>
   )
@@ -1056,7 +1140,7 @@ function ReparticionSelect({
  * para las de obra — se parametriza con `fetchFn` / `createFn`.
  */
 function BitacoraCard({
-  titulo, subtitulo, canEdit, queryKey, fetchFn, createFn,
+  titulo, subtitulo, canEdit, queryKey, fetchFn, createFn, updateFn,
 }: {
   titulo: string
   subtitulo?: string
@@ -1064,12 +1148,19 @@ function BitacoraCard({
   queryKey: unknown[]
   fetchFn: () => Promise<BitacoraEntry[]>
   createFn: (descripcion: string, fecha: string) => Promise<unknown>
+  /** Corrección de una entrada ya cargada (spec v1.7.0 §6-ter.2). */
+  updateFn: (id: string, descripcion: string, fecha: string) => Promise<unknown>
 }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [texto, setTexto] = useState('')
   const [fecha, setFecha] = useState(todayISO)
   const [error, setError] = useState<string | null>(null)
+  // Edición en línea de una entrada (mismo patrón que el lápiz de "Detalle" en Privada).
+  const [editandoId, setEditandoId] = useState<string | null>(null)
+  const [editTexto, setEditTexto] = useState('')
+  const [editFecha, setEditFecha] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
 
   const { data: entradas } = useQuery({ queryKey, queryFn: fetchFn })
 
@@ -1084,6 +1175,38 @@ function BitacoraCard({
     },
     onError: (err) => setError(extractErrorMessage(err, 'No se pudo guardar la observación.')),
   })
+
+  const updateMut = useMutation({
+    mutationFn: (id: string) => updateFn(id, editTexto.trim(), editFecha),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey })
+      setEditandoId(null)
+      setEditError(null)
+    },
+    onError: (err) => setEditError(extractErrorMessage(err, 'No se pudo guardar la corrección.')),
+  })
+
+  function empezarEdicion(e: BitacoraEntry) {
+    setEditandoId(e.id)
+    setEditTexto(e.descripcion)
+    setEditFecha(e.fecha)
+    setEditError(null)
+  }
+  function cancelarEdicion() {
+    setEditandoId(null)
+    setEditError(null)
+  }
+  function guardarEdicion(e: BitacoraEntry) {
+    if (!editTexto.trim()) {
+      setEditError('La observación no puede quedar vacía.')
+      return
+    }
+    if (editTexto.trim() === e.descripcion && editFecha === e.fecha) {
+      cancelarEdicion()
+      return
+    }
+    updateMut.mutate(e.id)
+  }
 
   return (
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
@@ -1138,18 +1261,84 @@ function BitacoraCard({
 
       <ul className="max-h-96 overflow-y-auto p-4 space-y-3">
         {(!entradas || entradas.length === 0) && <li className="text-center text-sm text-gray-400 py-4">Sin observaciones registradas aún.</li>}
-        {entradas?.map((e) => (
-          <li key={e.id} className="flex gap-2.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-gov-cyan mt-1.5 flex-shrink-0" />
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-gov-navy">{fmtFecha(e.fecha)}</div>
-              <p className="text-sm text-gray-700 mt-0.5 break-words">{e.descripcion}</p>
-              {(e.created_by_nombre || e.created_by) && (
-                <p className="text-[11px] text-gray-400 mt-0.5">{e.created_by_nombre || e.created_by}</p>
+        {entradas?.map((e) => {
+          // Las comunicaciones de Infraestructura / Supervisión no se corrigen desde acá (403 en el backend).
+          const corregible = canEdit && !SECRETARIAS_NO_CORREGIBLES.includes(e.secretaria ?? '')
+          return (
+            <li key={e.id} className="flex gap-2.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-gov-cyan mt-1.5 flex-shrink-0" />
+              {editandoId === e.id ? (
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <input
+                    type="date"
+                    aria-label="Fecha de la observación"
+                    className="border border-gov-cyan rounded-md px-2 py-1 text-xs"
+                    value={editFecha}
+                    onChange={(ev) => setEditFecha(ev.target.value)}
+                  />
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    aria-label="Texto de la observación"
+                    value={editTexto}
+                    onChange={(ev) => setEditTexto(ev.target.value)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Escape') { ev.preventDefault(); cancelarEdicion() }
+                      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); guardarEdicion(e) }
+                    }}
+                    className="w-full border border-gov-cyan rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                  />
+                  {editError && <p role="alert" className="text-[11px] text-red-600">{editError}</p>}
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => guardarEdicion(e)}
+                      disabled={updateMut.isPending}
+                      className="text-xs bg-gov-navy text-white px-2 py-1 rounded hover:bg-gov-blue transition-colors disabled:opacity-50"
+                    >
+                      {updateMut.isPending ? 'Guardando…' : 'Guardar corrección'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelarEdicion}
+                      disabled={updateMut.isPending}
+                      className="text-xs border border-slate-200 text-slate-500 px-2 py-1 rounded hover:bg-slate-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-xs font-bold text-gov-navy">{fmtFecha(e.fecha)}</div>
+                    {corregible && (
+                      <button
+                        type="button"
+                        onClick={() => empezarEdicion(e)}
+                        disabled={editandoId !== null}
+                        title="Corregir esta observación (error de carga o modificación)"
+                        aria-label="Corregir observación"
+                        className="text-slate-300 hover:text-gov-blue transition-colors shrink-0 disabled:opacity-30"
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-700 mt-0.5 break-words">{e.descripcion}</p>
+                  {(e.created_by_nombre || e.created_by) && (
+                    <p className="text-[11px] text-gray-400 mt-0.5">{e.created_by_nombre || e.created_by}</p>
+                  )}
+                  {e.editado_at && (
+                    <p className="text-[11px] italic text-gray-400 mt-0.5">
+                      (editado{e.editado_por_nombre || e.editado_por ? ` por ${e.editado_por_nombre || e.editado_por}` : ''}, {fmtFecha(e.editado_at.slice(0, 10))})
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

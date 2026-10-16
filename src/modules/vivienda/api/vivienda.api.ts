@@ -320,6 +320,17 @@ export const checklistTecnicoApi = {
       .post<PedidoChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/pedidos`, data)
       .then((r) => r.data),
 
+  // Corrección de una observación ya cargada (spec v1.7.0 §6-ter.2).
+  corregirPedido: (
+    programa: ProgramaChecklist,
+    entidadId: string,
+    pedidoId: string,
+    data: { descripcion?: string; fecha_pedido?: string },
+  ) =>
+    apiClient
+      .patch<PedidoChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/pedidos/${pedidoId}`, data)
+      .then((r) => r.data),
+
   // Observaciones de obra — bitácora propia del módulo (distinta de las del expediente).
   getObsObra: (programa: ProgramaChecklist, entidadId: string) =>
     apiClient
@@ -329,6 +340,16 @@ export const checklistTecnicoApi = {
   createObsObra: (programa: ProgramaChecklist, entidadId: string, data: ObraObsChecklistCreate) =>
     apiClient
       .post<ObraObsChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/obs-obra`, data)
+      .then((r) => r.data),
+
+  corregirObsObra: (
+    programa: ProgramaChecklist,
+    entidadId: string,
+    obsId: string,
+    data: { descripcion?: string; fecha?: string },
+  ) =>
+    apiClient
+      .patch<ObraObsChecklist>(`${BASE}/checklist-tecnico/${programa}/${entidadId}/obs-obra/${obsId}`, data)
       .then((r) => r.data),
 
   updateChecklist: (programa: ProgramaChecklist, entidadId: string, data: ChecklistTecnicoUpdate) =>

@@ -659,6 +659,10 @@ export interface PedidoChecklist {
   created_by: string | null
   created_by_nombre: string | null
   secretaria: string | null
+  // Corrección de la observación (spec-checklist-tecnico-dgv.md v1.7.0 §6-ter.2)
+  editado_at?: string | null
+  editado_por?: string | null
+  editado_por_nombre?: string | null
 }
 
 export interface ObraObsChecklist {
@@ -668,6 +672,10 @@ export interface ObraObsChecklist {
   created_at: string
   created_by: string | null
   created_by_nombre: string | null
+  // Corrección de la observación (spec-checklist-tecnico-dgv.md v1.7.0 §6-ter.2)
+  editado_at?: string | null
+  editado_por?: string | null
+  editado_por_nombre?: string | null
 }
 
 export interface ObraObsChecklistCreate {
@@ -751,14 +759,19 @@ export interface CatalogoItemEstadoUpdate {
   excluye_completitud?: boolean
 }
 
+/** Quién carga el ítem: los dos botones del panel (spec v1.7.0 §6-ter.1). null = el programa no se divide. */
+export type SeccionChecklist = 'tecnica' | 'legal_financiera'
+
 export interface ItemSubDefinicion {
   sub_item_num: number
   label: string
+  seccion?: SeccionChecklist | null
 }
 
 export interface ItemDefinicion {
   item_num: number
   label: string
+  seccion?: SeccionChecklist | null
   sub_items: ItemSubDefinicion[] | null
 }
 
