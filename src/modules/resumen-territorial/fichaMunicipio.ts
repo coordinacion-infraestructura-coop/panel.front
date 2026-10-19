@@ -138,21 +138,26 @@ const siNo = (v: boolean | null | undefined) => (v == null ? '—' : v ? 'Sí' :
 /** Filas "etiqueta / valor" del bloque "Datos institucionales (Gobierno)" —
  * una sola definición para pantalla, PDF y Excel. `null` si la respuesta no
  * trajo la ficha (cualquier rol que no sea `Admin` o `Autoridad`): el bloque no se
- * dibuja. */
+ * dibuja. Sólo se listan los campos con dato: desde que la ficha sale de
+ * "0. Resumen General - Vista" la fuente trae únicamente el partido (spec
+ * Fase 1 v1.2.0 §3.2), y el resto quedaría como una lista de guiones. */
 export function filasFichaGobierno(fg: FichaGobierno | null | undefined): { campo: string; valor: string }[] | null {
   if (!fg) return null
-  return [
-    { campo: 'Intendente / Jefe comunal', valor: fg.intendente ?? '—' },
-    { campo: 'Partido', valor: fg.partido ?? '—' },
-    { campo: 'Reelecto', valor: siNo(fg.reelecto) },
-    { campo: 'Continuidad', valor: siNo(fg.continuidad) },
-    { campo: 'Contacto del intendente', valor: fg.contacto_intendente ?? '—' },
-    { campo: 'Legislador departamental', valor: fg.legislador ?? '—' },
-    { campo: 'Partido del legislador', valor: fg.partido_legislador ?? '—' },
-    { campo: 'Electores', valor: fmtNum(fg.electores) },
-    { campo: 'Empleados municipales', valor: fmtNum(fg.empleados) },
-    { campo: 'Masa salarial', valor: fmtMoney(fg.masa_salarial) },
+  const filas = [
+    { campo: 'Intendente / Jefe comunal', dato: fg.intendente, valor: fg.intendente ?? '—' },
+    { campo: 'Partido', dato: fg.partido, valor: fg.partido ?? '—' },
+    { campo: 'Reelecto', dato: fg.reelecto, valor: siNo(fg.reelecto) },
+    { campo: 'Continuidad', dato: fg.continuidad, valor: siNo(fg.continuidad) },
+    { campo: 'Contacto del intendente', dato: fg.contacto_intendente, valor: fg.contacto_intendente ?? '—' },
+    { campo: 'Legislador departamental', dato: fg.legislador, valor: fg.legislador ?? '—' },
+    { campo: 'Partido del legislador', dato: fg.partido_legislador, valor: fg.partido_legislador ?? '—' },
+    { campo: 'Electores', dato: fg.electores, valor: fmtNum(fg.electores) },
+    { campo: 'Empleados municipales', dato: fg.empleados, valor: fmtNum(fg.empleados) },
+    { campo: 'Masa salarial', dato: fg.masa_salarial, valor: fmtMoney(fg.masa_salarial) },
   ]
+    .filter((f) => f.dato != null)
+    .map(({ campo, valor }) => ({ campo, valor }))
+  return filas.length ? filas : null
 }
 
 export const TITULO_FICHA_GOBIERNO = 'Datos institucionales (Gobierno)'
