@@ -73,6 +73,8 @@ export function Layout() {
   
   // Verificar acceso a Resumen Territorial: rol Autoridad OR secretaría 'supervision'
   const canAccessResumenTerritorial = portalUser?.rol === 'Autoridad' || (portalUser?.secretarias ?? []).some(s => s.toLowerCase() === 'supervision')
+  // Tablero de Gobierno: solo Admin y Autoridad (spec-tablero-gobierno-panel.md §1); el backend da 403 al resto
+  const canAccessTableroGobierno = portalUser?.rol === 'Admin' || portalUser?.rol === 'Autoridad'
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -149,6 +151,21 @@ export function Layout() {
                 }`}
               >
                 Resumen Territorial
+              </Link>
+            )}
+
+            {/* Tablero de Gobierno — transversal, solo Admin y Autoridad */}
+            {portalUser && canAccessTableroGobierno && (
+              <Link
+                to="/tablero-gobierno"
+                aria-current={location.pathname.startsWith('/tablero-gobierno') ? 'page' : undefined}
+                className={`flex-shrink-0 px-4 py-3 text-sm font-medium transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan ${
+                  location.pathname.startsWith('/tablero-gobierno')
+                    ? 'border-gov-cyan text-white'
+                    : 'border-transparent text-white/65 hover:text-white hover:border-white/30'
+                }`}
+              >
+                Tablero de Gobierno
               </Link>
             )}
 

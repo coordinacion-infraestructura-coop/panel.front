@@ -169,6 +169,7 @@ export function DashboardPage() {
 
   // Verificar acceso a Resumen Territorial: rol Autoridad OR secretaría 'supervision'
   const canAccessResumenTerritorial = portalUser?.rol === 'Autoridad' || assigned.some(s => s.toLowerCase() === 'supervision')
+  const canAccessTableroGobierno = portalUser?.rol === 'Admin' || portalUser?.rol === 'Autoridad'
 
   const visibleActivas = SECRETARIAS.filter((s) => s.activa && canSee(s))
   const visibleDesarrollo = SECRETARIAS.filter((s) => !s.activa && canSee(s))
@@ -221,6 +222,26 @@ export function DashboardPage() {
               <h3 className="font-semibold">Resumen Territorial</h3>
               <p className="text-xs text-white/60 mt-0.5">
                 Qué programas y gestiones tiene cada localidad y en qué estado está cada uno.
+              </p>
+            </div>
+            <span className="text-gov-cyan group-hover:translate-x-0.5 transition-transform">→</span>
+          </div>
+        </Link>
+      )}
+
+      {!isLoading && portalUser && canAccessTableroGobierno && (
+        <Link
+          to="/tablero-gobierno"
+          className="block mb-4 rounded-lg border border-gov-cyan/40 bg-gradient-to-r from-gov-navy to-[#1e3a52] text-white px-5 py-4 hover:brightness-110 transition group focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-cyan mb-0.5">
+                Panel transversal
+              </p>
+              <h3 className="font-semibold">Tablero de Gobierno</h3>
+              <p className="text-xs text-white/60 mt-0.5">
+                Transferencias, fondos, gestión territorial y expedientes por localidad (reemplaza al Looker).
               </p>
             </div>
             <span className="text-gov-cyan group-hover:translate-x-0.5 transition-transform">→</span>

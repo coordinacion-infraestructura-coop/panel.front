@@ -21,6 +21,7 @@ import { GasiferaPitPage } from './modules/gasifera/pages/GasiferaPitPage'
 import { AtpPage } from './modules/gralgob/pages/AtpPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
 import { FichaLocalidadPage } from './modules/resumen-territorial/pages/FichaLocalidadPage'
+import { TableroGobiernoPage } from './modules/tablero-gobierno/pages/TableroGobiernoPage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
@@ -67,6 +68,14 @@ export default function App() {
                     requiredSecretarias={['supervision']}
                   >
                     <FichaLocalidadPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="tablero-gobierno/:seccion?/:sub?"
+                element={
+                  <ProtectedRoute roles={['Admin', 'Autoridad']}>
+                    <TableroGobiernoPage />
                   </ProtectedRoute>
                 }
               />
