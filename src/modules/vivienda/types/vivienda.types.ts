@@ -429,6 +429,44 @@ export interface GeoPuntoMLCreate {
   lng: number
 }
 
+// Valuación IDECOR (spec-mi-lugar-valor-fiscal-idecor.md §5.5). El backend
+// serializa los Decimal como string: convertir con Number() antes de operar.
+export interface ParcelaIdecor {
+  nomenclatura: string
+  origen: 'punto' | 'nomenclatura' | 'ambos'
+  nro_cuenta: string | null
+  tipo_parcela: string | null
+  estado: string | null
+  desig_oficial: string | null
+  localidad: string | null
+  superficie_urbana_m2: number | string
+  superficie_rural_m2: number | string
+  valuacion: number | string
+  valuacion_tierra: number | string
+  valuacion_mejoras: number | string
+  vigencia_desde: string | null
+  valor_mercado: number | string | null
+  vut_pesos_m2: number | string | null
+  vur_pesos_ha: number | string | null
+}
+
+export interface ValuacionIdecorML {
+  estado: 'ok' | 'parcial' | 'sin_datos' | 'sin_parcelas' | 'error'
+  valor_total: number | string | null
+  valor_tierra: number | string | null
+  valor_mejoras: number | string | null
+  valor_mercado: number | string | null
+  mercado_anio: number | null
+  mercado_parcelas_sin_valor: number
+  cant_parcelas: number
+  puntos_sin_parcela: number
+  nomenclaturas_no_encontradas: string[]
+  vigencia_desde: string | null
+  parcelas: ParcelaIdecor[]
+  consultado_at: string | null
+  ultimo_error_at: string | null
+}
+
 export interface ProyectoML extends ObraPanel {
   id: string
   tipo: TipoProyectoML
@@ -456,6 +494,8 @@ export interface ProyectoML extends ObraPanel {
   updated_at: string
   updated_by: string | null
   geo_puntos: GeoPuntoML[]
+  nomenclaturas: string[]
+  valuacion_idecor: ValuacionIdecorML | null
 }
 
 export interface ProyectoMLCreate {
@@ -480,6 +520,7 @@ export interface ProyectoMLCreate {
   estado_general?: number | null
   obs?: string | null
   geo_puntos?: GeoPuntoMLCreate[]
+  nomenclaturas?: string[]
 }
 
 export interface ProyectoMLUpdate {
@@ -503,6 +544,7 @@ export interface ProyectoMLUpdate {
   estado_general?: number | null
   obs?: string | null
   geo_puntos?: GeoPuntoMLCreate[] | null
+  nomenclaturas?: string[] | null
   fecha_cambio?: string | null
 }
 

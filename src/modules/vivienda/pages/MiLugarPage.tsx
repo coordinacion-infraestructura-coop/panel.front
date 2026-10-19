@@ -21,7 +21,7 @@ import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
   EstadoMLCreate, EstadoMLUpdate, GeoPuntoMLCreate, GeoLocalidad, PuntoInforme,
-  CatalogoEstadoExpediente,
+  CatalogoEstadoExpediente, ValuacionIdecorML,
 } from '../types/vivienda.types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,6 +34,113 @@ function fmtMontoResumen(n: number) {
   if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'
   return '$' + (n / 1e6).toFixed(1) + 'M'
 }
+// ── Valuación IDECOR (spec-mi-lugar-valor-fiscal-idecor.md §6) ───────────────
+// Referencia externa: nunca se escribe sola en valor_fiscal.
+
+function numIdecor(v: number | string | null | undefined): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isNaN(n) ? null : n
+}
+
+function fmtFechaCorta(iso: string | null) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  return `${d}/${m}/${y}`
+}
+
+const ESTADOS_CON_RESULTADO_IDECOR = ['ok', 'parcial', 'sin_parcelas']
+
+function idecorConResultado(v: ValuacionIdecorML | null): v is ValuacionIdecorML {
+  return v != null && ESTADOS_CON_RESULTADO_IDECOR.includes(v.estado)
+}
+
+function idecorFiscal(p: ProyectoML): number | null {
+  const v = p.valuacion_idecor
+  return idecorConResultado(v) && v.cant_parcelas > 0 ? numIdecor(v.valor_total) : null
+}
+
+function idecorMercado(p: ProyectoML): number | null {
+  const v = p.valuacion_idecor
+  return idecorConResultado(v) ? numIdecor(v.valor_mercado) : null
+}
+
+function idecorSinValorTexto(v: ValuacionIdecorML | null): string {
+  if (v == null) return 'sin consultar'
+  if (v.estado === 'sin_datos') return 'sin puntos ni nomenclaturas'
+  if (v.estado === 'sin_parcelas') return 'sin parcelas en IDECOR'
+  return 'no disponible'
+}
+
+function idecorTooltip(v: ValuacionIdecorML | null): string {
+  if (v == null) return 'Todavía no se consultó IDECOR para este proyecto.'
+  const lineas: string[] = ['Referencia IDECOR — no modifica el Valor Fiscal del área.']
+  if (v.vigencia_desde) lineas.push(`Valuación vigente desde ${fmtFechaCorta(v.vigencia_desde)}`)
+  if (v.mercado_anio) lineas.push(`Mapa de valores de la tierra ${v.mercado_anio}`)
+  if (v.consultado_at) lineas.push(`Consultado: ${fmtTs(v.consultado_at)}`)
+  if (v.ultimo_error_at) lineas.push(`Último intento fallido: ${fmtTs(v.ultimo_error_at)}`)
+  for (const par of v.parcelas) {
+    const sup = Number(par.superficie_urbana_m2) + Number(par.superficie_rural_m2)
+    const mercado = numIdecor(par.valor_mercado)
+    lineas.push(
+      `• ${par.nomenclatura} (${par.origen}) ${par.tipo_parcela ?? ''} ${par.estado ?? ''} · ` +
+      `${sup.toLocaleString('es-AR')} m² · fiscal ${fmtMonto(numIdecor(par.valuacion))} · ` +
+      `mercado ${mercado != null ? fmtMonto(mercado) : 'sin valor'}`,
+    )
+  }
+  if (v.puntos_sin_parcela > 0) lineas.push(`${v.puntos_sin_parcela} punto(s) sin parcela`)
+  for (const n of v.nomenclaturas_no_encontradas) lineas.push(`Nomenclatura ${n} no encontrada`)
+  return lineas.join('\n')
+}
+
+function ValorFiscalIdecorCell({ proyecto }: { proyecto: ProyectoML }) {
+  const v = proyecto.valuacion_idecor
+  const valor = idecorFiscal(proyecto)
+  if (valor == null) {
+    return <span className="text-gray-300 italic" title={idecorTooltip(v)}>{idecorSinValorTexto(v)}</span>
+  }
+  const propio = numIdecor(proyecto.valor_fiscal)
+  let marca: { texto: string; clase: string } | null = null
+  if (propio != null && propio !== 0) {
+    if (Math.abs(valor - propio) < 1) marca = { texto: '= coincide', clase: 'text-emerald-600' }
+    else {
+      const pct = Math.round(((valor - propio) / propio) * 100)
+      marca = { texto: `Δ ${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`, clase: 'text-amber-600' }
+    }
+  }
+  return (
+    <span className="flex flex-col" title={idecorTooltip(v)}>
+      <span className="italic text-gray-500">{fmtMonto(valor)}</span>
+      <span className="text-[10px] text-gray-400">
+        {v?.cant_parcelas} parc.{v?.estado === 'parcial' && ' · incompleto'}
+        {marca && <b className={'ml-1 ' + marca.clase}>{marca.texto}</b>}
+      </span>
+    </span>
+  )
+}
+
+function ValorMercadoIdecorCell({ proyecto }: { proyecto: ProyectoML }) {
+  const v = proyecto.valuacion_idecor
+  const valor = idecorMercado(proyecto)
+  if (valor == null) {
+    const texto = idecorConResultado(v) && v.cant_parcelas > 0 ? 'sin valor en el mapa' : idecorSinValorTexto(v)
+    return <span className="text-gray-300 italic" title={idecorTooltip(v)}>{texto}</span>
+  }
+  return (
+    <span className="flex flex-col" title={idecorTooltip(v)}>
+      <span className="italic text-gray-500">{fmtMonto(valor)}</span>
+      <span className="text-[10px] text-gray-400">
+        IDECOR {v?.mercado_anio}
+        {v != null && v.mercado_parcelas_sin_valor > 0 && ` · ${v.mercado_parcelas_sin_valor} parc. sin valor`}
+      </span>
+    </span>
+  )
+}
+
+function parseNomenclaturasText(text: string): string[] {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean)
+}
+
 function fmtTs(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -119,6 +226,13 @@ function exportXlsx(
     'Lotes': p.lotes ?? '',
     'Monto ($)': p.monto ?? '',
     'Valor Fiscal ($)': p.valor_fiscal ?? '',
+    ...(tipo === 'exp' ? {
+      'Valor Fiscal IDECOR ($)': idecorFiscal(p) ?? '',
+      'Vigencia IDECOR': p.valuacion_idecor?.vigencia_desde ?? '',
+      'Valor referencia de mercado ($)': idecorMercado(p) ?? '',
+      'Año mapa de valores': p.valuacion_idecor?.mercado_anio ?? '',
+      'Nomenclaturas': (p.nomenclaturas ?? []).join(' | '),
+    } : {}),
     'INFRA s/Nexos ($)': p.infra_sin_nexos ?? '',
     'Costo Nexos ($)': p.costo_nexos ?? '',
     'Convenio UNC ($)': p.convenio_unc ?? '',
@@ -442,6 +556,18 @@ function EditModal({
     geo_puntos: proyecto.geo_puntos.map((p) => ({ lat: p.lat, lng: p.lng })),
   })
   const [geoText, setGeoText] = useState(proyecto.geo_puntos.map((p) => `${p.lat},${p.lng}`).join('\n'))
+  const [nomText, setNomText] = useState((proyecto.nomenclaturas ?? []).join('\n'))
+  const [valuacion, setValuacion] = useState<ValuacionIdecorML | null>(proyecto.valuacion_idecor ?? null)
+  const qcEdit = useQueryClient()
+  const recalcularMut = useMutation({
+    mutationFn: () => miLugarApi.recalcularValuacionIdecor(proyecto.id),
+    onSuccess: (v) => {
+      setValuacion(v)
+      qcEdit.invalidateQueries({ queryKey: ['ml-proyectos', proyecto.tipo] })
+    },
+  })
+  const sugerenciaFiscal = idecorConResultado(valuacion) && valuacion.cant_parcelas > 0 ? numIdecor(valuacion.valor_total) : null
+  const sugerenciaMercado = idecorConResultado(valuacion) ? numIdecor(valuacion.valor_mercado) : null
 
   const set = <K extends keyof ProyectoMLUpdate>(k: K, v: ProyectoMLUpdate[K]) =>
     setForm((p) => ({ ...p, [k]: v }))
@@ -562,6 +688,33 @@ function EditModal({
                 <div>
                   <label htmlFor={`${uid}-vf`} className={lbl}>Valor Fiscal ($)</label>
                   <input id={`${uid}-vf`} type="number" className={inp} value={form.valor_fiscal ?? ''} onChange={(e) => set('valor_fiscal', e.target.value === '' ? null : parseFloat(e.target.value))} />
+                  <div className="mt-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-gray-600 space-y-1" title={idecorTooltip(valuacion)}>
+                    <p>
+                      <b>Sugerencia IDECOR:</b>{' '}
+                      {sugerenciaFiscal != null
+                        ? <>{fmtMonto(sugerenciaFiscal)} · {valuacion?.cant_parcelas} parcela(s) · vigencia {fmtFechaCorta(valuacion?.vigencia_desde ?? null)}{valuacion?.estado === 'parcial' && ' · incompleta'}</>
+                        : <i>{idecorSinValorTexto(valuacion)}</i>}
+                    </p>
+                    <p>
+                      <b>Referencia de mercado{valuacion?.mercado_anio ? ` (IDECOR ${valuacion.mercado_anio})` : ''}:</b>{' '}
+                      {sugerenciaMercado != null ? fmtMonto(sugerenciaMercado) : <i>sin valor</i>} <span className="text-gray-400">(informativo)</span>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <button type="button" disabled={sugerenciaFiscal == null}
+                        onClick={() => sugerenciaFiscal != null && set('valor_fiscal', sugerenciaFiscal)}
+                        className="px-2 py-0.5 rounded border border-gov-blue text-gov-blue hover:bg-sky-50 disabled:opacity-40">
+                        Usar este valor
+                      </button>
+                      <button type="button" disabled={recalcularMut.isPending} onClick={() => recalcularMut.mutate()}
+                        className="px-2 py-0.5 rounded border border-slate-300 text-gray-600 hover:bg-white disabled:opacity-40">
+                        {recalcularMut.isPending ? 'Consultando…' : 'Recalcular'}
+                      </button>
+                      <span className="text-gray-400">Usa los puntos y nomenclaturas guardados.</span>
+                    </div>
+                    {recalcularMut.isError && (
+                      <p role="alert" className="text-red-600">{extractErrorMessage(recalcularMut.error, 'No se pudo consultar IDECOR.')}</p>
+                    )}
+                  </div>
                 </div>
               )}
               <div>
@@ -633,6 +786,15 @@ function EditModal({
               value={geoText} onChange={(e) => setGeoText(e.target.value)}
               placeholder={'-31.292807,-64.177675\n-31.289985,-64.179777'} />
           </div>
+          {proyecto.tipo === 'exp' && (
+            <div>
+              <label htmlFor={`${uid}-nom-cat`} className={lbl}>Nomenclaturas catastrales — una por línea</label>
+              <textarea id={`${uid}-nom-cat`} className={inp + ' font-mono text-xs'} rows={3}
+                value={nomText} onChange={(e) => setNomText(e.target.value)}
+                placeholder={'1604220301275100\n1604-2203-0127-5001'} />
+              <p className="text-[11px] text-gray-400 mt-0.5">Se suman a las parcelas de los puntos para el Valor Fiscal (IDECOR).</p>
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
@@ -642,7 +804,11 @@ function EditModal({
           <div className="flex gap-3 flex-shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
             <button type="button" disabled={isSaving || !form.nombre?.trim()}
-              onClick={() => onSave({ ...form, geo_puntos: parseGeoText(geoText) })}
+              onClick={() => onSave({
+                ...form,
+                geo_puntos: parseGeoText(geoText),
+                ...(proyecto.tipo === 'exp' ? { nomenclaturas: parseNomenclaturasText(nomText) } : {}),
+              })}
               className="px-5 py-1.5 rounded text-sm text-white disabled:opacity-50 transition-colors hover:opacity-90"
               style={{ background: 'var(--color-gov-navy)' }}>
               {isSaving ? 'Guardando...' : 'Guardar'}
@@ -670,6 +836,7 @@ function AgregarProyectoModal({
     tipo, nombre: '', localidad_nombre: '', ok_gob: 'SI',
   })
   const [geoText, setGeoText] = useState('')
+  const [nomText, setNomText] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [deptoGeo, setDeptoGeo] = useState('')
 
@@ -741,6 +908,7 @@ function AgregarProyectoModal({
       ok_gob: form.ok_gob,
       obs: form.obs || undefined,
       geo_puntos: parseGeoText(geoText),
+      ...(tipo === 'exp' ? { nomenclaturas: parseNomenclaturasText(nomText) } : {}),
     })
   }
 
@@ -838,6 +1006,14 @@ function AgregarProyectoModal({
             <textarea className={inp + ' font-mono text-xs'} rows={3} value={geoText}
               onChange={(e) => setGeoText(e.target.value)} placeholder={'-31.292807,-64.177675'} />
           </div>
+          {tipo === 'exp' && (
+            <div>
+              <label className={lbl}>Nomenclaturas catastrales — una por línea</label>
+              <textarea className={inp + ' font-mono text-xs'} rows={3} value={nomText}
+                onChange={(e) => setNomText(e.target.value)} placeholder={'1604220301275100'} />
+              <p className="text-[11px] text-gray-400 mt-0.5">Se suman a las parcelas de los puntos para el Valor Fiscal (IDECOR).</p>
+            </div>
+          )}
           {saveError && <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{saveError}</p>}
         </div>
         <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -1387,10 +1563,14 @@ export function MiLugarPage() {
     const dir = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => {
       if (sortCol === 'avance') return dir * (avancePct(a, estados, estadosTecnico) - avancePct(b, estados, estadosTecnico))
-      const va = sortCol === 'etecnico' ? tecnicoOrden(a.etecnico, estadosTecnico)
-        : (a as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
-      const vb = sortCol === 'etecnico' ? tecnicoOrden(b.etecnico, estadosTecnico)
-        : (b as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
+      const valorDe = (p: ProyectoML): string | number | null => {
+        if (sortCol === 'etecnico') return tecnicoOrden(p.etecnico, estadosTecnico)
+        if (sortCol === 'idecor_fiscal') return idecorFiscal(p)
+        if (sortCol === 'idecor_mercado') return idecorMercado(p)
+        return (p as unknown as Record<string, unknown>)[sortCol] as string | number | null ?? null
+      }
+      const va = valorDe(a)
+      const vb = valorDe(b)
       if (va === null && vb === null) return 0
       if (va === null) return dir
       if (vb === null) return -dir
@@ -1589,7 +1769,17 @@ export function MiLugarPage() {
                   <span className="flex items-center gap-0.5">Monto {sortIndicator('monto')}</span>
                 </th>
                 {tieneFinanciero && <>
-                  {tab === 'exp' && <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Valor Fiscal</th>}
+                  {tab === 'exp' && <>
+                    <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Valor Fiscal</th>
+                    <th scope="col" className={th} onClick={() => handleSort('idecor_fiscal')} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}
+                      title="Sugerencia de Catastro (IDECOR) para las parcelas del proyecto. No modifica el Valor Fiscal.">
+                      <span className="flex items-center gap-0.5 italic">Valor Fiscal (IDECOR) {sortIndicator('idecor_fiscal')}</span>
+                    </th>
+                    <th scope="col" className={th} onClick={() => handleSort('idecor_mercado')} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}
+                      title="Mapa de valores de la tierra de IDECOR. Solo informativo.">
+                      <span className="flex items-center gap-0.5 italic">Valor referencia de mercado {sortIndicator('idecor_mercado')}</span>
+                    </th>
+                  </>}
                   <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Infra s/Nexos</th>
                   <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>Nexos</th>
                   <th scope="col" className={thFixed} style={{ fontSize: '11px', background: 'rgba(255,255,255,0.06)' }}>UNC</th>
@@ -1608,7 +1798,7 @@ export function MiLugarPage() {
             <tbody>
               {!filtered.length && (
                 <tr>
-                  <td colSpan={tieneFinanciero ? (tab === 'exp' ? 21 : 20) : 17}
+                  <td colSpan={tieneFinanciero ? (tab === 'exp' ? 23 : 20) : 17}
                     className="text-center py-10 text-gray-400">
                     Sin resultados para los filtros aplicados.
                   </td>
@@ -1644,7 +1834,11 @@ export function MiLugarPage() {
                     <td className="px-2.5 py-1.5"><EstadoBadge id={p.estado_general} estados={estados} /></td>
                     <td className="px-2.5 py-1.5 font-semibold text-gov-blue whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.monto)}</td>
                     {tieneFinanciero && <>
-                      {tab === 'exp' && <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.valor_fiscal)}</td>}
+                      {tab === 'exp' && <>
+                        <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.valor_fiscal)}</td>
+                        <td className="px-2.5 py-1.5 whitespace-nowrap" style={{ fontSize: '11px' }}><ValorFiscalIdecorCell proyecto={p} /></td>
+                        <td className="px-2.5 py-1.5 whitespace-nowrap" style={{ fontSize: '11px' }}><ValorMercadoIdecorCell proyecto={p} /></td>
+                      </>}
                       <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.infra_sin_nexos)}</td>
                       <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.costo_nexos)}</td>
                       <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(p.convenio_unc)}</td>

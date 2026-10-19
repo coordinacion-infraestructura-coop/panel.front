@@ -36,6 +36,7 @@ import type {
   ProyectoML,
   ProyectoMLCreate,
   ProyectoMLUpdate,
+  ValuacionIdecorML,
   EstadoML,
   EstadoMLCreate,
   EstadoMLUpdate,
@@ -249,6 +250,10 @@ export const miLugarApi = {
 
   deleteProyecto: (id: string) =>
     apiClient.delete(`${BASE}/mi-lugar/proyectos/${id}`).then((r) => r.data),
+
+  // Valor fiscal sugerido + valor de mercado desde IDECOR (no toca valor_fiscal)
+  recalcularValuacionIdecor: (id: string) =>
+    apiClient.post<ValuacionIdecorML>(`${BASE}/mi-lugar/proyectos/${id}/valuacion-idecor`).then((r) => r.data),
 
   // Historial
   getHistorial: (proyectoId: string) =>
