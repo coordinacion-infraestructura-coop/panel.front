@@ -74,7 +74,7 @@ export const SECCIONES: Seccion[] = [
     id: 'expedientes',
     nombre: 'Expedientes',
     subs: [
-      { id: 'expedientes', nombre: 'Expedientes', etapa: 'E1', contenido: ['Expedientes visados de Cordón Cuneta y Gas, con datos del sistema', 'Por programa y estado'] },
+      { id: 'expedientes', nombre: 'Expedientes', etapa: 'a definir', contenido: ['Expedientes visados de Cordón Cuneta y Gas, con datos del sistema', 'Por programa y estado (Remitido / En trámite): falta definir de dónde sale ese estado en nuestros datos'] },
     ],
   },
   {

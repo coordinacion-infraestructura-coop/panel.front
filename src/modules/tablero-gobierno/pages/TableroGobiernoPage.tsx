@@ -1,20 +1,26 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { tableroApi } from '../api/tablero.api'
 import { FiltrosGobierno } from '../components/FiltrosGobierno'
 import { IndicadorFrescura } from '../components/IndicadorFrescura'
 import { useFiltrosGobierno } from '../hooks/useFiltrosGobierno'
 import { SECCIONES, type SubSeccion } from '../secciones'
+import { AtpCompromisosVista } from '../vistas/AtpCompromisosVista'
+import type { ContextoTablero } from '../vistas/contexto'
+import { InicioVista } from '../vistas/InicioVista'
+import { TransferenciasVista } from '../vistas/TransferenciasVista'
 
 const ANIO_ACTUAL = new Date().getFullYear()
 
 /** Tablero de Gobierno — reemplazo del Looker "Tablero - Min. de Gobierno"
- * (spec-tablero-gobierno-panel.md). Etapa 0: barra común (filtros en la URL, frescura de
- * fuentes), navegación de secciones y "en preparación" para cada pantalla hasta su etapa. */
+ * (spec-tablero-gobierno-panel.md). Barra común (filtros en la URL, frescura de fuentes) y
+ * navegación de secciones; cada pantalla muestra "en preparación" hasta su etapa (Etapa 1:
+ * Inicio, Coparticipación, FOFINDES y ATP Compromisos). */
 export function TableroGobiernoPage() {
   const { seccion: seccionId = 'inicio', sub: subId } = useParams()
   const { search } = useLocation()
+  const navigate = useNavigate()
   const { data: portalUser } = usePortalUser()
   const meta = useQuery({ queryKey: ['tablero-gobierno', 'meta'], queryFn: tableroApi.meta, staleTime: 5 * 60_000 })
   const anios = meta.data?.anios ?? [ANIO_ACTUAL]
@@ -26,6 +32,22 @@ export function TableroGobiernoPage() {
 
   const loc = meta.data?.localidades.find((l) => l.codigo_indec === filtros.localidad)
   const contexto = loc ? `${loc.nombre} · ${loc.departamento}` : filtros.departamento ? `Departamento ${filtros.departamento}` : 'Toda la provincia'
+  const locsFiltro = meta.data
+    ? loc
+      ? [loc]
+      : filtros.departamento
+        ? meta.data.localidades.filter((l) => l.departamento === filtros.departamento)
+        : undefined
+    : undefined
+  const ctx: ContextoTablero = {
+    anio: filtros.anio,
+    departamento: filtros.departamento,
+    localidad: loc,
+    codigos: locsFiltro?.map((l) => l.codigo_indec),
+    idsGeo: locsFiltro?.flatMap((l) => (l.id_geo ? [l.id_geo] : [])),
+    setDepartamento: filtros.setDepartamento,
+    irA: (s, sub) => navigate(`/tablero-gobierno/${s}${sub ? `/${sub}` : ''}${search}`),
+  }
   const puedeVerFicha =
     portalUser?.rol === 'Autoridad' || (portalUser?.secretarias ?? []).some((s) => s.toLowerCase() === 'supervision')
 
@@ -102,7 +124,17 @@ export function TableroGobiernoPage() {
         )}
       </div>
 
-      <EnPreparacion sub={sub} />
+      {!meta.data && !meta.isError ? (
+        <div className="h-40 bg-white border border-slate-200 rounded-lg animate-pulse" aria-label="Cargando" />
+      ) : sub.id === 'inicio' ? (
+        <InicioVista ctx={ctx} />
+      ) : sub.id === 'coparticipacion' || sub.id === 'fofindes' ? (
+        <TransferenciasVista key={sub.id} ctx={ctx} seccion={sub.id} />
+      ) : sub.id === 'atp-compromisos' ? (
+        <AtpCompromisosVista ctx={ctx} />
+      ) : (
+        <EnPreparacion sub={sub} />
+      )}
     </div>
   )
 }
@@ -110,7 +142,7 @@ export function TableroGobiernoPage() {
 function EnPreparacion({ sub }: { sub: SubSeccion }) {
   return (
     <section className="bg-white border border-dashed border-slate-300 rounded-lg px-5 py-6">
-      <p className="text-[11px] uppercase tracking-widest text-gov-cyan font-semibold">En preparación · Etapa {sub.etapa}</p>
+      <p className="text-[11px] uppercase tracking-widest text-gov-cyan font-semibold">En preparación · {sub.etapa.startsWith('E') ? `Etapa ${sub.etapa}` : sub.etapa}</p>
       <h3 className="text-lg font-semibold text-gov-navy mt-1">
         {sub.nombre}
         {sub.restringida && <span className="ml-2 text-sm">🔒</span>}
