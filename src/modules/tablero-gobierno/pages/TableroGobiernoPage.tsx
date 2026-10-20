@@ -7,8 +7,11 @@ import { IndicadorFrescura } from '../components/IndicadorFrescura'
 import { useFiltrosGobierno } from '../hooks/useFiltrosGobierno'
 import { SECCIONES, type SubSeccion } from '../secciones'
 import { AtpCompromisosVista } from '../vistas/AtpCompromisosVista'
+import { FodemeepVista } from '../vistas/FodemeepVista'
+import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
 import { InicioVista } from '../vistas/InicioVista'
+import { ResumenVista } from '../vistas/ResumenVista'
 import { TransferenciasVista } from '../vistas/TransferenciasVista'
 
 const ANIO_ACTUAL = new Date().getFullYear()
@@ -16,7 +19,8 @@ const ANIO_ACTUAL = new Date().getFullYear()
 /** Tablero de Gobierno — reemplazo del Looker "Tablero - Min. de Gobierno"
  * (spec-tablero-gobierno-panel.md). Barra común (filtros en la URL, frescura de fuentes) y
  * navegación de secciones; cada pantalla muestra "en preparación" hasta su etapa (Etapa 1:
- * Inicio, Coparticipación, FOFINDES y ATP Compromisos). */
+ * Inicio, Coparticipación, FOFINDES y ATP Compromisos; Etapa 2: Resumen general, FODEMEEP y
+ * FOMMEP, y Coparticipación y FOFINDES desde las planillas de Gobierno). */
 export function TableroGobiernoPage() {
   const { seccion: seccionId = 'inicio', sub: subId } = useParams()
   const { search } = useLocation()
@@ -130,6 +134,12 @@ export function TableroGobiernoPage() {
         <InicioVista ctx={ctx} />
       ) : sub.id === 'coparticipacion' || sub.id === 'fofindes' ? (
         <TransferenciasVista key={sub.id} ctx={ctx} seccion={sub.id} />
+      ) : sub.id === 'resumen' ? (
+        <ResumenVista ctx={ctx} />
+      ) : sub.id === 'fodemeep' ? (
+        <FodemeepVista ctx={ctx} />
+      ) : sub.id === 'fommep' ? (
+        <FommepVista ctx={ctx} />
       ) : sub.id === 'atp-compromisos' ? (
         <AtpCompromisosVista ctx={ctx} />
       ) : (

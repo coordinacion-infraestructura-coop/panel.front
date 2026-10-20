@@ -49,21 +49,32 @@ export function Cargando() {
   return <div className="h-40 bg-white border border-slate-200 rounded-lg animate-pulse" aria-label="Cargando" />
 }
 
-/** Barras agrupadas por mes: una serie por año (Chart.js). `null` = mes sin dato. */
+/** Barras por categoría (Chart.js): agrupadas (una serie por año), apiladas (transferido /
+ * pendiente) u horizontales. `null` = sin dato. `pie` agrega una línea al tooltip. */
 export function SerieComparada({
   labels,
   series,
   formato,
   height = 260,
+  apiladas = false,
+  horizontal = false,
+  pie,
+  ariaLabel = 'Serie mensual comparada',
 }: {
   labels: string[]
   series: { nombre: string; valores: (number | null)[]; color: string }[]
   formato: (v: number) => string
   height?: number
+  apiladas?: boolean
+  horizontal?: boolean
+  pie?: (indice: number) => string | undefined
+  ariaLabel?: string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     if (!ref.current) return
+    const valor = { ticks: { callback: (v: string | number) => formato(Number(v)), font: { size: 10 } }, grid: { color: '#e5e7eb' }, stacked: apiladas }
+    const categoria = { grid: { display: false }, ticks: { font: { size: 11 } }, stacked: apiladas }
     const chart = new Chart(ref.current, {
       type: 'bar',
       data: {
@@ -73,22 +84,52 @@ export function SerieComparada({
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        indexAxis: horizontal ? 'y' : 'x',
         plugins: {
           legend: { position: 'bottom', labels: { boxWidth: 12, font: { family: 'Poppins', size: 11 } } },
-          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw == null ? 'sin dato' : formato(c.raw as number)}` } },
+          tooltip: {
+            callbacks: {
+              label: (c) => `${c.dataset.label}: ${c.raw == null ? 'sin dato' : formato(c.raw as number)}`,
+              footer: (items) => (pie && items[0] ? pie(items[0].dataIndex) ?? '' : ''),
+            },
+          },
         },
-        scales: {
-          y: { ticks: { callback: (v) => formato(Number(v)), font: { size: 10 } }, grid: { color: '#e5e7eb' } },
-          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-        },
+        scales: horizontal ? { x: valor, y: categoria } : { y: valor, x: categoria },
       },
     })
     return () => chart.destroy()
-  }, [labels, series, formato])
+  }, [labels, series, formato, apiladas, horizontal, pie])
   return (
     <div style={{ height }}>
-      <canvas ref={ref} role="img" aria-label="Serie mensual comparada" />
+      <canvas ref={ref} role="img" aria-label={ariaLabel} />
     </div>
+  )
+}
+
+/** Velocímetro semicircular (SVG). `max` > 1 deja ver valores por encima del 100 %. */
+export function Velocimetro({ valor, etiqueta, max = 1.5, color = '#398ebd' }: { valor: number | null; etiqueta: string; max?: number; color?: string }) {
+  const r = 70
+  const frac = valor == null ? 0 : Math.max(0, Math.min(valor / max, 1))
+  const ang = Math.PI * (1 - frac)
+  const x = 90 + r * Math.cos(ang)
+  const y = 90 - r * Math.sin(ang)
+  const cien = Math.PI * (1 - Math.min(1 / max, 1))
+  return (
+    <figure className="flex flex-col items-center min-w-0">
+      <svg viewBox="0 0 180 104" className="w-full max-w-[220px]" role="img" aria-label={`${etiqueta}: ${valor == null ? 'sin dato' : `${Math.round(valor * 1000) / 10} %`}`}>
+        <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="#e5e7eb" strokeWidth="16" />
+        {valor != null && frac > 0 && (
+          <path d={`M 20 90 A 70 70 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)}`} fill="none" stroke={color} strokeWidth="16" />
+        )}
+        {max > 1 && (
+          <line x1={90 + 58 * Math.cos(cien)} y1={90 - 58 * Math.sin(cien)} x2={90 + 82 * Math.cos(cien)} y2={90 - 82 * Math.sin(cien)} stroke="#172c3f" strokeWidth="2" strokeDasharray="3 2" />
+        )}
+        <text x="90" y="86" textAnchor="middle" className="fill-gov-navy" style={{ fontSize: 22, fontWeight: 700 }}>
+          {valor == null ? '—' : `${(valor * 100).toLocaleString('es-AR', { maximumFractionDigits: 1 })} %`}
+        </text>
+      </svg>
+      <figcaption className="text-xs text-gray-600 text-center -mt-1">{etiqueta}</figcaption>
+    </figure>
   )
 }
 

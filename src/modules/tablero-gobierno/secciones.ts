@@ -39,9 +39,9 @@ export const SECCIONES: Seccion[] = [
     id: 'transferencias',
     nombre: 'Transferencias',
     subs: [
-      { id: 'resumen', nombre: 'Resumen general', etapa: 'E2', contenido: ['Tablas por departamento y por localidad', 'Semáforo ATP/COPA+FOFIN con mapa', 'Total y total por habitante'] },
-      { id: 'coparticipacion', nombre: 'Coparticipación', etapa: 'E1 → E2', contenido: ['Pagos por quincena y mes', '% a sueldos (velocímetros)', 'Retenciones Caja y APROSS sobre la COPA bruta'] },
-      { id: 'fofindes', nombre: 'FOFINDES', etapa: 'E1 → E2', contenido: ['KPIs del año y del último mes', 'Serie mensual bruto y neto'] },
+      { id: 'resumen', nombre: 'Resumen general', etapa: 'E2 → E4', contenido: ['Tablas por departamento y por localidad', 'Semáforo ATP/COPA+FOFIN con mapa', 'Total y total por habitante'] },
+      { id: 'coparticipacion', nombre: 'Coparticipación', etapa: 'E2', contenido: ['Pagos por quincena y mes', '% a sueldos (velocímetros)', 'Retenciones Caja y APROSS sobre la COPA bruta'] },
+      { id: 'fofindes', nombre: 'FOFINDES', etapa: 'E2', contenido: ['KPIs del año y del último mes', 'Serie mensual bruto y neto'] },
       { id: 'fodemeep', nombre: 'FODEMEEP', etapa: 'E2', contenido: ['Neto a transferir por mes (transferido y pendiente)', 'Estado de adhesión', 'Neto a transferir por localidad y mes'] },
       { id: 'fommep', nombre: 'FOMMEP', etapa: 'E2', contenido: ['Móviles y edificios por categoría', 'Filtro por año'] },
     ],
