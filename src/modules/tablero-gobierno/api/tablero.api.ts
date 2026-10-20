@@ -183,6 +183,7 @@ export interface ResumenFila {
   poblacion: number
   copa: number
   fofindes: number
+  fondo_ambiental: number
   total: number
   por_habitante: number | null
 }
@@ -193,6 +194,139 @@ export interface Resumen {
   total: ResumenFila
   por_departamento: ResumenFila[]
   por_localidad: ResumenFila[]
+}
+
+// ── Etapa 3: fondos (spec-datos-externos-fase3-fondos.md §4). Como FOMMEP, cada respuesta trae
+// todos los años y la gestión; la pantalla elige el año.
+
+export interface EstadoMonto {
+  estado: string
+  cantidad: number
+  monto: number
+}
+
+export interface PrestamosKpis {
+  monto: number
+  prestamos: number
+  localidades: number
+}
+
+export interface FpermPrestamo {
+  anio: number | null
+  codigo_indec: string | null
+  localidad: string | null
+  departamento: string | null
+  etapas: string | null
+  fecha: string | null
+  monto_total: number
+  cuota: number | null
+  plazo: number | null
+  mes_inicio_descuento: number | null
+  destino: string | null
+  ord_res: string | null
+}
+
+export interface FpermLocalidad {
+  codigo_indec: string
+  localidad: string
+  departamento: string
+  ultima_etapa: number | null
+  recibio_ultima: boolean
+  recibio_anteultima: boolean
+  etapas_disponibles: number[]
+  disponible: number
+}
+
+export interface FondoPermanente {
+  ultima_etapa_habilitada: number | null
+  saldo_cuenta: number | null
+  localidades_adheridas: number
+  recibieron_ultima: number
+  recibieron_anteultima: number
+  disponible: number
+  localidades_con_disponible: number
+  listo_para_pagar: PrestamosKpis
+  anios: number[]
+  gestion: PrestamosKpis
+  por_anio: { anio: number; otorgado: PrestamosKpis; mensual: (number | null)[] }[]
+  prestamos: FpermPrestamo[]
+  localidades: FpermLocalidad[]
+}
+
+export interface FondoAmbientalKpis {
+  localidades: number
+  entes: number
+  convenios: number
+  afectado: number
+  pagado: number
+  ingresos: number | null
+  disponible: number | null
+  estados: EstadoMonto[]
+}
+
+export interface FondoAmbientalFila {
+  anio: number | null
+  codigo: string
+  es_ente: boolean
+  localidad: string
+  departamento: string | null
+  expediente: string | null
+  convenio: string | null
+  fecha_convenio: string | null
+  resolucion: string | null
+  objeto: string | null
+  monto: number
+  estado: string | null
+  fecha_estado: string | null
+}
+
+export interface FondoAmbiental {
+  anios: number[]
+  gestion: FondoAmbientalKpis | null
+  por_anio: { anio: number; kpis: FondoAmbientalKpis }[]
+  objetos: { objeto: string; cantidad: number; monto: number }[]
+  convenios: FondoAmbientalFila[]
+}
+
+export interface CregTipo {
+  credito: number | null
+  cuotas: number
+  monto_cuotas: number
+  pagado: number
+  a_pagar: number
+  saldo: number | null
+}
+
+export interface CregKpis {
+  funcionamiento: CregTipo
+  obras: CregTipo
+  total: CregTipo
+  comunidades: number
+  estados: EstadoMonto[]
+}
+
+export interface CregCuota {
+  anio: number | null
+  codigo_ente: string
+  comunidad: string
+  departamento: string | null
+  tipo: string | null
+  expediente: string | null
+  destino: string | null
+  monto: number | null
+  cuota: number | null
+  monto_cuota: number | null
+  estado: string | null
+  fecha_pago: string | null
+  fecha_rendicion: string | null
+}
+
+export interface ComunidadesRegionales {
+  departamentos: string[] | null
+  anios: number[]
+  gestion: CregKpis | null
+  por_anio: { anio: number; kpis: CregKpis }[]
+  cuotas: CregCuota[]
 }
 
 export interface AtpGrupo {
@@ -252,6 +386,11 @@ export const tableroApi = {
   fodemeep: (anio: number, codigos?: string[]): Promise<Fodemeep> => seccionTransferencias('fodemeep', anio, codigos),
   fommep: (anio: number, codigos?: string[]): Promise<Fommep> => seccionTransferencias('fommep', anio, codigos),
   resumen: (anio: number, codigos?: string[]): Promise<Resumen> => seccionTransferencias('resumen', anio, codigos),
+  // Etapa 3: el año lo elige cada pantalla; se manda el de la barra solo porque la ruta lo pide.
+  fondoPermanente: (anio: number, codigos?: string[]): Promise<FondoPermanente> => seccionTransferencias('fondo-permanente', anio, codigos),
+  fondoAmbiental: (anio: number, codigos?: string[]): Promise<FondoAmbiental> => seccionTransferencias('fondo-ambiental', anio, codigos),
+  comunidadesRegionales: (anio: number, codigos?: string[]): Promise<ComunidadesRegionales> =>
+    seccionTransferencias('comunidades-regionales', anio, codigos),
   atpCompromisos: (idsGeo?: string[]): Promise<AtpCompromisos> =>
     apiClient
       .get('/api/v1/gralgob/tablero/atp-compromisos', { params: params({}, { clave: 'id_geo', valores: idsGeo }) })

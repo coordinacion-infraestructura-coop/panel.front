@@ -7,7 +7,10 @@ import { IndicadorFrescura } from '../components/IndicadorFrescura'
 import { useFiltrosGobierno } from '../hooks/useFiltrosGobierno'
 import { SECCIONES, type SubSeccion } from '../secciones'
 import { AtpCompromisosVista } from '../vistas/AtpCompromisosVista'
+import { ComunidadesRegionalesVista } from '../vistas/ComunidadesRegionalesVista'
 import { FodemeepVista } from '../vistas/FodemeepVista'
+import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
+import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
 import { InicioVista } from '../vistas/InicioVista'
@@ -142,6 +145,12 @@ export function TableroGobiernoPage() {
         <FommepVista ctx={ctx} />
       ) : sub.id === 'atp-compromisos' ? (
         <AtpCompromisosVista ctx={ctx} />
+      ) : sub.id === 'fondo-permanente' ? (
+        <FondoPermanenteVista ctx={ctx} />
+      ) : sub.id === 'fondo-ambiental' ? (
+        <FondoAmbientalVista ctx={ctx} />
+      ) : sub.id === 'comunidades-regionales' ? (
+        <ComunidadesRegionalesVista ctx={ctx} />
       ) : (
         <EnPreparacion sub={sub} />
       )}

@@ -8,7 +8,8 @@ const montos: Columna<ResumenFila>[] = [
   { titulo: 'Población', valor: (f) => f.poblacion, render: (f) => fmtN(f.poblacion), numerica: true },
   { titulo: 'COPA neta', valor: (f) => f.copa, render: (f) => fmtMonto(f.copa), numerica: true },
   { titulo: 'FOFINDES neto', valor: (f) => f.fofindes, render: (f) => fmtMonto(f.fofindes), numerica: true },
-  { titulo: 'COPA + FOFINDES', valor: (f) => f.total, render: (f) => fmtMonto(f.total), numerica: true },
+  { titulo: 'Fondo Ambiental', valor: (f) => f.fondo_ambiental, render: (f) => fmtMonto(f.fondo_ambiental), numerica: true },
+  { titulo: 'Total', valor: (f) => f.total, render: (f) => fmtMonto(f.total), numerica: true },
   { titulo: 'Por habitante', valor: (f) => f.por_habitante, render: (f) => fmtPesos(f.por_habitante), numerica: true },
 ]
 
@@ -27,12 +28,12 @@ const COL_LOC: Columna<ResumenFila>[] = [
 
 const totalFila = (t: ResumenFila, vacias: number) => [
   'Total', ...Array<string>(vacias).fill(''),
-  fmtN(t.poblacion), fmtMonto(t.copa), fmtMonto(t.fofindes), fmtMonto(t.total), fmtPesos(t.por_habitante),
+  fmtN(t.poblacion), fmtMonto(t.copa), fmtMonto(t.fofindes), fmtMonto(t.fondo_ambiental), fmtMonto(t.total), fmtPesos(t.por_habitante),
 ]
 
-/** Resumen general (Etapa 2): por ahora COPA + FOFINDES netos, desde las planillas de
- * Gobierno. Los demás fondos del total del Looker llegan con la Fase 3 y el semáforo
- * ATP/COPA+FOFIN con la Fase 4 (spec-datos-externos-fase2-transferencias.md §5.2). */
+/** Resumen general: COPA + FOFINDES netos (Etapa 2) y Fondo Ambiental pagado a localidades
+ * (Etapa 3, spec-datos-externos-fase3-fondos.md §4). ATP, FOCOM, adelantos y Fondo Federal siguen
+ * sin fuente; el semáforo ATP/COPA+FOFIN llega con la Fase 4. */
 export function ResumenVista({ ctx }: { ctx: ContextoTablero }) {
   const q = useQuery({ queryKey: ['tablero-gobierno', 'resumen', ctx.anio, ctx.codigos], queryFn: () => tableroApi.resumen(ctx.anio, ctx.codigos) })
   if (q.isError) return <Aviso tono="error">No pudimos cargar el resumen. Probá de nuevo en un rato.</Aviso>
@@ -44,15 +45,17 @@ export function ResumenVista({ ctx }: { ctx: ContextoTablero }) {
   return (
     <div className="space-y-4">
       <Kpis>
-        <Kpi label="COPA + FOFINDES netos" valor={fmtMonto(t.total)} detalle={d.periodo_hasta ? `${d.anio}, hasta ${fmtPeriodo(d.periodo_hasta)}` : `sin datos en ${d.anio}`} />
+        <Kpi label="Total transferido" valor={fmtMonto(t.total)} detalle={d.periodo_hasta ? `${d.anio}, hasta ${fmtPeriodo(d.periodo_hasta)}` : `sin datos en ${d.anio}`} />
         <Kpi label="Por habitante" valor={fmtPesos(t.por_habitante)} detalle="total ÷ población 2022" />
         <Kpi label="Coparticipación neta" valor={fmtMonto(t.copa)} />
         <Kpi label="FOFINDES neto" valor={fmtMonto(t.fofindes)} />
+        <Kpi label="Fondo Ambiental" valor={fmtMonto(t.fondo_ambiental)} detalle="pagado a localidades" />
       </Kpis>
 
       <Aviso tono="warn">
-        Este total todavía es solo <b>COPA + FOFINDES</b>. ATP, FOCOM, adelantos, Fondo Federal y Fondo Ambiental se suman con la Fase 3, y el
-        semáforo ATP / (COPA + FOFINDES) con la Fase 4, cuando esté la regla para no contar dos veces ATP Interno y Compromisos.
+        Este total es <b>COPA + FOFINDES + Fondo Ambiental</b>. FOCOM, adelantos y Fondo Federal esperan su fuente del área; ATP y el semáforo
+        ATP / (COPA + FOFINDES) llegan con la Fase 4, cuando esté la regla para no contar dos veces ATP Interno y Compromisos. Lo de comunidades
+        regionales no entra, igual que en el Looker.
       </Aviso>
 
       {porLocalidad ? (
@@ -69,7 +72,7 @@ export function ResumenVista({ ctx }: { ctx: ContextoTablero }) {
           </Panel>
         </>
       )}
-      <Fuente>planillas "11.1 COPARTICIPACION" y "11.1 FOFINDES" de Gobierno; población del Censo 2022 (INDEC).</Fuente>
+      <Fuente>planillas "11.1 COPARTICIPACION", "11.1 FOFINDES" y "9. FONDO AMBIENTAL" de Gobierno; población del Censo 2022 (INDEC).</Fuente>
     </div>
   )
 }

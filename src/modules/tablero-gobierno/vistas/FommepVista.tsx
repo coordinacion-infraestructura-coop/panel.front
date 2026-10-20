@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { BarChart } from '../../../shared/components/informe/BarChart'
 import { tableroApi, type FommepLocalidad } from '../api/tablero.api'
-import { Aviso, Cargando, Fuente, Kpi, Kpis, Panel, Tabla, type Columna } from '../components/Bloques'
+import { Aviso, Cargando, Fuente, Kpi, Kpis, Panel, SelectorAnio, Tabla, type Columna } from '../components/Bloques'
 import { fmtMonto, fmtN } from '../formato'
 import type { ContextoTablero } from './contexto'
 
@@ -39,22 +39,10 @@ export function FommepVista({ ctx }: { ctx: ContextoTablero }) {
   ]
   const porAnio = [...d.por_anio].reverse()
 
-  const botonCls = (activo: boolean) =>
-    `text-sm px-3 py-1.5 rounded-md border transition-colors ${activo ? 'bg-gov-blue border-gov-blue text-white' : 'bg-white border-slate-300 text-gov-navy hover:border-gov-blue'}`
-
   return (
     <div className="space-y-4">
       <Panel titulo="Año" ayuda="Filtro propio de esta página: por defecto muestra toda la gestión.">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Año de FOMMEP">
-          <button type="button" aria-pressed={anio === 'gestion'} onClick={() => setAnio('gestion')} className={botonCls(anio === 'gestion')}>
-            Toda la gestión
-          </button>
-          {[...d.anios].reverse().map((a) => (
-            <button key={a} type="button" aria-pressed={anio === a} onClick={() => setAnio(a)} className={botonCls(anio === a)}>
-              {a}
-            </button>
-          ))}
-        </div>
+        <SelectorAnio anios={[...d.anios].reverse()} valor={anio} onChange={setAnio} etiqueta="Año de FOMMEP" />
       </Panel>
 
       <Kpis>

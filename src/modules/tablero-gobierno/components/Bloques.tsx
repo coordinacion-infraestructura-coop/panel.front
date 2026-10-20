@@ -222,3 +222,38 @@ export function EstadoPill({ estado }: { estado: string }) {
     : 'bg-slate-100 text-slate-600'
   return <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>{estado}</span>
 }
+
+/** Filtro de año propio de una página (FOMMEP y fondos, spec-tablero-gobierno-panel.md §2.5 #6):
+ * por defecto toda la gestión. */
+export function SelectorAnio({ anios, valor, onChange, etiqueta }: { anios: number[]; valor: number | 'gestion'; onChange: (v: number | 'gestion') => void; etiqueta: string }) {
+  const cls = (activo: boolean) =>
+    `text-sm px-3 py-1.5 rounded-md border transition-colors ${activo ? 'bg-gov-blue border-gov-blue text-white' : 'bg-white border-slate-300 text-gov-navy hover:border-gov-blue'}`
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={etiqueta}>
+      <button type="button" aria-pressed={valor === 'gestion'} onClick={() => onChange('gestion')} className={cls(valor === 'gestion')}>
+        Toda la gestión
+      </button>
+      {anios.map((a) => (
+        <button key={a} type="button" aria-pressed={valor === a} onClick={() => onChange(a)} className={cls(valor === a)}>
+          {a}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Estado de una planilla de fondos (`PAGADO RENDIDO`, `LISTO PARA PAGAR`, `ANULADO`, …). */
+export function EstadoFondo({ estado }: { estado: string | null }) {
+  if (!estado) return <>—</>
+  const e = estado.toUpperCase()
+  const cls = e.startsWith('PAGADO') ? 'bg-emerald-50 text-emerald-700'
+    : e.startsWith('LISTO') ? 'bg-sky-50 text-sky-700'
+    : e === 'ANULADO' ? 'bg-slate-100 text-slate-500 line-through'
+    : 'bg-amber-50 text-amber-700'
+  return <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>{estado.charAt(0) + estado.slice(1).toLowerCase()}</span>
+}
+
+export const colorEstadoFondo = (estado: string) => {
+  const e = estado.toUpperCase()
+  return e.startsWith('PAGADO') ? '#2e8b57' : e.startsWith('LISTO') ? '#01aae3' : e === 'ANULADO' ? '#c9d6e2' : '#c98a12'
+}
