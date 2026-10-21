@@ -9,14 +9,19 @@ import { SECCIONES, type SubSeccion } from '../secciones'
 import { AtpCompromisosVista } from '../vistas/AtpCompromisosVista'
 import { AtpInternoVista } from '../vistas/AtpInternoVista'
 import { ComunidadesRegionalesVista } from '../vistas/ComunidadesRegionalesVista'
+import { ConveniosVista } from '../vistas/ConveniosVista'
 import { FodemeepVista } from '../vistas/FodemeepVista'
 import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
 import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
 import { InicioVista } from '../vistas/InicioVista'
+import { ObrasVista } from '../vistas/ObrasVista'
 import { ResumenVista } from '../vistas/ResumenVista'
+import { ReunionesVista } from '../vistas/ReunionesVista'
 import { TransferenciasVista } from '../vistas/TransferenciasVista'
+import { VisitasGobernadorVista } from '../vistas/VisitasGobernadorVista'
+import { VisitasVista } from '../vistas/VisitasVista'
 
 const ANIO_ACTUAL = new Date().getFullYear()
 
@@ -154,6 +159,16 @@ export function TableroGobiernoPage() {
         <FondoAmbientalVista ctx={ctx} />
       ) : sub.id === 'comunidades-regionales' ? (
         <ComunidadesRegionalesVista ctx={ctx} />
+      ) : sub.id === 'obras' ? (
+        <ObrasVista ctx={ctx} />
+      ) : sub.id === 'visitas' ? (
+        <VisitasVista ctx={ctx} />
+      ) : sub.id === 'visitas-gobernador' ? (
+        <VisitasGobernadorVista ctx={ctx} />
+      ) : sub.id === 'reuniones' ? (
+        <ReunionesVista ctx={ctx} />
+      ) : sub.id === 'convenios' ? (
+        <ConveniosVista ctx={ctx} />
       ) : (
         <EnPreparacion sub={sub} />
       )}

@@ -50,6 +50,17 @@ export interface Inicio {
     por_habitante: number | null
   }
   por_departamento: InicioDepartamento[]
+  /** Etapa 5: toda la gestión; null sin planillas de gestión sincronizadas. */
+  gestion: InicioGestion | null
+}
+
+export interface InicioGestion {
+  visitas: number
+  localidades_visitadas: number
+  reuniones: number
+  localidades_con_reunion: number
+  gobernador_visitadas: number
+  gobernador_total: number
 }
 
 export interface ConceptoMonto {
@@ -395,6 +406,143 @@ export interface AtpInterno {
   estado_sincronizacion: 'ok' | 'error' | 'frenado' | 'sin_datos'
 }
 
+// ── Etapa 5: gestión territorial (spec-datos-externos-fase5-gestion-territorial.md §4) ──────
+// Como en las Etapas 3 y 4, cada respuesta trae la gestión y cada año; la pantalla elige.
+
+export interface Conteo {
+  clave: string
+  cantidad: number
+}
+
+export interface Cobertura {
+  total: number
+  visitadas: number
+  municipios: number
+  municipios_visitados: number
+  comunas: number
+  comunas_visitadas: number
+}
+
+export interface CoberturaDepartamento extends Cobertura {
+  departamento: string
+}
+
+export interface VisitaFila {
+  fecha: string
+  origen: 'funcionarios' | 'ministro'
+  funcionario: string | null
+  tipo: string | null
+  codigo_indec: string
+  localidad: string | null
+  departamento: string | null
+}
+
+export interface VisitasPeriodo {
+  visitas: number
+  cobertura: Cobertura
+  por_departamento: CoberturaDepartamento[]
+  por_funcionario: { funcionario: string; actividades: number; localidades: number; municipios: number; comunas: number }[]
+  por_tipo: Conteo[]
+  mensual: number[]
+}
+
+export interface Visitas {
+  anios: number[]
+  gestion: VisitasPeriodo
+  por_anio: { anio: number; periodo: VisitasPeriodo }[]
+  visitas: VisitaFila[]
+  ultima_fecha: Record<'funcionarios' | 'ministro', string | null>
+}
+
+export interface VisitasGobernadorFila {
+  codigo_indec: string
+  localidad: string
+  departamento: string
+  tipo: string | null
+  visitada: boolean
+  fecha_ultima: string | null
+  rango_habitantes: string
+}
+
+export interface VisitasGobernador {
+  cobertura: Cobertura
+  por_departamento: CoberturaDepartamento[]
+  por_rango: { rango: string; total: number; visitadas: number }[]
+  localidades: VisitasGobernadorFila[]
+  con_datos: boolean
+}
+
+export interface ReunionFila {
+  fecha: string
+  codigo: string
+  localidad: string | null
+  departamento: string | null
+  temas: string[]
+  resolucion: string | null
+}
+
+export interface ReunionesPeriodo {
+  reuniones: number
+  localidades: number
+  por_tema: Conteo[]
+  por_resolucion: Conteo[]
+  mensual: number[]
+  por_localidad: { codigo: string; localidad: string | null; departamento: string | null; reuniones: number; pendientes: number; ultima: string }[]
+}
+
+export interface Reuniones {
+  anios: number[]
+  gestion: ReunionesPeriodo
+  por_anio: { anio: number; periodo: ReunionesPeriodo }[]
+  reuniones: ReunionFila[]
+  ultima_fecha: string | null
+}
+
+/** Sin monto hasta que el área confirme la moneda. */
+export interface ObraFila {
+  id_obra: string
+  nombre: string | null
+  ambito: string | null
+  division: string | null
+  estado: string | null
+  categoria: string | null
+  avance: number | null
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  departamentos: string[]
+  localidades: { codigo: string; nombre: string }[]
+}
+
+export interface Obras {
+  kpis: { obras: number; en_ejecucion: number; finalizadas: number; a_ejecutar: number; avance_promedio: number | null; localidades: number }
+  por_estado: Conteo[]
+  por_division: Conteo[]
+  por_departamento: { departamento: string; obras: number; en_ejecucion: number; finalizadas: number }[]
+  obras: ObraFila[]
+}
+
+export interface ConvenioValor {
+  valor: 'SI' | 'NO' | 'NC' | null
+  cantidad: number | null
+  detalle: string | null
+}
+
+export interface ConvenioLocalidad {
+  codigo_indec: string
+  localidad: string
+  departamento: string
+  tipo: string | null
+  valores: Record<string, ConvenioValor>
+}
+
+export interface Convenios {
+  convenios: string[]
+  resumen: { convenio: string; si: number; no: number; nc: number; sin_dato: number; cantidad: number | null }[]
+  localidades: ConvenioLocalidad[]
+}
+
+export type SeccionGestion = 'obras' | 'visitas' | 'visitas-gobernador' | 'reuniones' | 'convenios'
+
 /** FastAPI espera listas como parámetros repetidos (`codigo_indec=a&codigo_indec=b`), no el
  * `codigo_indec[]=` que arma axios por defecto. */
 function params(base: Record<string, string | number>, lista?: { clave: string; valores: string[] | undefined }) {
@@ -409,6 +557,10 @@ function seccionTransferencias<T>(seccion: string, anio: number, codigos?: strin
   return apiClient
     .get(`${BASE}/transferencias/${seccion}`, { params: params({ anio }, { clave: 'codigo_indec', valores: codigos }) })
     .then((r) => r.data)
+}
+
+function seccionGestion<T>(seccion: SeccionGestion, codigos?: string[]): Promise<T> {
+  return apiClient.get(`${BASE}/gestion/${seccion}`, { params: params({}, { clave: 'codigo_indec', valores: codigos }) }).then((r) => r.data)
 }
 
 export const tableroApi = {
@@ -429,6 +581,11 @@ export const tableroApi = {
     apiClient
       .get('/api/v1/gralgob/tablero/atp-compromisos', { params: params({}, { clave: 'id_geo', valores: idsGeo }) })
       .then((r) => r.data),
+  obras: (codigos?: string[]): Promise<Obras> => seccionGestion('obras', codigos),
+  visitas: (codigos?: string[]): Promise<Visitas> => seccionGestion('visitas', codigos),
+  visitasGobernador: (codigos?: string[]): Promise<VisitasGobernador> => seccionGestion('visitas-gobernador', codigos),
+  reuniones: (codigos?: string[]): Promise<Reuniones> => seccionGestion('reuniones', codigos),
+  convenios: (codigos?: string[]): Promise<Convenios> => seccionGestion('convenios', codigos),
   atpInterno: (codigos?: string[]): Promise<AtpInterno> =>
     apiClient
       .get('/api/v1/gralgob/tablero/atp-interno', { params: params({}, { clave: 'codigo_indec', valores: codigos }) })

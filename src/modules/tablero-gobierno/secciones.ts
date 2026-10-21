@@ -81,12 +81,17 @@ export const SECCIONES: Seccion[] = [
     id: 'gestion',
     nombre: 'Gestión territorial',
     subs: [
-      { id: 'obras', nombre: 'Obras', etapa: 'E5', contenido: ['Por departamento (con prorrateo) y por localidad', 'Obras generales', 'Estado y tipo'] },
-      { id: 'visitas', nombre: 'Visitas', etapa: 'E5', contenido: ['Cobertura total, municipios y comunas', 'Mapa', 'Visitas registradas y por funcionario'] },
-      { id: 'visitas-gobernador', nombre: 'Visitas del Gobernador', etapa: 'E5', contenido: ['Cobertura y mapa', 'Visitadas y aún no visitadas'] },
-      { id: 'reuniones', nombre: 'Reuniones', etapa: 'E5', contenido: ['Reuniones por mes y localidad'] },
-      { id: 'convenios', nombre: 'Convenios', etapa: 'E5', contenido: ['Matriz SI / NO por localidad'] },
-      { id: 'ipcam', nombre: 'Capacitación IPCAM', etapa: 'E5', contenido: ['Personas capacitadas por año e iniciativa', 'Top 10 por certificados (sin DNI)'] },
+      { id: 'obras', nombre: 'Obras', etapa: 'E5', contenido: ['Por departamento y por localidad', 'Obras generales', 'Estado y división (sin montos hasta confirmar la moneda)'] },
+      { id: 'visitas', nombre: 'Visitas', etapa: 'E5', contenido: ['Cobertura total, municipios y comunas', 'Visitas registradas y por funcionario'] },
+      { id: 'visitas-gobernador', nombre: 'Visitas del Gobernador', etapa: 'E5', contenido: ['Cobertura', 'Visitadas y aún no visitadas'] },
+      { id: 'reuniones', nombre: 'Reuniones', etapa: 'E5', contenido: ['Reuniones por mes, tema y resolución'] },
+      { id: 'convenios', nombre: 'Convenios', etapa: 'E5', contenido: ['Matriz SI / NO por localidad', 'Localidades por firmar'] },
+      {
+        id: 'ipcam',
+        nombre: 'Capacitación IPCAM',
+        etapa: 'E5 · esperando la planilla del área',
+        contenido: ['Falta la fuente: el área la va a compartir.', 'Personas capacitadas por año e iniciativa', 'Top 10 por certificados (sin DNI)'],
+      },
     ],
   },
   {

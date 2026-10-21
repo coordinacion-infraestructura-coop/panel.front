@@ -15,8 +15,8 @@ const METRICAS: Record<Metrica, { nombre: string; formato: (v: number) => string
   atp: { nombre: 'ATP comprometido', formato: (v) => fmtMonto(v) },
 }
 
-/** Inicio (Etapa 1): lo que ya tenemos — nomenclador, Censo, transferencias de Transparencia
- * y ATP Compromisos. Visitas, convenios y "Para mirar" llegan con la Etapa 5. */
+/** Inicio: nomenclador, Censo, transferencias de Transparencia y ATP Compromisos (Etapa 1);
+ * visitas, reuniones y visitas del Gobernador en toda la gestión (Etapa 5). */
 export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
   const [metrica, setMetrica] = useState<Metrica>('por_habitante')
   const inicio = useQuery({ queryKey: ['tablero-gobierno', 'inicio', ctx.anio, ctx.codigos], queryFn: () => tableroApi.inicio(ctx.anio, ctx.codigos) })
@@ -38,10 +38,11 @@ export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
     atp: atpPorDepto.get(normalizeDepartamento(d.departamento)) ?? 0,
   }))
   const a = atp.data?.kpis
+  const g = inicio.data.gestion
   const tarjetas: [string, string, string, string, string?][] = [
     ['Transferencias', `Automáticas en ${ctx.anio}`, fmtMonto(k.transferido), 'transferencias', 'coparticipacion'],
     ['Fondos y aportes', 'Compromisos del Gobernador', a ? fmtMonto(a.monto) : '…', 'fondos', 'atp-compromisos'],
-    ['Gestión territorial', 'Obras, visitas, convenios', 'Etapa 5', 'gestion'],
+    ['Gestión territorial', 'Localidades visitadas en la gestión', g ? `${fmtN(g.localidades_visitadas)} de ${fmtN(k.localidades)}` : '…', 'gestion', 'visitas'],
     ['Expedientes', 'Expedientes visados', 'a definir', 'expedientes'],
   ]
 
@@ -61,6 +62,18 @@ export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
           detalle={a ? <><span className="text-emerald-700 font-semibold">{fmtPct(a.monto ? a.pagado / a.monto : null)}</span> pagado · {fmtN(a.compromisos)} compromisos</> : undefined}
         />
       </Kpis>
+
+      {g && (
+        <Kpis>
+          <Kpi label="Visitas en territorio" valor={fmtN(g.visitas)} detalle={`${fmtN(g.localidades_visitadas)} localidades · en la gestión`} />
+          <Kpi label="Reuniones en el Panal" valor={fmtN(g.reuniones)} detalle={`${fmtN(g.localidades_con_reunion)} localidades · en la gestión`} />
+          <Kpi
+            label="Visitas del Gobernador"
+            valor={fmtN(g.gobernador_visitadas)}
+            detalle={`de ${fmtN(g.gobernador_total)} localidades · ${fmtPct(g.gobernador_total ? g.gobernador_visitadas / g.gobernador_total : null)}`}
+          />
+        </Kpis>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel
@@ -111,10 +124,6 @@ export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
           ))}
         </div>
       </div>
-
-      <Aviso>
-        Las visitas, los convenios y los cruces de "Para mirar" se suman en la Etapa 5, cuando estén conectadas las planillas de recorridos y convenios.
-      </Aviso>
     </div>
   )
 }
