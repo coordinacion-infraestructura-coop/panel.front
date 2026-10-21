@@ -184,6 +184,9 @@ export interface ResumenFila {
   copa: number
   fofindes: number
   fondo_ambiental: number
+  /** Fase 4: ATP Interno pagado en el año; null si svc-gralgob no respondió. */
+  atp: number | null
+  atp_sobre_copa_fofin: number | null
   total: number
   por_habitante: number | null
 }
@@ -191,6 +194,8 @@ export interface ResumenFila {
 export interface Resumen {
   anio: number
   periodo_hasta: string | null
+  /** false: el total no incluye ATP porque no se pudo leer. */
+  atp_disponible: boolean
   total: ResumenFila
   por_departamento: ResumenFila[]
   por_localidad: ResumenFila[]
@@ -361,6 +366,35 @@ export interface AtpCompromisos {
   estado_sincronizacion: 'ok' | 'con_errores' | 'en_curso' | 'sin_datos'
 }
 
+// ── Etapa 4: ATP Interno (spec-atp-interno.md §4.1). Sin referente. ─────────────────────────
+
+export interface AtpInternoPago {
+  fecha: string | null
+  anio: number
+  codigo_indec: string
+  localidad: string | null
+  departamento: string | null
+  monto: number
+}
+
+export interface AtpInternoPeriodo {
+  kpis: { localidades: number; pagos: number; monto: number; sin_fecha: number; monto_sin_fecha: number }
+  /** 12 valores por mes; vacío para la gestión completa. */
+  mensual: number[]
+  por_departamento: { departamento: string; localidades: number; pagos: number; monto: number }[]
+  por_localidad: { codigo_indec: string; localidad: string | null; departamento: string | null; pagos: number; monto: number; ultimo_pago: string | null }[]
+}
+
+export interface AtpInterno {
+  anios: number[]
+  gestion: AtpInternoPeriodo | null
+  por_anio: { anio: number; periodo: AtpInternoPeriodo }[]
+  pagos: AtpInternoPago[]
+  saldo_disponible: number | null
+  ultima_sincronizacion: string | null
+  estado_sincronizacion: 'ok' | 'error' | 'frenado' | 'sin_datos'
+}
+
 /** FastAPI espera listas como parámetros repetidos (`codigo_indec=a&codigo_indec=b`), no el
  * `codigo_indec[]=` que arma axios por defecto. */
 function params(base: Record<string, string | number>, lista?: { clave: string; valores: string[] | undefined }) {
@@ -394,5 +428,9 @@ export const tableroApi = {
   atpCompromisos: (idsGeo?: string[]): Promise<AtpCompromisos> =>
     apiClient
       .get('/api/v1/gralgob/tablero/atp-compromisos', { params: params({}, { clave: 'id_geo', valores: idsGeo }) })
+      .then((r) => r.data),
+  atpInterno: (codigos?: string[]): Promise<AtpInterno> =>
+    apiClient
+      .get('/api/v1/gralgob/tablero/atp-interno', { params: params({}, { clave: 'codigo_indec', valores: codigos }) })
       .then((r) => r.data),
 }

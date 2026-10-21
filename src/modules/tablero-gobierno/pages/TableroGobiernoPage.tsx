@@ -7,6 +7,7 @@ import { IndicadorFrescura } from '../components/IndicadorFrescura'
 import { useFiltrosGobierno } from '../hooks/useFiltrosGobierno'
 import { SECCIONES, type SubSeccion } from '../secciones'
 import { AtpCompromisosVista } from '../vistas/AtpCompromisosVista'
+import { AtpInternoVista } from '../vistas/AtpInternoVista'
 import { ComunidadesRegionalesVista } from '../vistas/ComunidadesRegionalesVista'
 import { FodemeepVista } from '../vistas/FodemeepVista'
 import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
@@ -145,6 +146,8 @@ export function TableroGobiernoPage() {
         <FommepVista ctx={ctx} />
       ) : sub.id === 'atp-compromisos' ? (
         <AtpCompromisosVista ctx={ctx} />
+      ) : sub.id === 'atp-interno' ? (
+        <AtpInternoVista ctx={ctx} />
       ) : sub.id === 'fondo-permanente' ? (
         <FondoPermanenteVista ctx={ctx} />
       ) : sub.id === 'fondo-ambiental' ? (

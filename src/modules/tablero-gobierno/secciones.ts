@@ -51,7 +51,7 @@ export const SECCIONES: Seccion[] = [
     nombre: 'Fondos y aportes',
     subs: [
       { id: 'atp-compromisos', nombre: 'ATP Compromisos', etapa: 'E1', contenido: ['Compromisos del Gobernador por ministerio y estado de pago', 'Tabla de compromisos'] },
-      { id: 'atp-interno', nombre: 'ATP Interno', etapa: 'E4', restringida: true, contenido: ['Pagos por mes', 'ATP por habitante en el mapa', 'Detalle por localidad'] },
+      { id: 'atp-interno', nombre: 'ATP Interno', etapa: 'E4', restringida: true, contenido: ['Pagos por mes y por departamento', 'Detalle por localidad y pagos'] },
       { id: 'fondo-permanente', nombre: 'Fondo Permanente', etapa: 'E3', contenido: ['Etapas, saldo en cuenta y disponible', 'Localidades que recibieron la última y la anteúltima etapa', 'Préstamos y etapas por localidad'] },
       { id: 'fondo-ambiental', nombre: 'Fondo Ambiental', etapa: 'E3', contenido: ['Estados con torta', 'Convenios y destinos'] },
       { id: 'comunidades-regionales', nombre: 'Comunidades Regionales', etapa: 'E3', contenido: ['Cuotas por estado', 'Fondos para obras'] },
