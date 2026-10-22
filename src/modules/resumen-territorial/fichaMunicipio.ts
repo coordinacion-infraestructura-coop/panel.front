@@ -26,8 +26,9 @@ const fmtFecha = (s: string | null | undefined) => {
 const semLabel = (c?: string | null) =>
   c ? ({ verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo' } as Record<string, string>)[c.toLowerCase()] ?? c : '—'
 
-/** avance ≈ posición del estado_general en su catálogo (0–100 %). */
-function avancePct(estadoId: number | null | undefined, estados: { id: number; orden: number }[]): string {
+/** avance ≈ posición del estado_general en el listado General de su catálogo (0–100 %). */
+function avancePct(estadoId: number | null | undefined, catalogo: { id: number; orden: number; dimension?: string }[]): string {
+  const estados = catalogo.filter((x) => x.dimension === 'general')
   if (estadoId == null || !estados.length) return '—'
   const e = estados.find((x) => x.id === estadoId)
   if (!e) return '—'
