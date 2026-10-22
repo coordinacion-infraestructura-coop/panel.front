@@ -696,6 +696,8 @@ function seccionGestion<T>(seccion: SeccionGestion, codigos?: string[]): Promise
 
 export const tableroApi = {
   meta: (): Promise<TableroMeta> => apiClient.get(`${BASE}/meta`).then((r) => r.data),
+  actualizar: (): Promise<{ disparados: string[]; fallidos: string[]; pedido_en: string; proxima_desde: string }> =>
+    apiClient.post(`${BASE}/actualizar`).then((r) => r.data),
   inicio: (anio: number, codigos?: string[]): Promise<Inicio> =>
     apiClient.get(`${BASE}/inicio`, { params: params({ anio }, { clave: 'codigo_indec', valores: codigos }) }).then((r) => r.data),
   transferencias: (seccion: 'coparticipacion' | 'fofindes', anio: number, codigos?: string[]): Promise<Transferencias> =>
