@@ -28,6 +28,17 @@ export interface TableroMeta {
   localidades: LocalidadFiltro[]
   anios: number[]
   frescura: FuenteFrescura[]
+  /** Último pedido del botón "Actualizar datos" (spec-tablero-gobierno-actualizar.md) */
+  actualizacion: ActualizacionManual | null
+}
+
+export interface ActualizacionManual {
+  pedido_en: string
+  disparados: string[]
+  fallidos: string[]
+  terminado_en: string | null
+  en_curso: boolean
+  proxima_desde: string
 }
 
 export interface InicioDepartamento {
@@ -696,7 +707,7 @@ function seccionGestion<T>(seccion: SeccionGestion, codigos?: string[]): Promise
 
 export const tableroApi = {
   meta: (): Promise<TableroMeta> => apiClient.get(`${BASE}/meta`).then((r) => r.data),
-  actualizar: (): Promise<{ disparados: string[]; fallidos: string[]; pedido_en: string; proxima_desde: string }> =>
+  actualizar: (): Promise<ActualizacionManual> =>
     apiClient.post(`${BASE}/actualizar`).then((r) => r.data),
   inicio: (anio: number, codigos?: string[]): Promise<Inicio> =>
     apiClient.get(`${BASE}/inicio`, { params: params({ anio }, { clave: 'codigo_indec', valores: codigos }) }).then((r) => r.data),

@@ -41,6 +41,15 @@ export function AtpCompromisosVista({ ctx }: { ctx: ContextoTablero }) {
               : 'La última sincronización de la planilla tuvo filas con error.'}
         </Aviso>
       )}
+      {ctx.codigos && k.compromisos === 0 && (
+        <Aviso>
+          No hay compromisos del Gobernador para este filtro. Los pagos de ATP (la página "ATP" del Looker) están en{' '}
+          <button type="button" onClick={() => ctx.irA('fondos', 'atp-interno')} className="font-semibold text-gov-blue underline">
+            ATP Interno
+          </button>
+          .
+        </Aviso>
+      )}
       <Kpis>
         <Kpi label="Localidades con compromisos" valor={fmtN(k.localidades)} />
         <Kpi label="Compromisos" valor={fmtN(k.compromisos)} detalle={k.derivados ? `${fmtN(k.derivados)} derivados` : undefined} />
