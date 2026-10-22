@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { checklistTecnicoApi } from '../api/vivienda.api'
 import { AvanceBar } from '../avanceObra'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { puedeEditarArea } from '../../../shared/utils/permisos'
 import type {
   CatalogoItemEstado,
   ChecklistItemDetalle,
@@ -121,8 +122,10 @@ interface LocalidadGroup {
 export function ChecklistTecnicoPage() {
   const { data: portalUser } = usePortalUser()
   // Allow-list explícito: 'Autoridad' es lectura consolidada cross-área (como 'Consulta'/'invitado',
-  // el backend igual 403ea la escritura), no debe ver los campos habilitados.
-  const canEdit = ['Admin', 'Supervisor', 'Operador', 'TecnicoDGV'].includes(portalUser?.rol ?? '')
+  // el backend igual 403ea la escritura), no debe ver los campos habilitados. Además, el área
+  // "checklist" en edición (spec-portal-areas-de-acceso.md).
+  const canEdit = ['Admin', 'Supervisor', 'Operador'].includes(portalUser?.rol ?? '')
+    && puedeEditarArea(portalUser, 'vivienda', 'checklist')
   const qc = useQueryClient()
   const searchId = useId()
 

@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { usePortalUser } from '../hooks/usePortalUser'
+import { cumpleArea, type AreaRequerida } from '../utils/permisos'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -8,13 +9,15 @@ interface ProtectedRouteProps {
   roles?: string[]
   /** Si se especifica, además de estar autenticado el usuario debe tener una de estas secretarías en su lista. */
   requiredSecretarias?: string[]
+  /** Si se especifica, el usuario debe tener alguna de esas áreas de acceso (spec-portal-areas-de-acceso.md). */
+  requiredArea?: AreaRequerida
 }
 
-export function ProtectedRoute({ children, roles, requiredSecretarias }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, roles, requiredSecretarias, requiredArea }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
   const portalQuery = usePortalUser(!loading && !!user)
 
-  const checkingRole = !!(roles || requiredSecretarias) && !!user && portalQuery.isLoading
+  const checkingRole = !!(roles || requiredSecretarias || requiredArea) && !!user && portalQuery.isLoading
 
   if (loading || checkingRole) {
     return (
@@ -49,6 +52,8 @@ export function ProtectedRoute({ children, roles, requiredSecretarias }: Protect
       hasAccess = hasSecretaria
     }
   }
+
+  if (requiredArea && !cumpleArea(portalQuery.data, requiredArea)) hasAccess = false
 
   if (!hasAccess) {
     return <Navigate to="/" replace />

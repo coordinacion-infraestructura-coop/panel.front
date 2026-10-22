@@ -26,6 +26,7 @@ import { NotificacionesPage } from './modules/notificaciones/pages/Notificacione
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
 import { LocalidadesSinResolverPage } from './modules/admin/pages/LocalidadesSinResolverPage'
+import { AREA_DE_RUTA } from './shared/utils/permisos'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,23 +81,49 @@ export default function App() {
                 }
               />
               <Route path="notificaciones" element={<NotificacionesPage />} />
-              <Route path="vivienda/programas" element={<ProgramasPage />} />
+              <Route
+                path="vivienda/programas"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/programas']}><ProgramasPage /></ProtectedRoute>}
+              />
               <Route path="vivienda/beneficiarios" element={<BeneficiariosListPage />} />
               <Route path="vivienda/beneficiarios/nuevo" element={<BeneficiarioFormPage />} />
               <Route path="vivienda/expedientes" element={<ExpedientesListPage />} />
-              <Route path="vivienda/cordon-cuneta" element={<CordonCunetaPage />} />
+              <Route
+                path="vivienda/cordon-cuneta"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/cordon-cuneta']}><CordonCunetaPage /></ProtectedRoute>}
+              />
               <Route
                 path="vivienda/cordon-cuneta/informe"
-                element={<ProgramaInformePage programa="cordon_cuneta" />}
+                element={
+                  <ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/cordon-cuneta']}>
+                    <ProgramaInformePage programa="cordon_cuneta" />
+                  </ProtectedRoute>
+                }
               />
-              <Route path="vivienda/cordoba-hogar" element={<CordobaHogarPage />} />
+              <Route
+                path="vivienda/cordoba-hogar"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/cordoba-hogar']}><CordobaHogarPage /></ProtectedRoute>}
+              />
               <Route
                 path="vivienda/cordoba-hogar/informe"
-                element={<ProgramaInformePage programa="cordoba_hogar" />}
+                element={
+                  <ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/cordoba-hogar']}>
+                    <ProgramaInformePage programa="cordoba_hogar" />
+                  </ProtectedRoute>
+                }
               />
-              <Route path="vivienda/mi-lugar" element={<MiLugarPage />} />
-              <Route path="vivienda/checklist-tecnico" element={<ChecklistTecnicoPage />} />
-              <Route path="vivienda/tablero-analitico" element={<TableroAnaliticoPage />} />
+              <Route
+                path="vivienda/mi-lugar"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/mi-lugar']}><MiLugarPage /></ProtectedRoute>}
+              />
+              <Route
+                path="vivienda/checklist-tecnico"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/checklist-tecnico']}><ChecklistTecnicoPage /></ProtectedRoute>}
+              />
+              <Route
+                path="vivienda/tablero-analitico"
+                element={<ProtectedRoute requiredArea={AREA_DE_RUTA['/vivienda/tablero-analitico']}><TableroAnaliticoPage /></ProtectedRoute>}
+              />
               <Route
                 path="privada/gestiones"
                 element={

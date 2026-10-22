@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../shared/auth/AuthContext'
-import { usePortalUser } from '../shared/hooks/usePortalUser'
+import { usePortalUser, type PortalUser } from '../shared/hooks/usePortalUser'
+import { puedeVerRuta } from '../shared/utils/permisos'
 
 interface Modulo {
   label: string
@@ -99,15 +100,10 @@ function ChevronRight() {
   )
 }
 
-function SecretariaCard({ sec, fullWidth, rol }: { sec: Secretaria; fullWidth?: boolean; rol?: string }) {
-  // El área técnica DGV solo debe ver Tablero + Checklist Técnico, nunca los paneles
-  // completos (mismo criterio que el nav de Layout.tsx — ver spec-checklist-tecnico-dgv.md §8).
-  const esTecnicoDgv = sec.id === 'vivienda' && rol === 'TecnicoDGV'
-  const visibleModulos = sec.modulos.filter((m) => {
-    if (m.hidden) return false
-    if (esTecnicoDgv) return ['/vivienda/programas', '/vivienda/tablero-analitico', '/vivienda/checklist-tecnico'].includes(m.to)
-    return true
-  })
+function SecretariaCard({ sec, fullWidth, usuario }: { sec: Secretaria; fullWidth?: boolean; usuario?: PortalUser }) {
+  // Solo los módulos de las áreas de acceso del usuario (mismo criterio que el nav de
+  // Layout.tsx — docs/files/spec-portal-areas-de-acceso.md).
+  const visibleModulos = sec.modulos.filter((m) => !m.hidden && puedeVerRuta(usuario, m.to))
   return (
     <section
       aria-label={sec.nombre}
@@ -266,7 +262,7 @@ export function DashboardPage() {
               key={sec.id}
               sec={sec}
               fullWidth={idx === 0 && sec.id === 'vivienda'}
-              rol={portalUser?.rol}
+              usuario={portalUser}
             />
           ))}
 

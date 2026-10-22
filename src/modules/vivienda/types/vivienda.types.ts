@@ -10,7 +10,7 @@ export interface Programa {
   updated_at: string
 }
 
-/** KPIs agregados del Tablero de Programas — endpoint propio, accesible a TecnicoDGV. */
+/** KPIs agregados del Tablero de Programas — endpoint propio, accesible con cualquier área de Vivienda. */
 export interface TableroVivienda {
   cordon_cuneta: {
     municipios: number
@@ -682,7 +682,7 @@ export interface InformeSnapshot {
 export type ProgramaChecklist = 'cc' | 'ch' | 'ml'
 export type TipoHitoChecklist = 'anticipo' | '40' | '70' | '100'
 
-/** Fila del selector localidad/programa — endpoint propio del módulo, accesible a TecnicoDGV. */
+/** Fila del selector localidad/programa — endpoint propio del módulo, accesible con el área "checklist". */
 export interface EntidadChecklistItem {
   programa: ProgramaChecklist
   id: string

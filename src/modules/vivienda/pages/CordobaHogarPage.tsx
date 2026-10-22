@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordobaHogarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { puedeEditarArea } from '../../../shared/utils/permisos'
 import { normalizeName } from '../../../shared/utils/normalizeName'
 import {
   CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
@@ -1028,8 +1029,10 @@ function AgregarLocalidadModal({
 export function CordobaHogarPage() {
   const queryClient = useQueryClient()
   const { data: user } = usePortalUser()
-  const canManage = user?.rol === 'Supervisor' || user?.rol === 'Admin'
-  const canEdit = canManage || user?.rol === 'Operador'
+  // Rol y área de acceso (spec-portal-areas-de-acceso.md): manda el menor de los dos.
+  const editaArea = puedeEditarArea(user, 'vivienda', 'ch')
+  const canManage = editaArea && (user?.rol === 'Supervisor' || user?.rol === 'Admin')
+  const canEdit = canManage || (editaArea && user?.rol === 'Operador')
 
   const searchId = useId()
   const deptoId = useId()
