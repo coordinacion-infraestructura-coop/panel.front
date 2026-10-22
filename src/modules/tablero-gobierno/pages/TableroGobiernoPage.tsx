@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
 import { tableroApi } from '../api/tablero.api'
+import { BotonActualizar } from '../components/BotonActualizar'
 import { FiltrosGobierno } from '../components/FiltrosGobierno'
 import { IndicadorFrescura } from '../components/IndicadorFrescura'
 import { useFiltrosGobierno } from '../hooks/useFiltrosGobierno'
@@ -15,7 +16,9 @@ import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
 import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
+import { EleccionesVista } from '../vistas/EleccionesVista'
 import { InicioVista } from '../vistas/InicioVista'
+import { IntendentesVista } from '../vistas/IntendentesVista'
 import { ObrasVista } from '../vistas/ObrasVista'
 import { ResumenVista } from '../vistas/ResumenVista'
 import { ReunionesVista } from '../vistas/ReunionesVista'
@@ -77,7 +80,10 @@ export function TableroGobiernoPage() {
             <h2 className="text-xl font-semibold text-gov-navy">Tablero de Gobierno</h2>
             <p className="text-xs text-gray-500 mt-0.5">Transferencias, fondos, gestión territorial y expedientes por localidad · acceso Admin y Autoridad</p>
           </div>
-          {meta.data && <IndicadorFrescura fuentes={meta.data.frescura} />}
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            {meta.data && <IndicadorFrescura fuentes={meta.data.frescura} />}
+            <BotonActualizar />
+          </div>
         </div>
         {meta.isError ? (
           <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
@@ -169,6 +175,10 @@ export function TableroGobiernoPage() {
         <ReunionesVista ctx={ctx} />
       ) : sub.id === 'convenios' ? (
         <ConveniosVista ctx={ctx} />
+      ) : sub.id === 'intendentes' ? (
+        <IntendentesVista ctx={ctx} />
+      ) : sub.id === 'elecciones' ? (
+        <EleccionesVista ctx={ctx} />
       ) : (
         <EnPreparacion sub={sub} />
       )}
