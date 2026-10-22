@@ -15,12 +15,13 @@ import {
   type SituacionObra,
 } from '../avanceObra'
 import {
-  AreaBadge, AreaResponsableSelect, DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
+  DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
   type DocumentacionPanel,
 } from '../areaEstado'
+import { DIMENSION_DE_CAMPO, EstadosPorAreaEditor, avanceEnListado, estadosDe } from '../estadosPorArea'
 import type {
   EstadoCH, LocalidadCH, LocalidadCHUpdate, LocalidadCHCreate,
-  EstadoCHCreate, EstadoCHUpdate, EstadoHistorialCH, PedidoCH,
+  EstadoHistorialCH, PedidoCH,
   CatalogoEstadoExpediente,
 } from '../types/vivienda.types'
 
@@ -93,14 +94,10 @@ const CH_COLS: Array<{ label: string | [string, string]; sort: string | null }> 
 ]
 
 function avancePct(p: LocalidadCH, estados: EstadoCH[], estadosTecnico: CatalogoEstadoExpediente[]) {
-  const maxPos = Math.max(estados.length - 1, 1)
-  const pos = (id: number | null) => {
-    if (!id) return 0
-    const i = estados.findIndex((e) => e.id === id)
-    return i < 0 ? 0 : i
-  }
+  const juridico = avanceEnListado(p.ejuridico, estados, 'juridico')
+  const financiero = avanceEnListado(p.efinanciero, estados, 'financiero')
   const tecnico = avanceTecnico(p.etecnico, estadosTecnico)
-  return Math.round((((pos(p.ejuridico) + pos(p.efinanciero)) / maxPos + tecnico) / 3) * 100)
+  return Math.round(((juridico + financiero + tecnico) / 3) * 100)
 }
 function avanceColor(pct: number) {
   if (pct === 0) return '#94a3b8'
@@ -299,8 +296,7 @@ function EditModal({
                   <select id={`${uid}-${field}`} className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan" value={form[field] ?? ''}
                     onChange={(e) => set(field, e.target.value ? Number(e.target.value) : null)}>
                     <option value="">—</option>
-                    {estados
-                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
+                    {estadosDe(estados, DIMENSION_DE_CAMPO[field])
                       .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
@@ -315,7 +311,7 @@ function EditModal({
                 onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}
               >
                 <option value="">— Sin estado —</option>
-                {estados.map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
+                {estadosDe(estados, 'general').map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
               </select>
             </div>
           </div>
@@ -564,9 +560,9 @@ function DetailPanel({
 // ── Gestionar parámetros modal ───────────────────────────────────────────────────
 
 function GestionarParametrosModal({
-  estados, montoPorCasa, onClose,
+  estados, montoPorCasa, canManage, esAdmin, onClose,
 }: {
-  estados: EstadoCH[]; montoPorCasa: number; onClose: () => void
+  estados: EstadoCH[]; montoPorCasa: number; canManage: boolean; esAdmin: boolean; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
@@ -583,48 +579,6 @@ function GestionarParametrosModal({
     onError: () => setMontoPorCasaError('Error al guardar el monto por casa.'),
   })
 
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<EstadoCHUpdate>({})
-  const [editSaveError, setEditSaveError] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<Record<number, string>>({})
-  const [showNew, setShowNew] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const [newForm, setNewForm] = useState<EstadoCHCreate>({
-    label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10,
-    aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true,
-  })
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: EstadoCHUpdate }) => cordobaHogarApi.updateEstado(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] }); setEditId(null); setEditSaveError(null) },
-    onError: (err: unknown) => setEditSaveError(extractErrorMessage(err, 'Error al guardar los cambios del estado.')),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => cordobaHogarApi.deleteEstado(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] }),
-    onError: (err: unknown, id: number) => {
-      const detail = (err as any)?.response?.data?.detail
-      const msg = typeof detail?.message === 'string'
-        ? detail.message
-        : 'Error al eliminar el estado.'
-      setDeleteError((prev) => ({ ...prev, [id]: msg }))
-    },
-  })
-
-  const createMut = useMutation({
-    mutationFn: (data: EstadoCHCreate) => cordobaHogarApi.createEstado(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })
-      setShowNew(false)
-      setCreateError(null)
-      setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
-    },
-    onError: (err: unknown) => setCreateError(extractErrorMessage(err, 'Error al crear el estado.')),
-  })
-
-  const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50" role="dialog" aria-modal="true" aria-labelledby={`${uid}-t`}>
       <div className="bg-white rounded-lg w-[640px] max-w-[97vw] max-h-[90vh] overflow-y-auto shadow-xl">
@@ -634,7 +588,7 @@ function GestionarParametrosModal({
         </div>
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-4 pt-3 gap-1">
-          {(['estados', 'parametros'] as const).map((t) => (
+          {(canManage ? ['estados', 'parametros'] as const : ['estados'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -694,141 +648,15 @@ function GestionarParametrosModal({
         )}
         {/* Tab: Estados */}
         {activeTab === 'estados' && (
-        <div className="p-4 space-y-2">
-          {estados.map((e) => (
-            <div key={e.id} className="border border-slate-200 rounded-md overflow-hidden">
-              <div className="flex items-center gap-3 px-3 py-2 bg-slate-50">
-                <span className="inline-block w-3 h-3 rounded-full flex-shrink-0" style={{ background: e.bg, border: `1px solid ${e.text_color}` }} />
-                <span className="flex-1 text-sm font-medium">{e.label}</span>
-                <span className="text-xs text-gray-400 w-10 text-right">{e.orden}</span>
-                <div className="flex items-center gap-1 text-xs text-gray-400">
-                  {e.aplica_juridico && <span title="Jurídico" className="px-1 bg-purple-100 text-purple-700 rounded text-[10px]">J</span>}
-                  {e.aplica_financiero && <span title="Presupuestario" className="px-1 bg-green-100 text-green-700 rounded text-[10px]">P</span>}
-                  <AreaBadge area={e.area_responsable} />
-                </div>
-                <button onClick={() => { setEditId(editId === e.id ? null : e.id); setEditSaveError(null); setEditForm({ label: e.label, bg: e.bg, text_color: e.text_color, orden: e.orden, aplica_juridico: e.aplica_juridico, aplica_tecnico: e.aplica_tecnico, aplica_financiero: e.aplica_financiero, area_responsable: e.area_responsable ?? null }) }} className="p-1 text-gray-400 hover:text-gov-navy rounded transition-colors" title="Editar">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                </button>
-                <button onClick={() => { setDeleteError((p) => { const n = { ...p }; delete n[e.id]; return n }); deleteMut.mutate(e.id) }} disabled={deleteMut.isPending} className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors" title="Eliminar">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
-              </div>
-              {deleteError[e.id] && (
-                <p className="px-3 py-1.5 text-xs text-red-600 bg-red-50 border-t border-red-200">{deleteError[e.id]}</p>
-              )}
-              {editId === e.id && (
-                <div className="px-3 py-3 border-t border-slate-200 bg-white space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Etiqueta</label>
-                      <input className={`w-full ${inp}`} value={editForm.label ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, label: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color fondo</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={editForm.bg ?? '#e2e8f0'} onChange={(e) => setEditForm((p) => ({ ...p, bg: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
-                        <input className={`flex-1 ${inp} font-mono text-xs`} value={editForm.bg ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, bg: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color texto</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={editForm.text_color ?? '#1e293b'} onChange={(e) => setEditForm((p) => ({ ...p, text_color: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
-                        <input className={`flex-1 ${inp} font-mono text-xs`} value={editForm.text_color ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, text_color: e.target.value }))} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orden</label>
-                      <input type="number" className={`w-full ${inp}`} value={editForm.orden ?? ''} onChange={(e) => setEditForm((p) => ({ ...p, orden: Number(e.target.value) }))} />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
-                      {(['aplica_juridico', 'aplica_financiero'] as const).map((flag) => (
-                        <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input type="checkbox" checked={editForm[flag] ?? false} onChange={(e) => setEditForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
-                          {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
-                        </label>
-                      ))}
-                    </div>
-                    <div className="col-span-2">
-                      <AreaResponsableSelect value={editForm.area_responsable} onChange={(v) => setEditForm((p) => ({ ...p, area_responsable: v }))} />
-                    </div>
-                    <div className="col-span-2 flex justify-end gap-2 pt-1">
-                      <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: editForm.bg ?? '#e2e8f0', color: editForm.text_color ?? '#1e293b' }}>Vista previa</span>
-                    </div>
-                  </div>
-                  {editSaveError && (
-                    <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{editSaveError}</p>
-                  )}
-                  <div className="flex gap-2 justify-end">
-                    <button onClick={() => { setEditId(null); setEditSaveError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button onClick={() => updateMut.mutate({ id: e.id, data: editForm })} disabled={updateMut.isPending} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
-                      {updateMut.isPending ? 'Guardando...' : 'Guardar cambios'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-          {/* Nuevo estado */}
-          <div className="border-2 border-dashed border-slate-300 rounded-md overflow-hidden">
-            {!showNew ? (
-              <button onClick={() => { setShowNew(true); setCreateError(null) }} className="w-full py-2.5 text-sm font-medium text-gray-500 hover:text-gov-navy hover:bg-slate-50 transition-colors">+ Nuevo estado</button>
-            ) : (
-              <div className="px-3 py-3 space-y-3">
-                <p className="text-xs font-bold text-gov-navy uppercase tracking-wide">Nuevo estado</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Etiqueta *</label>
-                    <input className={`w-full ${inp}`} value={newForm.label} onChange={(e) => setNewForm((p) => ({ ...p, label: e.target.value }))} placeholder="Ej: Escritura firmada" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color fondo</label>
-                    <div className="flex items-center gap-2">
-                      <input type="color" value={newForm.bg} onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
-                      <input className={`flex-1 ${inp} font-mono text-xs`} value={newForm.bg} onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Color texto</label>
-                    <div className="flex items-center gap-2">
-                      <input type="color" value={newForm.text_color} onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} className="w-8 h-8 rounded border border-slate-200 cursor-pointer" />
-                      <input className={`flex-1 ${inp} font-mono text-xs`} value={newForm.text_color} onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orden</label>
-                    <input type="number" className={`w-full ${inp}`} value={newForm.orden} onChange={(e) => setNewForm((p) => ({ ...p, orden: Number(e.target.value) }))} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Aplica a</label>
-                    {(['aplica_juridico', 'aplica_financiero'] as const).map((flag) => (
-                      <label key={flag} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                        <input type="checkbox" checked={newForm[flag] ?? true} onChange={(e) => setNewForm((p) => ({ ...p, [flag]: e.target.checked }))} className="rounded" />
-                        {{aplica_juridico: 'Jurídico', aplica_financiero: 'Presupuestario'}[flag]}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="col-span-2">
-                    <AreaResponsableSelect value={newForm.area_responsable} onChange={(v) => setNewForm((p) => ({ ...p, area_responsable: v }))} />
-                  </div>
-                  <div className="col-span-2 flex items-center gap-3">
-                    <span className="inline-block px-3 py-0.5 rounded-full text-xs font-semibold" style={{ background: newForm.bg, color: newForm.text_color }}>{newForm.label || 'Vista previa'}</span>
-                  </div>
-                </div>
-                {createError && (
-                  <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{createError}</p>
-                )}
-                <div className="flex gap-2 justify-end pt-1">
-                  <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1.5 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                  <button onClick={() => createMut.mutate(newForm)} disabled={createMut.isPending || !newForm.label.trim()} className="px-4 py-1.5 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-colors" style={{ background: 'var(--color-gov-navy)' }}>
-                    {createMut.isPending ? 'Guardando...' : 'Crear estado'}
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="p-4">
+            <EstadosPorAreaEditor
+              estados={estados}
+              api={{ create: cordobaHogarApi.createEstado, update: cordobaHogarApi.updateEstado, remove: cordobaHogarApi.deleteEstado }}
+              onInvalidate={() => queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })}
+              canDelete={canManage}
+              esAdmin={esAdmin}
+            />
           </div>
-        </div>
         )}
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end">
           <button onClick={onClose} className="px-4 py-1.5 rounded text-sm border border-slate-200 text-gray-600 hover:bg-slate-50 transition-colors">Cerrar</button>
@@ -981,7 +809,7 @@ function AgregarLocalidadModal({
                   <select id={`${uid}-${field}`} className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gov-cyan" value={form[field] ?? ''}
                     onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value ? Number(e.target.value) : undefined }))}>
                     <option value="">—</option>
-                    {estados.filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
+                    {estadosDe(estados, DIMENSION_DE_CAMPO[field])
                       .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
@@ -1253,7 +1081,7 @@ export function CordobaHogarPage() {
             + Agregar localidad
           </button>
         )}
-        {canManage && (
+        {canEdit && (
           <button
             onClick={() => setShowGestionarEstados(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-gray-600 hover:bg-slate-50 transition-colors"
@@ -1289,14 +1117,14 @@ export function CordobaHogarPage() {
           <label htmlFor={egId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. General</label>
           <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+            {estadosDe(estados, 'general').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor={ejId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Jurídico</label>
           <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+            {estadosDe(estados, 'juridico').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1310,7 +1138,7 @@ export function CordobaHogarPage() {
           <label htmlFor={efId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. Presup.</label>
           <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+            {estadosDe(estados, 'financiero').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1490,8 +1318,14 @@ export function CordobaHogarPage() {
           onClose={() => setDetailTarget(null)}
         />
       )}
-      {showGestionarEstados && canManage && (
-        <GestionarParametrosModal estados={estados} montoPorCasa={montoPorCasa} onClose={() => setShowGestionarEstados(false)} />
+      {showGestionarEstados && canEdit && (
+        <GestionarParametrosModal
+          estados={estados}
+          montoPorCasa={montoPorCasa}
+          canManage={canManage}
+          esAdmin={user?.rol === 'Admin'}
+          onClose={() => setShowGestionarEstados(false)}
+        />
       )}
       {showAgregar && (
         <AgregarLocalidadModal

@@ -14,13 +14,14 @@ import {
   type SituacionObra,
 } from '../avanceObra'
 import {
-  AreaBadge, AreaResponsableSelect, DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
+  DOCUMENTACION_PANEL_LABEL, documentacionPanel, labelConArea, tituloConArea,
   type DocumentacionPanel,
 } from '../areaEstado'
+import { DIMENSION_DE_CAMPO, EstadosPorAreaEditor, avanceEnListado, estadosDe } from '../estadosPorArea'
 import type {
   EstadoML, ProyectoML, ProyectoMLUpdate, ProyectoMLCreate,
   EstadoHistorialML, PedidoML, TipoProyectoML, ConfigML,
-  EstadoMLCreate, EstadoMLUpdate, GeoPuntoMLCreate, GeoLocalidad, PuntoInforme,
+  GeoPuntoMLCreate, GeoLocalidad, PuntoInforme,
   CatalogoEstadoExpediente, ValuacionIdecorML,
 } from '../types/vivienda.types'
 
@@ -190,14 +191,10 @@ const S2_BODY = { position: 'sticky' as const, left: 36, zIndex: 2, background: 
 
 function avancePct(p: ProyectoML, estados: EstadoML[], estadosTecnico: CatalogoEstadoExpediente[]) {
   const tipoEstados = estados.filter((e) => e.tipo === p.tipo)
-  const maxPos = Math.max(tipoEstados.length - 1, 1)
-  const pos = (id: number | null) => {
-    if (!id) return 0
-    const i = tipoEstados.findIndex((e) => e.id === id)
-    return i < 0 ? 0 : i
-  }
+  const juridico = avanceEnListado(p.ejuridico, tipoEstados, 'juridico')
+  const financiero = avanceEnListado(p.efinanciero, tipoEstados, 'financiero')
   const tecnico = avanceTecnico(p.etecnico, estadosTecnico)
-  return Math.round((((pos(p.ejuridico) + pos(p.efinanciero)) / maxPos + tecnico) / 3) * 100)
+  return Math.round(((juridico + financiero + tecnico) / 3) * 100)
 }
 function avanceColor(pct: number) {
   if (pct === 0) return '#94a3b8'
@@ -760,8 +757,7 @@ function EditModal({
                     value={form[field] ?? ''}
                     onChange={(e) => set(field, e.target.value ? Number(e.target.value) : null)}>
                     <option value="">—</option>
-                    {estados
-                      .filter((e) => field === 'ejuridico' ? e.aplica_juridico : e.aplica_financiero)
+                    {estadosDe(estados, DIMENSION_DE_CAMPO[field])
                       .map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
                   </select>
                 </div>
@@ -774,7 +770,7 @@ function EditModal({
                 value={form.estado_general ?? ''}
                 onChange={(e) => set('estado_general', e.target.value ? Number(e.target.value) : null)}>
                 <option value="">— Sin estado —</option>
-                {estados.map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
+                {estadosDe(estados, 'general').map((e) => <option key={e.id} value={e.id}>{labelConArea(e)}</option>)}
               </select>
             </div>
           </div>
@@ -1031,177 +1027,11 @@ function AgregarProyectoModal({
 
 // ── Modal de parámetros ───────────────────────────────────────────────────────
 
-function EstadosCatalogPanel({
-  estados, tipo, onInvalidate,
-}: {
-  estados: EstadoML[]; tipo: string; onInvalidate: () => void
-}) {
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<EstadoMLUpdate>({})
-  const [editSaveError, setEditSaveError] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<Record<number, string>>({})
-  const [showNew, setShowNew] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const [newForm, setNewForm] = useState<EstadoMLCreate>({
-    label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 1) * 10, tipo,
-    aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true,
-  })
-
-  const inp = 'border border-slate-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan'
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: EstadoMLUpdate }) => miLugarApi.updateEstado(id, data),
-    onSuccess: () => { onInvalidate(); setEditId(null); setEditSaveError(null) },
-    onError: (err: unknown) => setEditSaveError(extractErrorMessage(err, 'Error al guardar el estado.')),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => miLugarApi.deleteEstado(id),
-    onSuccess: () => onInvalidate(),
-    onError: (err: unknown, id: number) => {
-      setDeleteError((prev) => ({ ...prev, [id]: extractErrorMessage(err, 'Error al eliminar el estado.') }))
-    },
-  })
-
-  const createMut = useMutation({
-    mutationFn: (data: EstadoMLCreate) => miLugarApi.createEstado(data),
-    onSuccess: () => {
-      onInvalidate()
-      setShowNew(false); setCreateError(null)
-      setNewForm({ label: '', bg: '#e2e8f0', text_color: '#1e293b', orden: (estados.length + 2) * 10, tipo, aplica_juridico: true, aplica_tecnico: true, aplica_financiero: true })
-    },
-    onError: (err: unknown) => setCreateError(extractErrorMessage(err, 'Error al crear el estado.')),
-  })
-
-  return (
-    <div className="space-y-3">
-      {estados.map((e) => (
-        <div key={e.id}>
-          {editId === e.id ? (
-            <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label</label>
-                  <input className={inp + ' w-full text-sm'} value={editForm.label ?? e.label}
-                    onChange={(ev) => setEditForm((p) => ({ ...p, label: ev.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
-                  <input type="number" className={inp + ' w-full text-sm'} value={editForm.orden ?? e.orden}
-                    onChange={(ev) => setEditForm((p) => ({ ...p, orden: parseInt(ev.target.value) }))} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
-                  <div className="flex gap-1">
-                    <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.bg ?? e.bg}
-                      onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
-                    <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.bg ?? e.bg}
-                      onChange={(ev) => setEditForm((p) => ({ ...p, bg: ev.target.value }))} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
-                  <div className="flex gap-1">
-                    <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={editForm.text_color ?? e.text_color}
-                      onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
-                    <input className={inp + ' flex-1 text-xs font-mono'} value={editForm.text_color ?? e.text_color}
-                      onChange={(ev) => setEditForm((p) => ({ ...p, text_color: ev.target.value }))} />
-                  </div>
-                </div>
-              </div>
-              <AreaResponsableSelect
-                value={editForm.area_responsable !== undefined ? editForm.area_responsable : e.area_responsable}
-                onChange={(v) => setEditForm((p) => ({ ...p, area_responsable: v }))}
-              />
-              {editSaveError && <p role="alert" className="text-xs text-red-600">{editSaveError}</p>}
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => { setEditId(null); setEditForm({}); setEditSaveError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                <button disabled={updateMut.isPending} onClick={() => updateMut.mutate({ id: e.id, data: editForm })}
-                  className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
-                  style={{ background: 'var(--color-gov-navy)' }}>
-                  {updateMut.isPending ? '...' : 'Guardar'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 border border-slate-100 rounded px-3 py-2 bg-white">
-              <span className="w-5 text-xs text-gray-400 text-center">{e.orden}</span>
-              <span className="flex-1 text-sm">{e.label}</span>
-              <AreaBadge area={e.area_responsable} />
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: e.bg, color: e.text_color }}>{e.label}</span>
-              <button onClick={() => { setEditId(e.id); setEditForm({}) }} className="p-1 rounded text-gray-400 hover:text-gov-navy hover:bg-sky-50 transition-colors" aria-label="Editar estado">
-                <IconEdit />
-              </button>
-              <button onClick={() => deleteMut.mutate(e.id)} className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" aria-label="Eliminar estado">
-                <IconTrash />
-              </button>
-            </div>
-          )}
-          {deleteError[e.id] && (
-            <p role="alert" className="text-xs text-red-600 mt-1 px-3">{deleteError[e.id]}</p>
-          )}
-        </div>
-      ))}
-      {showNew ? (
-        <div className="border border-sky-200 rounded p-3 space-y-2 bg-sky-50">
-          <p className="text-xs font-bold uppercase text-gray-500">Nuevo estado</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="col-span-2">
-              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Label *</label>
-              <input className={inp + ' w-full text-sm'} autoFocus value={newForm.label}
-                onChange={(e) => setNewForm((p) => ({ ...p, label: e.target.value }))} />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color fondo</label>
-              <div className="flex gap-1">
-                <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.bg}
-                  onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
-                <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.bg}
-                  onChange={(e) => setNewForm((p) => ({ ...p, bg: e.target.value }))} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Color texto</label>
-              <div className="flex gap-1">
-                <input type="color" className="h-7 w-8 rounded border border-slate-200 cursor-pointer" value={newForm.text_color}
-                  onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
-                <input className={inp + ' flex-1 text-xs font-mono'} value={newForm.text_color}
-                  onChange={(e) => setNewForm((p) => ({ ...p, text_color: e.target.value }))} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-gray-500 mb-0.5">Orden</label>
-              <input type="number" className={inp + ' w-full text-sm'} value={newForm.orden}
-                onChange={(e) => setNewForm((p) => ({ ...p, orden: parseInt(e.target.value) }))} />
-            </div>
-          </div>
-          <AreaResponsableSelect value={newForm.area_responsable} onChange={(v) => setNewForm((p) => ({ ...p, area_responsable: v }))} />
-          {createError && <p role="alert" className="text-xs text-red-600">{createError}</p>}
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => { setShowNew(false); setCreateError(null) }} className="px-3 py-1 text-xs border border-slate-200 rounded text-gray-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-            <button disabled={createMut.isPending || !newForm.label.trim()} onClick={() => createMut.mutate(newForm)}
-              className="px-3 py-1 text-xs text-white rounded disabled:opacity-50 hover:opacity-90 transition-opacity"
-              style={{ background: 'var(--color-gov-navy)' }}>
-              {createMut.isPending ? '...' : '+ Crear'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button onClick={() => setShowNew(true)} className="w-full text-sm font-medium py-2 rounded border-2 border-dashed border-sky-300 text-sky-700 hover:bg-sky-50 transition-colors">
-          + Agregar estado
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ── Modal de parámetros ───────────────────────────────────────────────────────
-
 function GestionarParametrosModal({
-  estadosExp, estadosMuni, estadosProv, config, onClose,
+  estadosExp, estadosMuni, estadosProv, config, canManage, esAdmin, onClose,
 }: {
   estadosExp: EstadoML[]; estadosMuni: EstadoML[]; estadosProv: EstadoML[]
-  config: ConfigML | null; onClose: () => void
+  config: ConfigML | null; canManage: boolean; esAdmin: boolean; onClose: () => void
 }) {
   const uid = useId()
   const qc = useQueryClient()
@@ -1242,7 +1072,7 @@ function GestionarParametrosModal({
           <button onClick={onClose} className="text-sky-300 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
         </div>
         <div className="flex border-b border-slate-200 px-4 pt-3 gap-1">
-          {(['estados', 'parametros'] as const).map((t) => (
+          {(canManage ? ['estados', 'parametros'] as const : ['estados'] as const).map((t) => (
             <button key={t} onClick={() => setActiveTab(t)}
               className={`px-4 py-1.5 text-xs font-semibold rounded-t border-b-2 transition-colors ${
                 activeTab === t ? 'border-gov-navy text-gov-navy bg-slate-50' : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -1299,11 +1129,14 @@ function GestionarParametrosModal({
                 </button>
               ))}
             </div>
-            <EstadosCatalogPanel
+            <EstadosPorAreaEditor
               key={estadoTipoTab}
               estados={estadosByTipoTab[estadoTipoTab]}
-              tipo={estadoTipoTab}
+              api={{ create: miLugarApi.createEstado, update: miLugarApi.updateEstado, remove: miLugarApi.deleteEstado }}
               onInvalidate={invalidateEstados}
+              canDelete={canManage}
+              esAdmin={esAdmin}
+              extra={{ tipo: estadoTipoTab }}
             />
           </div>
         )}
@@ -1643,7 +1476,7 @@ export function MiLugarPage() {
             + Agregar proyecto
           </button>
         )}
-        {canManage && (
+        {canEdit && (
           <button onClick={() => setShowParams(true)}
             className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-gray-600 hover:bg-slate-50 transition-colors"
             title="Gestionar parámetros y estados">
@@ -1672,7 +1505,7 @@ export function MiLugarPage() {
           <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+            {estadosDe(estados, 'general').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1680,7 +1513,7 @@ export function MiLugarPage() {
           <select id={ejId} value={ejFilter} onChange={(e) => setEjFilter(e.target.value)}
             className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
-            {estados.filter((e) => e.aplica_juridico).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+            {estadosDe(estados, 'juridico').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -1697,7 +1530,7 @@ export function MiLugarPage() {
             <select id={efId} value={efFilter} onChange={(e) => setEfFilter(e.target.value)}
               className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
               <option value="">— Todos —</option>
-              {estados.filter((e) => e.aplica_financiero).map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
+              {estadosDe(estados, 'financiero').map((e) => <option key={e.id} value={String(e.id)}>{labelConArea(e)}</option>)}
             </select>
           </div>
         )}
@@ -1912,8 +1745,11 @@ export function MiLugarPage() {
       {detailTarget && (
         <DetailPanel proyecto={detailTarget} estados={estadosByTipo[detailTarget.tipo] ?? estadosExp} onClose={() => setDetailTarget(null)} />
       )}
-      {showParams && canManage && (
-        <GestionarParametrosModal estadosExp={estadosExp} estadosMuni={estadosMuni} estadosProv={estadosProv} config={config} onClose={() => setShowParams(false)} />
+      {showParams && canEdit && (
+        <GestionarParametrosModal
+          estadosExp={estadosExp} estadosMuni={estadosMuni} estadosProv={estadosProv} config={config}
+          canManage={canManage} esAdmin={user?.rol === 'Admin'} onClose={() => setShowParams(false)}
+        />
       )}
       {showAgregar && (
         <AgregarProyectoModal

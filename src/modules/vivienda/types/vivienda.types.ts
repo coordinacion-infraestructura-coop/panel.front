@@ -107,9 +107,7 @@ export interface EstadoCC {
   bg: string
   text_color: string
   orden: number
-  aplica_juridico: boolean
-  aplica_tecnico: boolean
-  aplica_financiero: boolean
+  dimension: DimensionEstado
   area_responsable?: AreaResponsable | null
 }
 
@@ -118,9 +116,7 @@ export interface EstadoCCCreate {
   bg: string
   text_color: string
   orden: number
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
+  dimension: DimensionEditable
   area_responsable?: AreaResponsable | null
 }
 
@@ -129,9 +125,6 @@ export interface EstadoCCUpdate {
   bg?: string
   text_color?: string
   orden?: number
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
   area_responsable?: AreaResponsable | null
 }
 
@@ -268,9 +261,7 @@ export interface EstadoCH {
   bg: string
   text_color: string
   orden: number
-  aplica_juridico: boolean
-  aplica_tecnico: boolean
-  aplica_financiero: boolean
+  dimension: DimensionEstado
   area_responsable?: AreaResponsable | null
 }
 
@@ -279,9 +270,7 @@ export interface EstadoCHCreate {
   bg: string
   text_color: string
   orden: number
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
+  dimension: DimensionEditable
   area_responsable?: AreaResponsable | null
 }
 
@@ -290,9 +279,6 @@ export interface EstadoCHUpdate {
   bg?: string
   text_color?: string
   orden?: number
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
   area_responsable?: AreaResponsable | null
 }
 
@@ -388,9 +374,7 @@ export interface EstadoML {
   text_color: string
   orden: number
   tipo: string
-  aplica_juridico: boolean
-  aplica_tecnico: boolean
-  aplica_financiero: boolean
+  dimension: DimensionEstado
   area_responsable?: AreaResponsable | null
 }
 
@@ -400,9 +384,7 @@ export interface EstadoMLCreate {
   text_color: string
   orden: number
   tipo?: string
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
+  dimension: DimensionEditable
   area_responsable?: AreaResponsable | null
 }
 
@@ -411,9 +393,6 @@ export interface EstadoMLUpdate {
   bg?: string
   text_color?: string
   orden?: number
-  aplica_juridico?: boolean
-  aplica_tecnico?: boolean
-  aplica_financiero?: boolean
   area_responsable?: AreaResponsable | null
 }
 
@@ -880,6 +859,11 @@ export interface ObraPanel {
 
 /** Área que lleva cada estado del catálogo (spec-vivienda-tablero-analitico §4.4). */
 export type AreaResponsable = 'juridica' | 'tecnica' | 'financiera' | 'externa'
+
+// Listado al que pertenece cada estado de los paneles (spec-vivienda-estados-por-area.md §2).
+// `tecnico_anterior` son los estados técnicos de antes del Checklist: solo para leer historial.
+export type DimensionEstado = 'juridico' | 'financiero' | 'general' | 'tecnico_anterior'
+export type DimensionEditable = Exclude<DimensionEstado, 'tecnico_anterior'>
 
 export interface AvanceVigente {
   porcentaje: number
