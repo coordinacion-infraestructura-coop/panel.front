@@ -36,6 +36,8 @@ export interface ActualizacionManual {
   pedido_en: string
   disparados: string[]
   fallidos: string[]
+  terminado_en: string | null
+  en_curso: boolean
   proxima_desde: string
 }
 
