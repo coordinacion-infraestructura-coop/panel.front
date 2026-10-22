@@ -106,9 +106,14 @@ export const SECCIONES: Seccion[] = [
     nombre: 'Político',
     restringida: true,
     subs: [
-      { id: 'intendentes', nombre: 'Intendentes', etapa: 'E6', contenido: ['Intendente, partido, reelecto, continuidad, contacto'] },
-      { id: 'legisladores', nombre: 'Legisladores', etapa: 'E6', contenido: ['Legislador departamental y partido'] },
-      { id: 'elecciones', nombre: 'Elecciones', etapa: 'E6', contenido: ['Resultados 2023 y 2025 por fuerza', 'Resultado municipal por localidad'] },
+      { id: 'intendentes', nombre: 'Intendentes', etapa: 'E6', contenido: ['Intendente, partido, alineación, reelecto, continuidad, contacto'] },
+      {
+        id: 'legisladores',
+        nombre: 'Legisladores',
+        etapa: 'E6 · esperando la fuente del área',
+        contenido: ['Falta la fuente: no está en ninguna planilla compartida, se la pedimos al área.', 'Legislador departamental y partido'],
+      },
+      { id: 'elecciones', nombre: 'Elecciones', etapa: 'E6', contenido: ['Diputados 2021, 2023 y 2025 y gobernador 2023 por fuerza', 'Resultado municipal 2023 por localidad', 'Diferencias con la planilla'] },
     ],
   },
 ]

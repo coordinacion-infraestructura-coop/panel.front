@@ -543,6 +543,120 @@ export interface Convenios {
 
 export type SeccionGestion = 'obras' | 'visitas' | 'visitas-gobernador' | 'reuniones' | 'convenios'
 
+// ── Etapa 6: Político (spec-datos-externos-fase6-politico.md §4). Solo Admin y Autoridad ──
+
+export interface IntendenteFila {
+  codigo_indec: string
+  localidad: string
+  departamento: string
+  tipo: string | null
+  intendente: string | null
+  reelecto: boolean | null
+  partido: string | null
+  continuidad: boolean | null
+  alineacion: string | null
+  celular: string | null
+  foto_url: string | null
+}
+
+export interface Intendentes {
+  concepto: 'intendentes'
+  kpis: { gobiernos_locales: number; con_intendente: number; reelectos: number; continuidad: number; con_celular: number }
+  por_partido: Conteo[]
+  por_alineacion: Conteo[]
+  por_departamento: { departamento: string; total: number; por_alineacion: Record<string, number>; por_partido: Record<string, number> }[]
+  intendentes: IntendenteFila[]
+}
+
+interface Podio {
+  ganador: string | null
+  ganador_pct: number | null
+  segundo: string | null
+  segundo_pct: number | null
+  margen: number | null
+}
+
+export interface EleccionDepartamento extends Podio {
+  departamento: string
+  padron: number | null
+  afirmativos: number | null
+  participacion: number | null
+}
+
+export interface EleccionLocalidad extends Podio {
+  codigo_indec: string
+  localidad: string
+  departamento: string | null
+  padron: number | null
+  afirmativos: number | null
+  participacion: number | null
+  pct: Record<string, number | null>
+}
+
+export interface EleccionResultado {
+  eleccion: string
+  titulo: string
+  fuente: 'circuitos' | 'copia'
+  padron: number | null
+  total_votos: number | null
+  afirmativos: number | null
+  participacion: number | null
+  principales: string[]
+  fuerzas: { fuerza: string; votos: number | null; pct: number | null }[]
+  localidades_ganadas: Conteo[]
+  por_departamento: EleccionDepartamento[]
+  por_localidad: EleccionLocalidad[]
+}
+
+export interface MunicipalFila {
+  codigo_indec: string
+  localidad: string
+  departamento: string | null
+  tipo_gobierno: string | null
+  fecha: string | null
+  periodo: string | null
+  participacion: number | null
+  padron: number | null
+  afirmativos: number | null
+  ganador_partido: string | null
+  ganador_lista: string | null
+  ganador_nombre: string | null
+  ganador_pct: number | null
+  segundo_partido: string | null
+  segundo_nombre: string | null
+  segundo_pct: number | null
+  margen: number | null
+}
+
+export interface VariacionFila {
+  codigo_indec: string
+  localidad: string
+  departamento: string | null
+  lla_2023: number
+  lla_2025: number
+  variacion_lla: number
+  hxc_2023: number
+  pu_2025: number
+  variacion_pu_hxc: number
+}
+
+export interface DiferenciaPlanilla {
+  localidad: string
+  pestana: string
+  campo: string
+  planilla: string
+  calculado: string
+}
+
+export interface Elecciones {
+  concepto: 'elecciones'
+  elecciones: EleccionResultado[]
+  municipales: { localidades_ganadas: Conteo[]; sin_votos: number; por_localidad: MunicipalFila[] } | null
+  variacion: VariacionFila[]
+  diferencias: DiferenciaPlanilla[]
+  circuitos_sin_localidad: number
+}
+
 /** FastAPI espera listas como parámetros repetidos (`codigo_indec=a&codigo_indec=b`), no el
  * `codigo_indec[]=` que arma axios por defecto. */
 function params(base: Record<string, string | number>, lista?: { clave: string; valores: string[] | undefined }) {
@@ -557,6 +671,10 @@ function seccionTransferencias<T>(seccion: string, anio: number, codigos?: strin
   return apiClient
     .get(`${BASE}/transferencias/${seccion}`, { params: params({ anio }, { clave: 'codigo_indec', valores: codigos }) })
     .then((r) => r.data)
+}
+
+function seccionPolitico<T>(seccion: 'intendentes' | 'elecciones', codigos?: string[]): Promise<T> {
+  return apiClient.get(`${BASE}/politico/${seccion}`, { params: params({}, { clave: 'codigo_indec', valores: codigos }) }).then((r) => r.data)
 }
 
 function seccionGestion<T>(seccion: SeccionGestion, codigos?: string[]): Promise<T> {
@@ -586,6 +704,8 @@ export const tableroApi = {
   visitasGobernador: (codigos?: string[]): Promise<VisitasGobernador> => seccionGestion('visitas-gobernador', codigos),
   reuniones: (codigos?: string[]): Promise<Reuniones> => seccionGestion('reuniones', codigos),
   convenios: (codigos?: string[]): Promise<Convenios> => seccionGestion('convenios', codigos),
+  intendentes: (codigos?: string[]): Promise<Intendentes> => seccionPolitico('intendentes', codigos),
+  elecciones: (codigos?: string[]): Promise<Elecciones> => seccionPolitico('elecciones', codigos),
   atpInterno: (codigos?: string[]): Promise<AtpInterno> =>
     apiClient
       .get('/api/v1/gralgob/tablero/atp-interno', { params: params({}, { clave: 'codigo_indec', valores: codigos }) })

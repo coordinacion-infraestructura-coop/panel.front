@@ -15,7 +15,9 @@ import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
 import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
+import { EleccionesVista } from '../vistas/EleccionesVista'
 import { InicioVista } from '../vistas/InicioVista'
+import { IntendentesVista } from '../vistas/IntendentesVista'
 import { ObrasVista } from '../vistas/ObrasVista'
 import { ResumenVista } from '../vistas/ResumenVista'
 import { ReunionesVista } from '../vistas/ReunionesVista'
@@ -169,6 +171,10 @@ export function TableroGobiernoPage() {
         <ReunionesVista ctx={ctx} />
       ) : sub.id === 'convenios' ? (
         <ConveniosVista ctx={ctx} />
+      ) : sub.id === 'intendentes' ? (
+        <IntendentesVista ctx={ctx} />
+      ) : sub.id === 'elecciones' ? (
+        <EleccionesVista ctx={ctx} />
       ) : (
         <EnPreparacion sub={sub} />
       )}
