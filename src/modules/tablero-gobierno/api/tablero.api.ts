@@ -557,6 +557,18 @@ export interface IntendenteFila {
   alineacion: string | null
   celular: string | null
   foto_url: string | null
+  /** 'gobierno' | 'privada': de dónde salió el valor (spec-padron-politico-gobierno-privada.md §4) */
+  origen_intendente: string | null
+  origen_partido: string | null
+}
+
+export interface CruceFila {
+  localidad: string
+  departamento: string
+  campo: 'intendente' | 'partido'
+  estado: string
+  gobierno: string | null
+  privada: string | null
 }
 
 export interface Intendentes {
@@ -566,6 +578,7 @@ export interface Intendentes {
   por_alineacion: Conteo[]
   por_departamento: { departamento: string; total: number; por_alineacion: Record<string, number>; por_partido: Record<string, number> }[]
   intendentes: IntendenteFila[]
+  cruce: { disponible: boolean; leido_en: string | null; por_campo: Record<string, Record<string, number>>; diferencias: CruceFila[] } | null
 }
 
 interface Podio {

@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { BarChart } from '../../../shared/components/informe/BarChart'
 import { DonutChart } from '../../../shared/components/informe/DonutChart'
-import { tableroApi, type IntendenteFila, type Intendentes } from '../api/tablero.api'
+import { tableroApi, type CruceFila, type IntendenteFila, type Intendentes } from '../api/tablero.api'
 import { Aviso, Cargando, Fuente, Kpi, Kpis, Panel, Tabla, type Columna } from '../components/Bloques'
-import { fmtN, fmtPct } from '../formato'
+import { fmtFecha, fmtN, fmtPct } from '../formato'
 import type { ContextoTablero } from './contexto'
 
 const COLORES = ['#172c3f', '#01aae3', '#398ebd', '#c98a12', '#2e8b57', '#8a6bbf', '#c9d6e2', '#b0413e']
@@ -13,8 +13,8 @@ const COLUMNAS: Columna<IntendenteFila>[] = [
   { titulo: 'Departamento', valor: (f) => f.departamento },
   { titulo: 'Localidad', valor: (f) => f.localidad },
   { titulo: 'Tipo', valor: (f) => (f.tipo === 'MU' ? 'Municipio' : f.tipo === 'CO' ? 'Comuna' : f.tipo) },
-  { titulo: 'Intendente / jefe comunal', valor: (f) => f.intendente },
-  { titulo: 'Partido', valor: (f) => f.partido },
+  { titulo: 'Intendente / jefe comunal', valor: (f) => f.intendente, render: (f) => <ConOrigen valor={f.intendente} origen={f.origen_intendente} /> },
+  { titulo: 'Partido', valor: (f) => f.partido, render: (f) => <ConOrigen valor={f.partido} origen={f.origen_partido} /> },
   { titulo: 'Alineación', valor: (f) => f.alineacion },
   { titulo: 'Reelecto', valor: (f) => siNo(f.reelecto) },
   { titulo: 'Continuidad', valor: (f) => siNo(f.continuidad) },
@@ -27,6 +27,65 @@ const COLUMNAS: Columna<IntendenteFila>[] = [
 ]
 
 type FilaDepto = Intendentes['por_departamento'][number]
+
+/** Valor del padrón combinado: si vino de Privada (Gobierno no tenía dato), se marca. */
+function ConOrigen({ valor, origen }: { valor: string | null; origen: string | null }) {
+  if (!valor) return <>—</>
+  if (origen !== 'privada') return <>{valor}</>
+  return (
+    <span title="Gobierno no tiene este dato: viene del padrón de Privada">
+      {valor} <span className="text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded px-1">Privada</span>
+    </span>
+  )
+}
+
+const ESTADOS: Record<string, string> = {
+  igual: 'Iguales',
+  igual_otro_orden: 'Iguales en otro orden',
+  parecido: 'Parecidos',
+  distinto: 'Distintos',
+  solo_gobierno: 'Solo en Gobierno',
+  solo_privada: 'Solo en Privada',
+  sin_dato: 'Sin dato en ninguno',
+}
+
+const COL_CRUCE: Columna<CruceFila>[] = [
+  { titulo: 'Departamento', valor: (f) => f.departamento },
+  { titulo: 'Localidad', valor: (f) => f.localidad },
+  { titulo: 'Dato', valor: (f) => (f.campo === 'intendente' ? 'Intendente' : 'Partido') },
+  { titulo: 'Cruce', valor: (f) => ESTADOS[f.estado] ?? f.estado },
+  { titulo: 'Gobierno', valor: (f) => f.gobierno },
+  { titulo: 'Privada (original)', valor: (f) => f.privada },
+]
+
+function Cruce({ cruce }: { cruce: NonNullable<Intendentes['cruce']> }) {
+  if (!cruce.disponible) {
+    return <Aviso tono="warn">Todavía no se pudo leer el padrón de Privada: el cruce aparece después del próximo sync.</Aviso>
+  }
+  return (
+    <Panel
+      titulo="Cruce con Privada"
+      ayuda={`Gobierno contra el valor original de Privada, que queda guardado como respaldo. Privada adopta el dato de Gobierno; si Gobierno no lo tiene, se usa el de Privada. Leído ${fmtFecha(cruce.leido_en)}.`}
+    >
+      <div className="grid gap-3 md:grid-cols-2 mb-3">
+        {Object.entries(cruce.por_campo).map(([campo, conteo]) => (
+          <table key={campo} className="w-full text-sm">
+            <caption className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 pb-1">{campo === 'intendente' ? 'Intendente' : 'Partido'}</caption>
+            <tbody>
+              {Object.entries(conteo).map(([estado, n]) => (
+                <tr key={estado} className="border-b border-slate-100 last:border-0">
+                  <td className="py-1 text-gov-navy">{ESTADOS[estado] ?? estado}</td>
+                  <td className="py-1 text-right tabular-nums">{fmtN(n)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
+      </div>
+      <Tabla columnas={COL_CRUCE} filas={cruce.diferencias} archivo="cruce_padron_gobierno_privada.xlsx" />
+    </Panel>
+  )
+}
 
 /** Intendentes (Etapa 6, solo Admin y Autoridad): pestaña `Intendentes` de "1. REGISTRO
  * REUNIONES". La alineación sale de la pestaña `GANADORES` de la planilla de elecciones. */
@@ -75,6 +134,7 @@ export function IntendentesVista({ ctx }: { ctx: ContextoTablero }) {
       <Panel titulo="Intendentes y jefes comunales" ayuda="Datos personales: no los compartas fuera del área.">
         <Tabla columnas={COLUMNAS} filas={d.intendentes} archivo="intendentes.xlsx" />
       </Panel>
+      {d.cruce && <Cruce cruce={d.cruce} />}
       <Aviso>Legisladores: no están en ninguna planilla compartida. Se los pedimos al área.</Aviso>
       <Fuente>planilla "1. REGISTRO REUNIONES" de Gobierno, pestaña Intendentes (sincronizada a diario).</Fuente>
     </div>
