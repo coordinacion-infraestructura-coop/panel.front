@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../../../shared/api/client'
+import type { AreaAcceso, NivelArea } from '../../../shared/utils/permisos'
 
 interface PortalUsuario {
   email: string
   nombre?: string
   rol: string
   secretarias: string[]
+  areas?: AreaAcceso[]
   activo: boolean
   created_at: string
 }
@@ -17,10 +19,22 @@ interface UsuarioPayload {
   nombre?: string
   rol: string
   secretarias: string[]
+  areas: AreaAcceso[]
   activo?: boolean
 }
 
-const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta', 'TecnicoDGV', 'Autoridad'] as const
+// Catálogo de áreas de acceso por secretaría (GET /api/v1/portal/areas).
+type CatalogoAreas = Record<string, { area: string; label: string }[]>
+
+function useCatalogoAreas() {
+  return useQuery<CatalogoAreas>({
+    queryKey: ['portal-areas'],
+    queryFn: () => apiClient.get('/api/v1/portal/areas').then((r) => r.data),
+    staleTime: Infinity,
+  })
+}
+
+const ROLES = ['Admin', 'Supervisor', 'Operador', 'Consulta', 'Autoridad'] as const
 const SECRETARIAS = [
   { id: 'vivienda', label: 'Vivienda' },
   { id: 'privada', label: 'Privada del Ministro' },
@@ -37,7 +51,6 @@ const ROL_COLORS: Record<string, string> = {
   Supervisor: 'bg-blue-100 text-blue-700',
   Operador: 'bg-green-100 text-green-700',
   Consulta: 'bg-gray-100 text-gray-600',
-  TecnicoDGV: 'bg-amber-100 text-amber-700',
   Autoridad: 'bg-gov-cyan/15 text-gov-blue',
 }
 
@@ -58,16 +71,31 @@ function UsuarioModal({
   const [rol, setRol] = useState<string>(usuario?.rol ?? 'Operador')
   const [secretarias, setSecretarias] = useState<string[]>(usuario?.secretarias ?? [])
   const [activo, setActivo] = useState(usuario?.activo ?? true)
+  const [areas, setAreas] = useState<AreaAcceso[]>(usuario?.areas ?? [])
+  const { data: catalogoAreas = {} } = useCatalogoAreas()
 
   function toggleSecretaria(id: string) {
     setSecretarias((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     )
+    // Las áreas de una secretaría quitada se van con ella (igual que en el backend).
+    setAreas((prev) => prev.filter((a) => a.secretaria !== id))
+  }
+
+  function nivelDe(secretaria: string, area: string): NivelArea | null {
+    return areas.find((a) => a.secretaria === secretaria && a.area === area)?.nivel ?? null
+  }
+
+  function setNivel(secretaria: string, area: string, nivel: NivelArea | null) {
+    setAreas((prev) => [
+      ...prev.filter((a) => !(a.secretaria === secretaria && a.area === area)),
+      ...(nivel ? [{ secretaria, area, nivel }] : []),
+    ])
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onSave({ email: isEdit ? undefined : email, nombre: nombre || undefined, rol, secretarias, activo })
+    onSave({ email: isEdit ? undefined : email, nombre: nombre || undefined, rol, secretarias, areas, activo })
   }
 
   return (
@@ -135,7 +163,6 @@ function UsuarioModal({
                   {r === 'Supervisor' && ' — ver, editar, crear y eliminar'}
                   {r === 'Operador' && ' — ver, editar y crear'}
                   {r === 'Consulta' && ' — solo lectura'}
-                  {r === 'TecnicoDGV' && ' — área técnica DGV, solo Tablero + Checklist Técnico'}
                   {r === 'Autoridad' && ' — lectura consolidada de todas las áreas (Resumen Territorial)'}
                 </option>
               ))}
@@ -163,6 +190,48 @@ function UsuarioModal({
               ))}
             </div>
           </div>
+
+          {SECRETARIAS.filter((sec) => secretarias.includes(sec.id) && catalogoAreas[sec.id]?.length).map((sec) => (
+            <fieldset key={sec.id} className="border border-slate-200 rounded-md p-3">
+              <legend className="px-1 text-xs font-semibold text-gray-700">Áreas de acceso — {sec.label}</legend>
+              {rol === 'Admin' ? (
+                <p className="text-xs text-gray-500">Admin accede a todas las áreas.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {catalogoAreas[sec.id].map(({ area, label }) => {
+                    const nivel = nivelDe(sec.id, area)
+                    return (
+                      <div key={area} className="flex items-center gap-3 text-sm text-gray-700">
+                        <label className="flex items-center gap-2 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            checked={nivel !== null}
+                            onChange={(e) => setNivel(sec.id, area, e.target.checked ? 'lectura' : null)}
+                            className="rounded border-gray-300 text-gov-cyan focus:ring-gov-cyan"
+                          />
+                          {label}
+                        </label>
+                        <select
+                          aria-label={`Nivel en ${label}`}
+                          disabled={nivel === null}
+                          value={nivel ?? 'lectura'}
+                          onChange={(e) => setNivel(sec.id, area, e.target.value as NivelArea)}
+                          className="border border-gray-300 rounded px-2 py-1 text-xs disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-gov-cyan"
+                        >
+                          <option value="lectura">Ver</option>
+                          <option value="edicion">Editar</option>
+                        </select>
+                      </div>
+                    )
+                  })}
+                  {!areas.some((a) => a.secretaria === sec.id) && (
+                    <p className="text-[11px] text-amber-700">Sin áreas marcadas no ve nada de esta secretaría.</p>
+                  )}
+                  <p className="text-[11px] text-gray-400">"Editar" no da más permisos que el rol: un usuario Consulta solo ve.</p>
+                </div>
+              )}
+            </fieldset>
+          ))}
 
           {isEdit && (
             <div>
@@ -202,6 +271,7 @@ function UsuarioModal({
 
 export function AdminUsuariosPage() {
   const qc = useQueryClient()
+  const { data: catalogoAreas = {} } = useCatalogoAreas()
   const [modalUsuario, setModalUsuario] = useState<PortalUsuario | 'nuevo' | null>(null)
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -344,6 +414,7 @@ export function AdminUsuariosPage() {
                             className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
                           >
                             {SECRETARIAS.find((x) => x.id === s)?.label ?? s}
+                            {!!catalogoAreas[s]?.length && u.rol !== 'Admin' && ` · ${(u.areas ?? []).filter((a) => a.secretaria === s).length} áreas`}
                           </span>
                         ))
                       )}

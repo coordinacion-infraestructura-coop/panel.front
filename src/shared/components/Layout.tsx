@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { usePortalUser } from '../hooks/usePortalUser'
+import { usePortalUser, type PortalUser } from '../hooks/usePortalUser'
+import { puedeVerRuta } from '../utils/permisos'
 import { NotificacionesCampana } from './NotificacionesCampana'
 
 interface NavItem {
@@ -31,19 +32,10 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
   ],
 }
 
-// El área técnica DGV solo debe ver Tablero + Checklist Técnico — nunca los paneles
-// completos de Cordón Cuneta / Córdoba Hogar / Mi Lugar (aprobado por el área,
-// ver docs/files/spec-checklist-tecnico-dgv.md §8). El backend ya bloquea el acceso
-// (403) a esos paneles para este rol; este filtro es solo la capa de navegación.
-// + Tablero analítico (spec-vivienda-tablero-analitico.md §5), que el backend también le abre.
-const TECNICO_DGV_RUTAS = ['/vivienda/programas', '/vivienda/tablero-analitico', '/vivienda/checklist-tecnico']
-
-function navItemsFor(secretaria: string, rol: string | undefined): NavItem[] {
-  const items = SECRETARIA_NAV[secretaria] ?? []
-  if (secretaria === 'vivienda' && rol === 'TecnicoDGV') {
-    return items.filter((i) => TECNICO_DGV_RUTAS.includes(i.to))
-  }
-  return items
+// Cada ítem se muestra solo si el usuario tiene su área de acceso
+// (docs/files/spec-portal-areas-de-acceso.md). El backend igual responde 403.
+function navItemsFor(secretaria: string, usuario: PortalUser | undefined): NavItem[] {
+  return (SECRETARIA_NAV[secretaria] ?? []).filter((i) => puedeVerRuta(usuario, i.to))
 }
 
 const SECRETARIA_LABEL: Record<string, string> = {
@@ -67,7 +59,7 @@ export function Layout() {
   const location = useLocation()
 
   const activeSecretaria = getActiveSecretaria(location.pathname)
-  const navItems = activeSecretaria ? navItemsFor(activeSecretaria, portalUser?.rol) : []
+  const navItems = activeSecretaria ? navItemsFor(activeSecretaria, portalUser) : []
   const isAdmin = portalUser?.rol === 'Admin'
   const isAdminPage = location.pathname.startsWith('/admin')
   

@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '../api/client'
+import type { AreaAcceso } from '../utils/permisos'
 
 export interface PortalUser {
   email: string
   nombre?: string
-  rol: 'Admin' | 'Supervisor' | 'Operador' | 'Consulta' | 'TecnicoDGV' | 'Autoridad'
+  rol: 'Admin' | 'Supervisor' | 'Operador' | 'Consulta' | 'Autoridad'
   secretarias: string[]
+  areas?: AreaAcceso[]
 }
 
 /**

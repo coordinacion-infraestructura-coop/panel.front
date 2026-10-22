@@ -24,6 +24,7 @@
 // (ver `lineaReferenciaPlugin` de BarChart.tsx).
 import { Link } from 'react-router-dom'
 import type { ResumenLocalidad } from '../types/resumenTerritorial.types'
+import { puedeVerRuta, type AreaAcceso } from '../../../shared/utils/permisos'
 
 export interface ConteosPrincipalesLocalidad {
   cc: number
@@ -86,10 +87,10 @@ const LISTADOS: { id: keyof ConteosPrincipalesLocalidad; secretaria: string; rut
  * `?departamento=&localidad=`, que cada panel destino usa para precargar sus
  * filtros (`useFiltroTerritorialUrl`; Privada ya los leía). Sólo navegación:
  * se omiten los paneles que el usuario no tiene asignados (mismo criterio que
- * `DashboardPage.canSee`, más el recorte de `TecnicoDGV` de `Layout.tsx`); el
+ * `DashboardPage.canSee`, más las áreas de acceso de `puedeVerRuta`); el
  * backend sigue siendo quien responde 403. */
 export function enlacesListados(
-  usuario: { rol: string; secretarias: string[] } | null | undefined,
+  usuario: { rol: string; secretarias: string[]; areas?: AreaAcceso[] } | null | undefined,
   ambito: { departamento?: string | null; localidad?: string | null },
 ): EnlacesListado {
   if (!usuario) return {}
@@ -100,7 +101,7 @@ export function enlacesListados(
   const enlaces: EnlacesListado = {}
   for (const l of LISTADOS) {
     const asignada = usuario.rol === 'Admin' || usuario.secretarias.includes(l.secretaria)
-    if (!asignada || (l.secretaria === 'vivienda' && usuario.rol === 'TecnicoDGV')) continue
+    if (!asignada || !puedeVerRuta(usuario, l.ruta)) continue
     enlaces[l.id] = qs ? `${l.ruta}?${qs}` : l.ruta
   }
   return enlaces

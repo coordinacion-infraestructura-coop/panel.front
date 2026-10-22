@@ -72,7 +72,7 @@ export const programasApi = {
   list: () => apiClient.get<Programa[]>(`${BASE}/programas`).then((r) => r.data),
 
   // KPIs agregados de CC/CH/ML para el Tablero — no expone los paneles completos,
-  // asi que TecnicoDGV puede verlo (spec-checklist-tecnico-dgv §8/§9).
+  // así que lo ve cualquiera con un área de Vivienda (spec-portal-areas-de-acceso.md).
   getTablero: () =>
     apiClient.get<TableroVivienda>(`${BASE}/programas-tablero`).then((r) => r.data),
 }
@@ -299,7 +299,7 @@ export const checklistTecnicoApi = {
     apiClient.get<CatalogosChecklist>(`${BASE}/checklist-tecnico/catalogos`).then((r) => r.data),
 
   // Selector de localidad/programa — endpoint propio (los GET de panel completo
-  // de CC/CH/ML están vedados a TecnicoDGV). Spec §6, enmienda 1.1.0.
+  // de CC/CH/ML están vedados a quien solo tiene el área "checklist"). Spec §6, enmienda 1.1.0.
   getEntidades: () =>
     apiClient
       .get<EntidadChecklistItem[]>(`${BASE}/checklist-tecnico/entidades`)
