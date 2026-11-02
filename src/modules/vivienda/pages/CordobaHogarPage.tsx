@@ -82,6 +82,7 @@ const CH_COLS: Array<{ label: string | [string, string]; sort: string | null }> 
   { label: 'Viviendas', sort: 'cantidad_casas' },
   { label: 'Monto', sort: 'monto' },
   { label: ['OK', 'Ministro'], sort: 'ok_gob' },
+  { label: ['Convenio', 'firmado'], sort: 'convenio_firmado' },
   { label: ['Última', 'obs.'], sort: 'doc_exp' },
   { label: ['Últ.', 'modif.'], sort: 'updated_at' },
   { label: ['Estado', 'General'], sort: 'estado_general' },
@@ -158,6 +159,8 @@ function EditModal({
     monto: localidad.monto ?? undefined,
     cantidad_casas: localidad.cantidad_casas ?? undefined,
     ok_gob: localidad.ok_gob,
+    convenio_firmado: localidad.convenio_firmado,
+    fecha_firma_convenio: localidad.fecha_firma_convenio,
     doc_exp: localidad.doc_exp ?? '',
     ejuridico: localidad.ejuridico,
     efinanciero: localidad.efinanciero,
@@ -261,6 +264,34 @@ function EditModal({
               <select id={`${uid}-ok`} className={inp} value={form.ok_gob ?? 'SI'} onChange={(e) => set('ok_gob', e.target.value)}>
                 <option>SI</option><option>NO</option><option>En trámite</option>
               </select>
+            </div>
+            <div className="col-span-2 grid grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-md p-3">
+              <label htmlFor={`${uid}-conv`} className="flex items-center gap-2 text-sm font-semibold text-gov-navy cursor-pointer self-end pb-1.5">
+                <input
+                  id={`${uid}-conv`}
+                  type="checkbox"
+                  className="w-4 h-4 accent-gov-cyan"
+                  checked={!!form.convenio_firmado}
+                  onChange={(e) => setForm((p) => ({
+                    ...p,
+                    convenio_firmado: e.target.checked,
+                    fecha_firma_convenio: e.target.checked ? p.fecha_firma_convenio : null,
+                  }))}
+                />
+                Firmó convenio
+              </label>
+              <div>
+                <label htmlFor={`${uid}-ffirma`} className={lbl}>Fecha de firma</label>
+                <input
+                  id={`${uid}-ffirma`}
+                  type="date"
+                  className={`${inp} disabled:bg-slate-100 disabled:text-gray-400`}
+                  disabled={!form.convenio_firmado}
+                  max={today}
+                  value={form.fecha_firma_convenio ?? ''}
+                  onChange={(e) => set('fecha_firma_convenio', e.target.value || null)}
+                />
+              </div>
             </div>
             <div className="col-span-2">
               <label htmlFor={`${uid}-doc`} className={lbl}>Última observación</label>
@@ -865,6 +896,7 @@ export function CordobaHogarPage() {
   const searchId = useId()
   const deptoId = useId()
   const okId = useId()
+  const convenioId = useId()
   const egId = useId()
   const ejId = useId()
   const etId = useId()
@@ -873,6 +905,7 @@ export function CordobaHogarPage() {
   const [search, setSearch] = useState('')
   const [deptoFilter, setDeptoFilter] = useState('')
   const [okFilter, setOkFilter] = useState('')
+  const [convenioFilter, setConvenioFilter] = useState('')
   const [egFilter, setEgFilter] = useState('')
   const [ejFilter, setEjFilter] = useState('')
   const estadosTecnico = useEstadosTecnico()
@@ -946,6 +979,7 @@ export function CordobaHogarPage() {
       if (q && !`${l.localidad} ${l.expediente ?? ''} ${l.doc_exp ?? ''}`.toLowerCase().includes(q)) return false
       if (deptoFilter && l.departamento !== deptoFilter) return false
       if (okFilter && l.ok_gob !== okFilter) return false
+      if (convenioFilter && l.convenio_firmado !== (convenioFilter === 'SI')) return false
       if (egFilter && String(l.estado_general) !== egFilter) return false
       if (ejFilter && String(l.ejuridico) !== ejFilter) return false
       if (etFilter && String(l.etecnico) !== etFilter) return false
@@ -954,17 +988,14 @@ export function CordobaHogarPage() {
       if (docFilter && documentacionPanel(l) !== docFilter) return false
       return true
     })
-  }, [localidades, search, deptoFilter, okFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter, docFilter])
+  }, [localidades, search, deptoFilter, okFilter, convenioFilter, egFilter, ejFilter, etFilter, efFilter, obraFilter, docFilter])
 
   const montoTotal = localidades.reduce((s, l) => s + (l.monto ?? 0), 0)
   const saldo = montoTotal - presupuesto
   const totalCasas = localidades.reduce((s, l) => s + (l.cantidad_casas ?? 0), 0)
   const conOkGob = localidades.filter((l) => l.ok_gob === 'SI').length
-  const conConvenio = localidades.filter((l) => {
-    const e = estados.find((s) => s.id === l.ejuridico)
-    return e?.label === 'Convenio Firmado'
-  }).length
-  const hasFilters = !!(search || deptoFilter || okFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter || docFilter)
+  const conConvenio = localidades.filter((l) => l.convenio_firmado).length
+  const hasFilters = !!(search || deptoFilter || okFilter || convenioFilter || egFilter || ejFilter || etFilter || efFilter || obraFilter || docFilter)
 
   const [sortCol, setSortCol] = useState('localidad') // alfabético por defecto (spec-vivienda-tablero-analitico §8.1)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -983,6 +1014,8 @@ export function CordobaHogarPage() {
       let vb: string | number | null
       if (sortCol === 'avance') {
         va = avancePct(a, estados, estadosTecnico); vb = avancePct(b, estados, estadosTecnico)
+      } else if (sortCol === 'convenio_firmado') {
+        va = a.convenio_firmado ? 1 : 0; vb = b.convenio_firmado ? 1 : 0
       } else if (sortCol === 'avance_obra') {
         va = a.avance_obra_pct ?? null; vb = b.avance_obra_pct ?? null
       } else if (sortCol === 'etecnico') {
@@ -1022,7 +1055,7 @@ export function CordobaHogarPage() {
           { label: 'Viviendas', value: String(totalCasas), color: 'var(--color-gov-blue)' },
           { label: 'Monto Total', value: fmtMontoResumen(montoTotal), color: 'var(--color-gov-cyan)' },
           { label: 'OK Ministerio', value: String(conOkGob), color: '#22c55e' },
-          { label: 'Convenio Firmado', value: String(conConvenio), color: 'var(--color-gov-navy)' },
+          { label: 'Convenio Firmado', value: `${conConvenio} / ${localidades.length}`, color: 'var(--color-gov-navy)' },
         ].map((c) => (
           <div key={c.label} className="bg-white rounded-md px-4 py-3 min-w-[140px] shadow-sm border border-slate-100" style={{ borderTop: `4px solid ${c.color}` }}>
             <div className="text-2xl font-bold leading-none" style={{ color: c.color }}>{c.value}</div>
@@ -1059,6 +1092,8 @@ export function CordobaHogarPage() {
               'Viviendas': l.cantidad_casas ?? '',
               'Monto ($)': l.monto ?? '',
               'OK Ministro': l.ok_gob,
+              'Convenio firmado': l.convenio_firmado ? 'SI' : 'NO',
+              'Fecha firma convenio': l.fecha_firma_convenio ?? '',
               'Última obs.': l.doc_exp ?? '',
               'Últ. modif.': fmtDate(l.updated_at),
               'Estado General': estados.find((e) => e.id === l.estado_general)?.label ?? '',
@@ -1117,6 +1152,14 @@ export function CordobaHogarPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <label htmlFor={convenioId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Convenio firmado</label>
+          <select id={convenioId} value={convenioFilter} onChange={(e) => setConvenioFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
+            <option value="">— Todos —</option>
+            <option value="SI">SI</option>
+            <option value="NO">NO</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
           <label htmlFor={egId} className="text-xs font-bold uppercase text-gray-500 whitespace-nowrap">Est. General</label>
           <select id={egId} value={egFilter} onChange={(e) => setEgFilter(e.target.value)} className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan">
             <option value="">— Todos —</option>
@@ -1159,7 +1202,7 @@ export function CordobaHogarPage() {
           </select>
         </div>
         {hasFilters && (
-          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter(''); setDocFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
+          <button onClick={() => { setSearch(''); setDeptoFilter(''); setOkFilter(''); setConvenioFilter(''); setEgFilter(''); setEjFilter(''); setEtFilter(''); setEfFilter(''); setObraFilter(''); setDocFilter('') }} className="border border-slate-200 rounded px-3 py-1 text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors">
             ✕ Limpiar filtros
           </button>
         )}
@@ -1213,7 +1256,7 @@ export function CordobaHogarPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={18} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
+                  <td colSpan={19} className="text-center py-10 text-gray-400">Sin resultados para los filtros aplicados.</td>
                 </tr>
               )}
               {sorted.map((l) => {
@@ -1242,6 +1285,10 @@ export function CordobaHogarPage() {
                     <td className="px-2.5 py-1.5 font-semibold text-center" style={{ fontSize: '11px' }}>{l.cantidad_casas ?? '—'}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-gov-blue whitespace-nowrap" style={{ fontSize: '11px' }}>{fmtMonto(l.monto)}</td>
                     <td className="px-2.5 py-1.5"><OkBadge v={l.ok_gob} /></td>
+                    <td className="px-2.5 py-1.5 whitespace-nowrap">
+                      <OkBadge v={l.convenio_firmado ? 'SI' : 'NO'} />
+                      {l.fecha_firma_convenio && <span className="block text-gray-500 mt-0.5" style={{ fontSize: '10px' }}>{fmtFecha(l.fecha_firma_convenio)}</span>}
+                    </td>
                     <td className="px-2.5 py-1.5" style={{ fontSize: '10px' }}>
                       {l.doc_exp
                         ? <span className="rounded px-1.5 py-0.5" style={{ background: '#E3F2FD', color: '#1565C0', fontSize: '10px' }}>📄 {l.doc_exp}</span>

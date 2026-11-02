@@ -292,6 +292,8 @@ export interface LocalidadCH extends ObraPanel {
   monto: number | null
   cantidad_casas: number | null
   ok_gob: string
+  convenio_firmado: boolean
+  fecha_firma_convenio: string | null
   doc_exp: string | null
   ejuridico: number | null
   etecnico: number | null
@@ -345,6 +347,8 @@ export interface LocalidadCHUpdate {
   monto?: number | null
   cantidad_casas?: number | null
   ok_gob?: string
+  convenio_firmado?: boolean
+  fecha_firma_convenio?: string | null
   doc_exp?: string
   ejuridico?: number | null
   efinanciero?: number | null
