@@ -22,6 +22,7 @@ import { AtpPage } from './modules/gralgob/pages/AtpPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
 import { FichaLocalidadPage } from './modules/resumen-territorial/pages/FichaLocalidadPage'
 import { TableroGobiernoPage } from './modules/tablero-gobierno/pages/TableroGobiernoPage'
+import { AgentePage } from './modules/agente/pages/AgentePage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
@@ -77,6 +78,14 @@ export default function App() {
                 element={
                   <ProtectedRoute roles={['Admin', 'Autoridad']}>
                     <TableroGobiernoPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="agente/:conversacionId?"
+                element={
+                  <ProtectedRoute roles={['Admin', 'Autoridad']}>
+                    <AgentePage />
                   </ProtectedRoute>
                 }
               />

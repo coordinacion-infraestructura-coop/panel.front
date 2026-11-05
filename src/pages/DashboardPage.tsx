@@ -245,6 +245,24 @@ export function DashboardPage() {
         </Link>
       )}
 
+      {!isLoading && portalUser && canAccessTableroGobierno && (
+        <Link
+          to="/agente"
+          className="block mb-4 rounded-lg border border-slate-200 bg-white px-5 py-4 hover:border-gov-cyan transition group focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gov-blue mb-0.5">Nuevo</p>
+              <h3 className="font-semibold text-gov-navy">Asistente de consultas</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Preguntá en lenguaje natural por programas, gestiones, montos o demoras de cualquier localidad.
+              </p>
+            </div>
+            <span className="text-gov-cyan group-hover:translate-x-0.5 transition-transform">→</span>
+          </div>
+        </Link>
+      )}
+
       {!isLoading && !isError && portalUser && visibleActivas.length === 0 && visibleDesarrollo.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-5 py-6 text-center">
           <p className="text-amber-800 font-medium">Tu cuenta no tiene secretarías asignadas.</p>

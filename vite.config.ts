@@ -22,6 +22,9 @@ export default defineConfig(({ mode }) => {
         ...(env.VITE_LOCAL_GRALGOB_URL && {
           '/api/v1/gralgob': { target: env.VITE_LOCAL_GRALGOB_URL, changeOrigin: true },
         }),
+        ...(env.VITE_LOCAL_AGENTE_URL && {
+          '/api/v1/agente': { target: env.VITE_LOCAL_AGENTE_URL, changeOrigin: true },
+        }),
         ...(env.VITE_LOCAL_PRIVADA_URL && {
           '/api/v1/privada': { target: env.VITE_LOCAL_PRIVADA_URL, changeOrigin: true },
         }),
