@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import { usePortalUser, type PortalUser } from '../hooks/usePortalUser'
 import { puedeVerRuta } from '../utils/permisos'
 import { NotificacionesCampana } from './NotificacionesCampana'
+import { AgenteBurbuja } from '../../modules/agente/components/AgenteBurbuja'
 
 interface NavItem {
   to: string
@@ -241,6 +242,9 @@ export function Layout() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <Outlet />
       </main>
+
+      {/* Burbuja del asistente — mismo permiso que la pestaña "Asistente" (spec-agente-consultas.md §8) */}
+      {portalUser && canAccessTableroGobierno && <AgenteBurbuja />}
     </div>
   )
 }
