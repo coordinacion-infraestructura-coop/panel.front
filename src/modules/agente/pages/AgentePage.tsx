@@ -106,7 +106,11 @@ export function AgentePage() {
   })
 
   const mensajes = conversacionId ? detalle.data?.mensajes ?? [] : []
-  useEffect(() => finRef.current?.scrollIntoView({ behavior: 'smooth' }), [mensajes.length, pendiente, progreso])
+  // Con llaves: en Chrome actual scrollIntoView devuelve una Promise, y si el efecto la devuelve
+  // React la toma como cleanup y falla con "n is not a function".
+  useEffect(() => {
+    finRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [mensajes.length, pendiente, progreso])
 
   async function enviar(pregunta: string) {
     const t = pregunta.trim()
