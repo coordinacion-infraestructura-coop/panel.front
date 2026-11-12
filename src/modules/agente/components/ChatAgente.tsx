@@ -110,6 +110,17 @@ export function ChatAgente({ conversacionId, onConversacionCreada, compacto = fa
     finRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [mensajes.length, pendiente, progreso])
 
+  async function respuestaGuardada(id: string, pregunta: string): Promise<boolean> {
+    try {
+      const d = await qc.fetchQuery({ queryKey: ['agente', 'conversacion', id], queryFn: () => obtenerConversacion(id), staleTime: 0 })
+      qc.invalidateQueries({ queryKey: ['agente', 'conversaciones'] })
+      const [u, a] = d.mensajes.slice(-2)
+      return u?.rol === 'user' && u.texto.trim() === pregunta && a?.rol === 'assistant'
+    } catch {
+      return false
+    }
+  }
+
   async function enviar(pregunta: string) {
     const t = pregunta.trim()
     if (!t || pendiente) return
@@ -117,8 +128,8 @@ export function ChatAgente({ conversacionId, onConversacionCreada, compacto = fa
     setPendiente(t)
     setProgreso('Pensando la consulta')
     setTexto('')
+    let id = conversacionId
     try {
-      let id = conversacionId
       if (!id) {
         id = (await crearConversacion()).id
         onConversacionCreada(id)
@@ -128,6 +139,9 @@ export function ChatAgente({ conversacionId, onConversacionCreada, compacto = fa
       qc.invalidateQueries({ queryKey: ['agente', 'conversaciones'] })
     } catch (e) {
       const err = e as ErrorAgente
+      // Si el stream se cortó pero el backend llegó a guardar la respuesta, se muestra esa en vez de
+      // devolver la pregunta al cuadro: reenviarla gastaba tokens dos veces.
+      if (id && !err.status && (await respuestaGuardada(id, t))) return
       setError(err.code === 'CUOTA_DIARIA_AGOTADA' ? err.message : `No se pudo completar la consulta. ${err.message ?? ''}`)
       setTexto(t)
     } finally {

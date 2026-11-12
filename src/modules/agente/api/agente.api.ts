@@ -120,8 +120,15 @@ export async function preguntar(
     while ((corte = buffer.indexOf('\n\n')) >= 0) {
       const crudo = buffer.slice(0, corte)
       buffer = buffer.slice(corte + 2)
-      const evento = /^event: (.*)$/m.exec(crudo)?.[1]
-      const data = /^data: (.*)$/m.exec(crudo)?.[1]
+      // Por líneas y no con regex: `.` y `$` de JS cortan en U+2028/U+2029, que vienen en textos
+      // pegados desde Word/Sheets y partían el evento `respuesta` (el usuario reenviaba la pregunta).
+      let evento: string | undefined
+      const datos: string[] = []
+      for (const linea of crudo.split('\n')) {
+        if (linea.startsWith('event: ')) evento = linea.slice(7)
+        else if (linea.startsWith('data: ')) datos.push(linea.slice(6))
+      }
+      const data = datos.length ? datos.join('\n') : null
       if (!evento || data == null) continue
       const payload = JSON.parse(data)
       if (evento === 'progreso') onProgreso(payload.texto)
