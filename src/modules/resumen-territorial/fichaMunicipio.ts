@@ -120,7 +120,8 @@ interface AtpFila {
 // tienen el objeto completo en mano al pedir la ficha, así que se pasa acá
 // en vez de volver a pedir el snapshot entero dentro de armarFichaMunicipio.
 export interface DatosExternosLocalidad {
-  poblacion_2022: number | null
+  poblacion_2022: number | null // de Gobierno (la del Tablero de Gobierno)
+  poblacion_censo_2022?: number | null
   viviendas_2022: number | null
   transferencias_periodo: string | null
   transferencias_total: number | null
@@ -198,6 +199,8 @@ export interface FichaMunicipio {
   visitaGobernador: { visitado: boolean; fechas: string[] }
   datosExternos: {
     poblacion_2022: string
+    /** Censo 2022 solo si difiere de la de Gobierno; si no, null y no se muestra. */
+    poblacion_censo_2022: string | null
     viviendas_2022: string
     transferencias_periodo: string
     transferencias_total: string
@@ -424,6 +427,10 @@ export async function armarFichaMunicipio(
     },
     datosExternos: {
       poblacion_2022: fmtNum(datosExternos?.poblacion_2022),
+      poblacion_censo_2022:
+        datosExternos?.poblacion_censo_2022 != null && datosExternos.poblacion_censo_2022 !== datosExternos.poblacion_2022
+          ? fmtNum(datosExternos.poblacion_censo_2022)
+          : null,
       viviendas_2022: fmtNum(datosExternos?.viviendas_2022),
       transferencias_periodo: datosExternos?.transferencias_periodo ?? '—',
       transferencias_total: fmtMoney(datosExternos?.transferencias_total),
@@ -686,7 +693,8 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
 
   // ── Datos externos (Censo 2022 + Transferencias automáticas) ──
   heading(`Datos Externos — Censo 2022 y Transferencias${f.datosExternos.transferencias_periodo !== '—' ? `  |  ${f.datosExternos.transferencias_periodo}` : ''}`)
-  kv('Población (Censo 2022)', f.datosExternos.poblacion_2022)
+  kv('Población (Gobierno)', f.datosExternos.poblacion_2022)
+  if (f.datosExternos.poblacion_censo_2022) kv('Población (Censo 2022, difiere)', f.datosExternos.poblacion_censo_2022)
   kv('Viviendas (Censo 2022)', f.datosExternos.viviendas_2022)
   if (f.datosExternos.porConcepto.length) {
     f.datosExternos.porConcepto.forEach((c) => kv(c.concepto, c.monto))
@@ -800,7 +808,10 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
       Campo: `Datos Externos — Censo 2022 y Transferencias${f.datosExternos.transferencias_periodo !== '—' ? ` (${f.datosExternos.transferencias_periodo})` : ''}`,
       Valor: '',
     },
-    { Campo: '  Población (Censo 2022)', Valor: f.datosExternos.poblacion_2022 },
+    { Campo: '  Población (Gobierno)', Valor: f.datosExternos.poblacion_2022 },
+    ...(f.datosExternos.poblacion_censo_2022
+      ? [{ Campo: '  Población (Censo 2022, difiere)', Valor: f.datosExternos.poblacion_censo_2022 }]
+      : []),
     { Campo: '  Viviendas (Censo 2022)', Valor: f.datosExternos.viviendas_2022 },
     ...f.datosExternos.porConcepto.map((c) => ({ Campo: `  ${c.concepto}`, Valor: c.monto })),
     { Campo: '  Total transferencias', Valor: f.datosExternos.transferencias_total },

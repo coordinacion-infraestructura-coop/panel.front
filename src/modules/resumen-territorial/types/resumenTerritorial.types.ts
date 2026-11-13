@@ -77,7 +77,10 @@ export interface ResumenLocalidad {
   // Censo 2022 + transferencias automáticas (svc-datos-externos, ADR-025).
   // Todos null si no hubo match de id_geo o la federación está apagada/caída.
   categoria: 'MU' | 'CO' | null
+  // Población de Gobierno (la misma del Tablero de Gobierno); si falta, la del Censo. El Censo
+  // 2022 viaja aparte para mostrarlo cuando difiere (spec-datos-externos-fase1 v1.3.0).
   poblacion_2022: number | null
+  poblacion_censo_2022?: number | null
   viviendas_2022: number | null
   transferencias_periodo: string | null // ej. "2026-07-01"
   transferencias_total: number | null

@@ -21,7 +21,16 @@ function Semaforo({ valor }: { valor: number | null }) {
 }
 
 const montos: Columna<ResumenFila>[] = [
-  { titulo: 'Población', valor: (f) => f.poblacion, render: (f) => fmtN(f.poblacion), numerica: true },
+  { titulo: 'Población (Gobierno)', valor: (f) => f.poblacion, render: (f) => fmtN(f.poblacion), numerica: true },
+  {
+    titulo: 'Censo 2022',
+    valor: (f) => f.poblacion_censo ?? null,
+    // Resaltada si difiere del dato de Gobierno (p. ej. Villa San Isidro: 1.527 vs. 607).
+    render: (f) => f.poblacion_censo != null && f.poblacion_censo !== f.poblacion
+      ? <span className="text-amber-700 font-semibold" title="Distinta de la población de Gobierno">{fmtN(f.poblacion_censo)}</span>
+      : fmtN(f.poblacion_censo ?? null),
+    numerica: true,
+  },
   { titulo: 'ATP Interno', valor: (f) => f.atp, render: (f) => fmtMonto(f.atp), numerica: true },
   { titulo: 'COPA neta', valor: (f) => f.copa, render: (f) => fmtMonto(f.copa), numerica: true },
   { titulo: 'FOFINDES neto', valor: (f) => f.fofindes, render: (f) => fmtMonto(f.fofindes), numerica: true },
@@ -47,7 +56,7 @@ const COL_LOC: Columna<ResumenFila>[] = [
 // La fila de total no lleva color en el semáforo, como en el Looker.
 const totalFila = (t: ResumenFila, vacias: number) => [
   'Total', ...Array<string>(vacias).fill(''),
-  fmtN(t.poblacion), fmtMonto(t.atp), fmtMonto(t.copa), fmtMonto(t.fofindes), fmtPct(t.atp_sobre_copa_fofin), fmtMonto(t.fondo_ambiental),
+  fmtN(t.poblacion), fmtN(t.poblacion_censo ?? null), fmtMonto(t.atp), fmtMonto(t.copa), fmtMonto(t.fofindes), fmtPct(t.atp_sobre_copa_fofin), fmtMonto(t.fondo_ambiental),
   fmtMonto(t.total), fmtPesos(t.por_habitante),
 ]
 

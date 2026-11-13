@@ -290,7 +290,11 @@ export function VistaProvincia({
   const metricaInfo = METRICAS.find((m) => m.id === metrica)!
 
   const kpiItems: Kpi[] = [
-    { value: fmtInt(kpisFiltrados.poblacion_2022), label: 'Población (Censo 2022)', accent: 'navy' },
+    { value: fmtInt(kpisFiltrados.poblacion_2022), label: 'Población (Gobierno)', accent: 'navy' },
+    // Las dos poblaciones solo cuando no coinciden (spec-datos-externos-fase1 v1.3.0).
+    ...(kpisFiltrados.poblacion_censo_2022 != null && kpisFiltrados.poblacion_censo_2022 !== kpisFiltrados.poblacion_2022
+      ? [{ value: fmtInt(kpisFiltrados.poblacion_censo_2022), label: 'Población Censo 2022 (difiere de Gobierno)', accent: 'navy' as const }]
+      : []),
     { value: fmtDensidad(kpisFiltrados.densidad), label: 'Densidad en el radio municipal (hab/km²)', accent: 'cyan' },
     { value: fmtCrecimiento(kpisFiltrados.crecimiento_intercensal), label: 'Crecim. intercensal 2010–2022', accent: 'orange' },
     // La zona rural es de un departamento, no de una localidad: con una
@@ -305,7 +309,11 @@ export function VistaProvincia({
   ]
 
   const kpiGlosario: { label: string; explicacion: string }[] = [
-    { label: 'Población (Censo 2022)', explicacion: 'Habitantes del padrón oficial (Censo Nacional 2022) de la zona.' },
+    {
+      label: 'Población (Gobierno)',
+      explicacion:
+        'Habitantes según la Secretaría General de Gobierno (la misma del Tablero de Gobierno). Coincide con el Censo Nacional 2022 salvo donde Gobierno fijó otro valor (p. ej. por coparticipación); en ese caso también se muestra la población del Censo.',
+    },
     {
       label: 'Cobertura territorial',
       explicacion: 'Localidades de la zona con al menos un registro en algún programa/fuente, sobre el total del padrón.',
@@ -320,7 +328,7 @@ export function VistaProvincia({
     {
       label: 'Densidad en el radio municipal',
       explicacion:
-        'Población (Censo 2022) ÷ superficie del radio municipal en km² (polígono según IDECOR, informado por Gobierno). No es la densidad del departamento: sólo cuenta el radio de cada gobierno local.',
+        'Población ÷ superficie del radio municipal en km² (polígono según IDECOR, informado por Gobierno). No es la densidad del departamento: sólo cuenta el radio de cada gobierno local.',
     },
     {
       label: 'Crecim. intercensal 2010–2022',

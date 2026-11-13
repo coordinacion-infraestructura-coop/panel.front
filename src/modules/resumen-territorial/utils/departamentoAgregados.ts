@@ -56,6 +56,7 @@ export interface DepartamentoAgregado {
   total_programas: number
   promedio_programas: number // total_programas / localidades_totales (0 si no hay padrón)
   poblacion_2022: number | null
+  poblacion_censo_2022: number | null // Censo 2022 de las mismas localidades (ver `poblacionCenso`)
   transferencias_total: number | null
   transferencias_per_capita: number | null
   atp_monto: number
@@ -70,9 +71,17 @@ interface Acumulador {
   localidadesConDatos: number
   totalProgramas: number
   poblacion: number
+  poblacionCenso: number
   transferenciasTotal: number
   atpMonto: number
   atpMontoEntregado: number
+}
+
+/** Censo 2022 de una localidad. Si no viene, se toma la población principal: sin Censo no hay
+ * diferencia que mostrar, y así los totales de Gobierno y Censo solo difieren donde los dos datos
+ * existen y no coinciden (p. ej. Villa San Isidro: Gobierno 1.527, Censo 607). */
+export function poblacionCenso(loc: Pick<ResumenLocalidad, 'poblacion_2022' | 'poblacion_censo_2022'>): number {
+  return loc.poblacion_censo_2022 ?? loc.poblacion_2022 ?? 0
 }
 
 export function calcularDepartamentos(payload: ResumenTerritorialPayload): DepartamentoAgregado[] {
@@ -81,7 +90,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
   const ensure = (dep: string): Acumulador => {
     let acc = porDepto.get(dep)
     if (!acc) {
-      acc = { localidadesConDatos: 0, totalProgramas: 0, poblacion: 0, transferenciasTotal: 0, atpMonto: 0, atpMontoEntregado: 0 }
+      acc = { localidadesConDatos: 0, totalProgramas: 0, poblacion: 0, poblacionCenso: 0, transferenciasTotal: 0, atpMonto: 0, atpMontoEntregado: 0 }
       porDepto.set(dep, acc)
     }
     return acc
@@ -97,6 +106,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
     acc.localidadesConDatos += 1
     acc.totalProgramas += loc.programas.length
     if (loc.poblacion_2022) acc.poblacion += loc.poblacion_2022
+    acc.poblacionCenso += poblacionCenso(loc)
     if (loc.transferencias_total) acc.transferenciasTotal += loc.transferencias_total
     for (const p of loc.programas) {
       if (p.programa === 'atp' && p.monto) acc.atpMonto += p.monto
@@ -136,6 +146,7 @@ export function calcularDepartamentos(payload: ResumenTerritorialPayload): Depar
       total_programas: acc.totalProgramas,
       promedio_programas: Math.round(promedioProgramas * 100) / 100,
       poblacion_2022: acc.poblacion || null,
+      poblacion_censo_2022: acc.poblacionCenso || null,
       transferencias_total: acc.transferenciasTotal || null,
       transferencias_per_capita: transferenciasPerCapita,
       atp_monto: acc.atpMonto,
@@ -200,7 +211,8 @@ export function calcularFocalizacionPorLocalidad(
 }
 
 export interface KpisProvincia {
-  poblacion_2022: number | null
+  poblacion_2022: number | null // de Gobierno
+  poblacion_censo_2022: number | null // Censo 2022; se muestra solo si difiere
   transferencias_total: number | null
   transferencias_per_capita: number | null
   transferencias_periodo: string | null
@@ -221,6 +233,7 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
   const deptos = calcularDepartamentos(payload)
 
   const poblacion = deptos.reduce((s, d) => s + (d.poblacion_2022 ?? 0), 0) || null
+  const poblacionCensoTotal = deptos.reduce((s, d) => s + (d.poblacion_censo_2022 ?? 0), 0) || null
   const transferenciasTotal = deptos.reduce((s, d) => s + (d.transferencias_total ?? 0), 0) || null
   const atpMontoTotal = deptos.reduce((s, d) => s + d.atp_monto, 0)
   const atpMontoEntregadoTotal = deptos.reduce((s, d) => s + d.atp_monto_entregado, 0)
@@ -236,6 +249,7 @@ export function calcularKpisProvincia(payload: ResumenTerritorialPayload): KpisP
     ...calcularDemografia(payload.localidades),
     poblacion_rural_2022: poblacionRural,
     poblacion_2022: poblacion,
+    poblacion_censo_2022: poblacionCensoTotal,
     transferencias_total: transferenciasTotal,
     transferencias_per_capita:
       transferenciasTotal !== null && poblacion ? Math.round((transferenciasTotal / poblacion) * 100) / 100 : null,

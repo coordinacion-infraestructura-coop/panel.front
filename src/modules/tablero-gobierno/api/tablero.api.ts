@@ -44,7 +44,9 @@ export interface ActualizacionManual {
 export interface InicioDepartamento {
   departamento: string
   localidades: number
+  /** Población de Gobierno (la que usa el área); poblacion_censo: Censo 2022, null si falta en alguna localidad. */
   poblacion: number
+  poblacion_censo?: number | null
   transferido: number
   por_habitante: number | null
 }
@@ -57,6 +59,7 @@ export interface Inicio {
     municipios: number
     comunas: number
     poblacion: number
+    poblacion_censo?: number | null
     transferido: number
     por_habitante: number | null
   }
@@ -203,6 +206,7 @@ export interface ResumenFila {
   tipo: string | null
   localidades: number
   poblacion: number
+  poblacion_censo?: number | null
   copa: number
   fofindes: number
   fondo_ambiental: number

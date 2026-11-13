@@ -17,6 +17,14 @@ const METRICAS: Record<Metrica, { nombre: string; formato: (v: number) => string
 
 /** Inicio: nomenclador, Censo, transferencias de Transparencia y ATP Compromisos (Etapa 1);
  * visitas, reuniones y visitas del Gobernador en toda la gestión (Etapa 5). */
+/** La población que se muestra es la de Gobierno (la que usa para coparticipación); el Censo 2022 va
+ * al lado cuando difiere (spec-datos-externos-fase1-nomenclador-demografia.md §11.2, v1.3.0). */
+function detallePoblacion(gobierno: number, censo: number | null | undefined): string {
+  if (censo == null) return 'Dato de Gobierno'
+  if (censo === gobierno) return 'Dato de Gobierno · igual al Censo 2022'
+  return `Dato de Gobierno · Censo 2022: ${fmtN(censo)}`
+}
+
 export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
   const [metrica, setMetrica] = useState<Metrica>('por_habitante')
   const inicio = useQuery({ queryKey: ['tablero-gobierno', 'inicio', ctx.anio, ctx.codigos], queryFn: () => tableroApi.inicio(ctx.anio, ctx.codigos) })
@@ -50,7 +58,7 @@ export function InicioVista({ ctx }: { ctx: ContextoTablero }) {
     <div className="space-y-4">
       <Kpis>
         <Kpi label="Localidades" valor={fmtN(k.localidades)} detalle={`${fmtN(k.municipios)} municipios · ${fmtN(k.comunas)} comunas`} />
-        <Kpi label="Población 2022" valor={fmtN(k.poblacion)} detalle="Censo INDEC" />
+        <Kpi label="Población" valor={fmtN(k.poblacion)} detalle={detallePoblacion(k.poblacion, k.poblacion_censo)} />
         <Kpi
           label={`Transferido en ${ctx.anio}`}
           valor={fmtMonto(k.transferido)}
