@@ -179,7 +179,10 @@ export interface FichaMunicipio {
   demografica: {
     color_semaforo: string
     tipo_localidad: string
+    /** Población de Gobierno (la del Tablero de Gobierno); la de Privada solo si falta. */
     habitantes: string
+    /** Censo 2022 solo si difiere de `habitantes`; si no, null y no se muestra. */
+    habitantes_censo: string | null
     electores: string
     intendente: string
     partido: string
@@ -334,7 +337,15 @@ export async function armarFichaMunicipio(
     demografica: {
       color_semaforo: semLabel(li?.color_semaforo),
       tipo_localidad: li?.tipo_localidad ?? '—',
-      habitantes: fmtNum(li?.habitantes),
+      // Misma población que el Tablero de Gobierno y el resto del Resumen Territorial
+      // (spec-datos-externos-fase1 v1.3.0); el padrón de Privada queda como respaldo.
+      habitantes: fmtNum(datosExternos?.poblacion_2022 ?? li?.habitantes),
+      habitantes_censo:
+        datosExternos?.poblacion_2022 != null
+        && datosExternos.poblacion_censo_2022 != null
+        && datosExternos.poblacion_censo_2022 !== datosExternos.poblacion_2022
+          ? fmtNum(datosExternos.poblacion_censo_2022)
+          : null,
       electores: fmtNum(li?.electores),
       intendente: li?.intendente_jefe_comunal ?? '—',
       partido: li?.partido_politico ?? '—',
@@ -559,6 +570,7 @@ export async function fichaMunicipioPdf(f: FichaMunicipio): Promise<void> {
   heading('Ficha Demográfica')
   semaforoKv(f.demografica.color_semaforo)
   kv('Habitantes', f.demografica.habitantes)
+  if (f.demografica.habitantes_censo) kv('Habitantes (Censo 2022, difiere)', f.demografica.habitantes_censo)
   kv('Electores', f.demografica.electores)
   kv('Intendente / Jefe Comunal', f.demografica.intendente)
   kv('Partido Político', f.demografica.partido)
@@ -734,6 +746,7 @@ export function fichaMunicipioXlsx(f: FichaMunicipio): void {
     { Campo: 'Tipo localidad', Valor: f.demografica.tipo_localidad },
     { Campo: 'Semáforo', Valor: f.demografica.color_semaforo },
     { Campo: 'Habitantes', Valor: f.demografica.habitantes },
+    ...(f.demografica.habitantes_censo ? [{ Campo: 'Habitantes (Censo 2022, difiere)', Valor: f.demografica.habitantes_censo }] : []),
     { Campo: 'Electores', Valor: f.demografica.electores },
     { Campo: 'Intendente / Jefe Comunal', Valor: f.demografica.intendente },
     { Campo: 'Partido Político', Valor: f.demografica.partido },

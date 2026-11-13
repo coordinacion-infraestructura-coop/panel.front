@@ -308,6 +308,11 @@ export function FichaLocalidadPage() {
               <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 min-w-[100px]">
                 <div className="text-xl font-extrabold text-gov-navy leading-none">{ficha.demografica.habitantes}</div>
                 <div className="text-[10px] uppercase tracking-wide text-gray-400 mt-1">Habitantes</div>
+                {ficha.demografica.habitantes_censo && (
+                  <div className="text-[10px] text-amber-700 font-semibold mt-0.5" title="Distinta de la población de Gobierno">
+                    Censo 2022: {ficha.demografica.habitantes_censo}
+                  </div>
+                )}
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 min-w-[100px]">
                 <div className="text-xl font-extrabold text-gov-navy leading-none">{ficha.demografica.electores}</div>
@@ -351,7 +356,7 @@ export function FichaLocalidadPage() {
             <div className="px-6 py-5">
               <SectionHeader icon="👤" title="Ficha demográfica y política" />
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-base">
-                <div><dt className="text-xs text-gray-400 uppercase">Habitantes</dt><dd className="font-semibold text-gov-navy">{ficha.demografica.habitantes}</dd></div>
+                <div><dt className="text-xs text-gray-400 uppercase">Habitantes</dt><dd className="font-semibold text-gov-navy">{ficha.demografica.habitantes}{ficha.demografica.habitantes_censo && <span className="ml-1.5 text-xs font-normal text-amber-700">(Censo 2022: {ficha.demografica.habitantes_censo})</span>}</dd></div>
                 <div><dt className="text-xs text-gray-400 uppercase">Electores</dt><dd className="font-semibold text-gov-navy">{ficha.demografica.electores}</dd></div>
                 <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Intendente / Jefe comunal</dt><dd className="text-slate-700">{ficha.demografica.intendente}{ficha.demografica.partido !== '—' ? ` · ${ficha.demografica.partido}` : ''}</dd></div>
                 <div className="col-span-2"><dt className="text-xs text-gray-400 uppercase">Tipo de localidad</dt><dd className="text-slate-700">{ficha.demografica.tipo_localidad}</dd></div>
