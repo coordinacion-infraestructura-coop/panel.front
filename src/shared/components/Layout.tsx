@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { usePortalUser, type PortalUser } from '../hooks/usePortalUser'
-import { puedeVerRuta } from '../utils/permisos'
+import { alcanceAdminUsuarios, puedeAdministrarCatalogosChecklist, puedeVerRuta } from '../utils/permisos'
 import { NotificacionesCampana } from './NotificacionesCampana'
 import { AgenteBurbuja } from '../../modules/agente/components/AgenteBurbuja'
 
@@ -61,7 +61,11 @@ export function Layout() {
 
   const activeSecretaria = getActiveSecretaria(location.pathname)
   const navItems = activeSecretaria ? navItemsFor(activeSecretaria, portalUser) : []
-  const isAdmin = portalUser?.rol === 'Admin'
+  // Administración: Admin, administrador delegado de usuarios, o quien administra los catálogos
+  // del Checklist (ADR-035). El enlace lleva a la primera pantalla que puede usar.
+  const adminDestino = alcanceAdminUsuarios(portalUser) !== null
+    ? '/admin/usuarios'
+    : puedeAdministrarCatalogosChecklist(portalUser) ? '/admin/catalogos-checklist' : null
   const isAdminPage = location.pathname.startsWith('/admin')
   
   // Verificar acceso a Resumen Territorial: rol Autoridad OR secretaría 'supervision'
@@ -221,10 +225,10 @@ export function Layout() {
               </>
             )}
 
-            {/* Administración — solo para Admin */}
-            {isAdmin && (
+            {/* Administración — Admin y administración delegada (ADR-035) */}
+            {adminDestino && (
               <Link
-                to="/admin/usuarios"
+                to={adminDestino}
                 aria-current={isAdminPage ? 'page' : undefined}
                 className={`flex-shrink-0 ml-auto px-4 py-3 text-sm font-medium transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gov-cyan ${
                   isAdminPage

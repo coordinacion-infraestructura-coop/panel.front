@@ -11,13 +11,17 @@ interface ProtectedRouteProps {
   requiredSecretarias?: string[]
   /** Si se especifica, el usuario debe tener alguna de esas áreas de acceso (spec-portal-areas-de-acceso.md). */
   requiredArea?: AreaRequerida
+  /** Regla propia sobre el usuario del portal; se exige además de las anteriores. */
+  allow?: (usuario: PortalUserData | undefined) => boolean
 }
 
-export function ProtectedRoute({ children, roles, requiredSecretarias, requiredArea }: ProtectedRouteProps) {
+type PortalUserData = ReturnType<typeof usePortalUser>['data']
+
+export function ProtectedRoute({ children, roles, requiredSecretarias, requiredArea, allow }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
   const portalQuery = usePortalUser(!loading && !!user)
 
-  const checkingRole = !!(roles || requiredSecretarias || requiredArea) && !!user && portalQuery.isLoading
+  const checkingRole = !!(roles || requiredSecretarias || requiredArea || allow) && !!user && portalQuery.isLoading
 
   if (loading || checkingRole) {
     return (
@@ -54,6 +58,7 @@ export function ProtectedRoute({ children, roles, requiredSecretarias, requiredA
   }
 
   if (requiredArea && !cumpleArea(portalQuery.data, requiredArea)) hasAccess = false
+  if (allow && !allow(portalQuery.data)) hasAccess = false
 
   if (!hasAccess) {
     return <Navigate to="/" replace />

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import { miLugarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
-import { puedeEditarArea } from '../../../shared/utils/permisos'
+import { puedeAdministrarCatalogosChecklist, puedeEditarArea } from '../../../shared/utils/permisos'
 import { normalizeName } from '../../../shared/utils/normalizeName'
 import {
   CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
@@ -1029,10 +1029,10 @@ function AgregarProyectoModal({
 // ── Modal de parámetros ───────────────────────────────────────────────────────
 
 function GestionarParametrosModal({
-  estadosExp, estadosMuni, estadosProv, config, canManage, esAdmin, onClose,
+  estadosExp, estadosMuni, estadosProv, config, canManage, adminCatalogos, onClose,
 }: {
   estadosExp: EstadoML[]; estadosMuni: EstadoML[]; estadosProv: EstadoML[]
-  config: ConfigML | null; canManage: boolean; esAdmin: boolean; onClose: () => void
+  config: ConfigML | null; canManage: boolean; adminCatalogos: boolean; onClose: () => void
 }) {
   const uid = useId()
   const qc = useQueryClient()
@@ -1136,7 +1136,7 @@ function GestionarParametrosModal({
               api={{ create: miLugarApi.createEstado, update: miLugarApi.updateEstado, remove: miLugarApi.deleteEstado }}
               onInvalidate={invalidateEstados}
               canDelete={canManage}
-              esAdmin={esAdmin}
+              adminCatalogos={adminCatalogos}
               extra={{ tipo: estadoTipoTab }}
             />
           </div>
@@ -1751,7 +1751,7 @@ export function MiLugarPage() {
       {showParams && canEdit && (
         <GestionarParametrosModal
           estadosExp={estadosExp} estadosMuni={estadosMuni} estadosProv={estadosProv} config={config}
-          canManage={canManage} esAdmin={user?.rol === 'Admin'} onClose={() => setShowParams(false)}
+          canManage={canManage} adminCatalogos={puedeAdministrarCatalogosChecklist(user)} onClose={() => setShowParams(false)}
         />
       )}
       {showAgregar && (

@@ -610,7 +610,7 @@ function ProgramaCard({
 
       <div className="px-4 py-3 border-t border-slate-100 flex items-center gap-3 flex-wrap">
         <label className="text-xs font-bold uppercase text-gray-500">
-          Estado del expediente <span className="ml-1 text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5" title="Catálogo administrable por un usuario Admin">⚙ admin</span>
+          Estado del expediente <span className="ml-1 text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5" title="Catálogo administrable por Admin o Supervisor con el Checklist en Editar">⚙ admin</span>
         </label>
         <select
           className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-semibold text-gov-navy disabled:opacity-60"
@@ -1056,7 +1056,7 @@ function RadicadoCard({
     <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
       <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-2">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gov-navy min-w-0">Expediente radicado en</h3>
-        <span className="text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap" title="Catálogo administrable por un usuario Admin — puede variar por programa">⚙ admin</span>
+        <span className="text-[10px] font-semibold text-gov-blue bg-sky-50 border border-sky-100 rounded-full px-1.5 py-0.5 flex-shrink-0 whitespace-nowrap" title="Catálogo administrable por Admin o Supervisor con el Checklist en Editar — puede variar por programa">⚙ admin</span>
       </div>
       <div className="p-4 space-y-3">
         <div className="flex items-start gap-2">

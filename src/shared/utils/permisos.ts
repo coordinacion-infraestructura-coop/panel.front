@@ -16,6 +16,9 @@ interface UsuarioConAreas {
   areas?: AreaAcceso[]
 }
 
+/** Áreas que habilitan una función y no un panel (ADR-035): no cuentan como "alguna área". */
+export const AREAS_DE_FUNCION = ['usuarios']
+
 /** Mejor nivel del usuario en alguna de `areas` de la secretaría (cualquiera si va vacío). */
 export function nivelDeArea(
   usuario: UsuarioConAreas | null | undefined,
@@ -26,7 +29,8 @@ export function nivelDeArea(
   if (usuario.rol === 'Admin') return 'edicion'
   if (!usuario.secretarias.includes(secretaria)) return null
   const niveles = (usuario.areas ?? [])
-    .filter((a) => a.secretaria === secretaria && (areas.length === 0 || areas.includes(a.area)))
+    .filter((a) => a.secretaria === secretaria
+      && (areas.length ? areas.includes(a.area) : !AREAS_DE_FUNCION.includes(a.area)))
     .map((a) => a.nivel)
   if (niveles.includes('edicion')) return 'edicion'
   return niveles.length ? 'lectura' : null
@@ -61,4 +65,30 @@ export function cumpleArea(usuario: UsuarioConAreas | null | undefined, req: Are
 export function puedeVerRuta(usuario: UsuarioConAreas | null | undefined, ruta: string) {
   const req = AREA_DE_RUTA[ruta]
   return req ? cumpleArea(usuario, req) : true
+}
+
+// --- Administración delegada (docs/files/spec-portal-administracion-delegada.md, ADR-035) ---
+
+/** Roles que un administrador delegado puede asignar (el backend valida lo mismo). */
+export const ROLES_ASIGNABLES_DELEGADO = ['Supervisor', 'Operador', 'Consulta']
+
+/**
+ * Alcance de administración de usuarios: `'*'` para Admin, la secretaría para un Supervisor con
+ * el área "usuarios" en Editar, `null` si no administra.
+ */
+export function alcanceAdminUsuarios(usuario: UsuarioConAreas | null | undefined): string | null {
+  if (!usuario) return null
+  if (usuario.rol === 'Admin') return '*'
+  if (usuario.rol !== 'Supervisor') return null
+  const area = (usuario.areas ?? []).find(
+    (a) => a.area === 'usuarios' && a.nivel === 'edicion' && usuario.secretarias.includes(a.secretaria),
+  )
+  return area?.secretaria ?? null
+}
+
+/** Catálogos del Checklist Técnico: Admin, o Supervisor con el área Checklist en Editar. */
+export function puedeAdministrarCatalogosChecklist(usuario: UsuarioConAreas | null | undefined) {
+  if (!usuario) return false
+  if (usuario.rol === 'Admin') return true
+  return usuario.rol === 'Supervisor' && puedeEditarArea(usuario, 'vivienda', 'checklist')
 }

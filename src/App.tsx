@@ -26,6 +26,7 @@ import { AgentePage } from './modules/agente/pages/AgentePage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
 import { AdminUsuariosPage } from './modules/admin/pages/AdminUsuariosPage'
 import { AdminCatalogosChecklistPage } from './modules/admin/pages/AdminCatalogosChecklistPage'
+import { alcanceAdminUsuarios, puedeAdministrarCatalogosChecklist } from './shared/utils/permisos'
 import { LocalidadesSinResolverPage } from './modules/admin/pages/LocalidadesSinResolverPage'
 import { AREA_DE_RUTA } from './shared/utils/permisos'
 
@@ -154,7 +155,7 @@ export default function App() {
               <Route
                 path="admin/usuarios"
                 element={
-                  <ProtectedRoute roles={['Admin']}>
+                  <ProtectedRoute allow={(u) => alcanceAdminUsuarios(u) !== null}>
                     <AdminUsuariosPage />
                   </ProtectedRoute>
                 }
@@ -162,7 +163,7 @@ export default function App() {
               <Route
                 path="admin/catalogos-checklist"
                 element={
-                  <ProtectedRoute roles={['Admin']}>
+                  <ProtectedRoute allow={puedeAdministrarCatalogosChecklist}>
                     <AdminCatalogosChecklistPage />
                   </ProtectedRoute>
                 }

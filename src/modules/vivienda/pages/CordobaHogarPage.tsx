@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordobaHogarApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
-import { puedeEditarArea } from '../../../shared/utils/permisos'
+import { puedeAdministrarCatalogosChecklist, puedeEditarArea } from '../../../shared/utils/permisos'
 import { normalizeName } from '../../../shared/utils/normalizeName'
 import {
   CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
@@ -592,9 +592,9 @@ function DetailPanel({
 // ── Gestionar parámetros modal ───────────────────────────────────────────────────
 
 function GestionarParametrosModal({
-  estados, montoPorCasa, canManage, esAdmin, onClose,
+  estados, montoPorCasa, canManage, adminCatalogos, onClose,
 }: {
-  estados: EstadoCH[]; montoPorCasa: number; canManage: boolean; esAdmin: boolean; onClose: () => void
+  estados: EstadoCH[]; montoPorCasa: number; canManage: boolean; adminCatalogos: boolean; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
@@ -686,7 +686,7 @@ function GestionarParametrosModal({
               api={{ create: cordobaHogarApi.createEstado, update: cordobaHogarApi.updateEstado, remove: cordobaHogarApi.deleteEstado }}
               onInvalidate={() => queryClient.invalidateQueries({ queryKey: ['cordoba-hogar'] })}
               canDelete={canManage}
-              esAdmin={esAdmin}
+              adminCatalogos={adminCatalogos}
             />
           </div>
         )}
@@ -1373,7 +1373,7 @@ export function CordobaHogarPage() {
           estados={estados}
           montoPorCasa={montoPorCasa}
           canManage={canManage}
-          esAdmin={user?.rol === 'Admin'}
+          adminCatalogos={puedeAdministrarCatalogosChecklist(user)}
           onClose={() => setShowGestionarEstados(false)}
         />
       )}

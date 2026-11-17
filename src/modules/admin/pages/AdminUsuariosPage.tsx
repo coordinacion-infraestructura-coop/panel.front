@@ -2,7 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../../../shared/api/client'
-import type { AreaAcceso, NivelArea } from '../../../shared/utils/permisos'
+import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import {
+  ROLES_ASIGNABLES_DELEGADO,
+  alcanceAdminUsuarios,
+  puedeAdministrarCatalogosChecklist,
+  type AreaAcceso,
+  type NivelArea,
+} from '../../../shared/utils/permisos'
 
 interface PortalUsuario {
   email: string
@@ -59,20 +66,30 @@ function UsuarioModal({
   onClose,
   onSave,
   saving,
+  secretariaFija,
 }: {
   usuario: PortalUsuario | null
   onClose: () => void
   onSave: (payload: UsuarioPayload) => void
   saving: boolean
+  /** Administrador delegado (ADR-035): secretaría fija, roles acotados, sin el área "usuarios". */
+  secretariaFija?: string
 }) {
   const isEdit = !!usuario
   const [email, setEmail] = useState(usuario?.email ?? '')
   const [nombre, setNombre] = useState(usuario?.nombre ?? '')
   const [rol, setRol] = useState<string>(usuario?.rol ?? 'Operador')
-  const [secretarias, setSecretarias] = useState<string[]>(usuario?.secretarias ?? [])
+  const [secretarias, setSecretarias] = useState<string[]>(
+    usuario?.secretarias ?? (secretariaFija ? [secretariaFija] : []),
+  )
   const [activo, setActivo] = useState(usuario?.activo ?? true)
   const [areas, setAreas] = useState<AreaAcceso[]>(usuario?.areas ?? [])
-  const { data: catalogoAreas = {} } = useCatalogoAreas()
+  const { data: catalogoTodo = {} } = useCatalogoAreas()
+  // El delegado no puede habilitar a otro administrador: no ve el área "usuarios" (D2).
+  const catalogoAreas: CatalogoAreas = secretariaFija
+    ? Object.fromEntries(Object.entries(catalogoTodo).map(([sec, as]) => [sec, as.filter((a) => a.area !== 'usuarios')]))
+    : catalogoTodo
+  const rolesDisponibles = secretariaFija ? ROLES_ASIGNABLES_DELEGADO : ROLES
 
   function toggleSecretaria(id: string) {
     setSecretarias((prev) =>
@@ -156,7 +173,7 @@ function UsuarioModal({
               onChange={(e) => setRol(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gov-cyan"
             >
-              {ROLES.map((r) => (
+              {rolesDisponibles.map((r) => (
                 <option key={r} value={r}>
                   {r}
                   {r === 'Admin' && ' — acceso total'}
@@ -169,6 +186,11 @@ function UsuarioModal({
             </select>
           </div>
 
+          {secretariaFija ? (
+            <p className="text-xs text-gray-500">
+              Secretaría: <span className="font-semibold text-gray-700">{SECRETARIAS.find((s) => s.id === secretariaFija)?.label ?? secretariaFija}</span>
+            </p>
+          ) : (
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-2">
               Secretarías asignadas
@@ -190,6 +212,7 @@ function UsuarioModal({
               ))}
             </div>
           </div>
+          )}
 
           {SECRETARIAS.filter((sec) => secretarias.includes(sec.id) && catalogoAreas[sec.id]?.length).map((sec) => (
             <fieldset key={sec.id} className="border border-slate-200 rounded-md p-3">
@@ -272,6 +295,11 @@ function UsuarioModal({
 export function AdminUsuariosPage() {
   const qc = useQueryClient()
   const { data: catalogoAreas = {} } = useCatalogoAreas()
+  const { data: yo } = usePortalUser()
+  const alcance = alcanceAdminUsuarios(yo)
+  // Administrador delegado (ADR-035): el backend ya devuelve solo los usuarios de su secretaría.
+  const secretariaFija = alcance && alcance !== '*' ? alcance : undefined
+  const esAdmin = alcance === '*'
   const [modalUsuario, setModalUsuario] = useState<PortalUsuario | 'nuevo' | null>(null)
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -339,22 +367,28 @@ export function AdminUsuariosPage() {
         <div>
           <h2 className="text-xl font-semibold text-gov-navy">Administración de usuarios</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            Gestioná el acceso al sistema por secretaría y rol.
+            {secretariaFija
+              ? <>Usuarios exclusivos de {SECRETARIAS.find((s) => s.id === secretariaFija)?.label ?? secretariaFija}. Los usuarios con más de una secretaría y los administradores los gestiona un Admin.</>
+              : 'Gestioná el acceso al sistema por secretaría y rol.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {puedeAdministrarCatalogosChecklist(yo) && (
           <Link
             to="/admin/catalogos-checklist"
             className="text-sm text-gov-navy border border-gray-200 px-4 py-2 rounded hover:bg-slate-50 transition-colors"
           >
             Catálogos Checklist Técnico
           </Link>
+          )}
+          {esAdmin && (
           <Link
             to="/admin/localidades-sin-resolver"
             className="text-sm text-gov-navy border border-gray-200 px-4 py-2 rounded hover:bg-slate-50 transition-colors"
           >
             Localidades sin resolver
           </Link>
+          )}
           <button
             onClick={() => { setModalUsuario('nuevo'); setError(null) }}
             className="bg-gov-navy text-white text-sm px-4 py-2 rounded hover:bg-gov-navy/90 transition-colors"
@@ -449,18 +483,25 @@ export function AdminUsuariosPage() {
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-3">
+                        {(esAdmin || (
+                          u.email.toLowerCase() !== yo?.email.toLowerCase()
+                          && !(u.areas ?? []).some((a) => a.area === 'usuarios' && a.nivel === 'edicion')
+                        )) && (
                         <button
                           onClick={() => { setModalUsuario(u); setError(null) }}
                           className="text-xs text-gov-cyan hover:text-gov-navy transition-colors font-medium"
                         >
                           Editar
                         </button>
+                        )}
+                        {esAdmin && (
                         <button
                           onClick={() => { setConfirmDeleteEmail(u.email); setError(null) }}
                           className="text-xs text-red-400 hover:text-red-600 transition-colors font-medium"
                         >
                           Eliminar
                         </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -477,6 +518,7 @@ export function AdminUsuariosPage() {
           onClose={() => { setModalUsuario(null); setError(null) }}
           onSave={handleSave}
           saving={isSaving}
+          secretariaFija={secretariaFija}
         />
       )}
     </div>

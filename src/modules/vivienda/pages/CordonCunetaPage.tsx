@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cordonCunetaApi, checklistTecnicoApi } from '../api/vivienda.api'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
-import { puedeEditarArea } from '../../../shared/utils/permisos'
+import { puedeAdministrarCatalogosChecklist, puedeEditarArea } from '../../../shared/utils/permisos'
 import { normalizeName } from '../../../shared/utils/normalizeName'
 import {
   CAMPO_TECNICO_CHECKLIST, TecnicoBadge, TecnicoSoloLectura, avanceTecnico, tecnicoLabel, tecnicoOrden,
@@ -660,9 +660,9 @@ function DetailPanel({
 // ── Gestionar estados modal ──────────────────────────────────────────────────────
 
 function GestionarEstadosModal({
-  estados, canDelete, esAdmin, onClose,
+  estados, canDelete, adminCatalogos, onClose,
 }: {
-  estados: EstadoCC[]; canDelete: boolean; esAdmin: boolean; onClose: () => void
+  estados: EstadoCC[]; canDelete: boolean; adminCatalogos: boolean; onClose: () => void
 }) {
   const uid = useId()
   const queryClient = useQueryClient()
@@ -679,7 +679,7 @@ function GestionarEstadosModal({
             api={{ create: cordonCunetaApi.createEstado, update: cordonCunetaApi.updateEstado, remove: cordonCunetaApi.deleteEstado }}
             onInvalidate={() => queryClient.invalidateQueries({ queryKey: ['cordon-cuneta'] })}
             canDelete={canDelete}
-            esAdmin={esAdmin}
+            adminCatalogos={adminCatalogos}
           />
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end">
@@ -1321,7 +1321,7 @@ export function CordonCunetaPage() {
         <GestionarEstadosModal
           estados={estados}
           canDelete={canManage}
-          esAdmin={user?.rol === 'Admin'}
+          adminCatalogos={puedeAdministrarCatalogosChecklist(user)}
           onClose={() => setShowGestionarEstados(false)}
         />
       )}

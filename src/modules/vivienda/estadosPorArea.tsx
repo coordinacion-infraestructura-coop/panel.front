@@ -102,16 +102,16 @@ function CamposEstado<T extends EstadoDePanelUpdate>({
   )
 }
 
-function ListadoTecnico({ esAdmin }: { esAdmin: boolean }) {
+function ListadoTecnico({ adminCatalogos }: { adminCatalogos: boolean }) {
   const estados = useEstadosTecnico()
   return (
     <div className="space-y-2">
       <p className="text-xs text-gray-600 bg-slate-50 border border-slate-200 rounded px-3 py-2">
         Es el "Estado del expediente" del Checklist Técnico: un solo listado para Cordón Cuneta,
         Córdoba Hogar y Mi Lugar. Se administra desde los catálogos del Checklist
-        {esAdmin
+        {adminCatalogos
           ? <> (<Link to="/admin/catalogos-checklist" className="text-gov-blue underline">ir a catálogos</Link>).</>
-          : <>, solo Admin.</>}
+          : <>, solo Admin o Supervisor con el Checklist en Editar.</>}
       </p>
       {estados.map((e) => (
         <div key={e.id} className="flex items-center gap-3 px-3 py-2 border border-slate-200 rounded-md bg-slate-50">
@@ -130,7 +130,7 @@ function ListadoTecnico({ esAdmin }: { esAdmin: boolean }) {
  * manda su `tipo`).
  */
 export function EstadosPorAreaEditor<E extends EstadoDePanel>({
-  estados, api, onInvalidate, canDelete, esAdmin, extra,
+  estados, api, onInvalidate, canDelete, adminCatalogos, extra,
 }: {
   estados: E[]
   api: {
@@ -140,7 +140,7 @@ export function EstadosPorAreaEditor<E extends EstadoDePanel>({
   }
   onInvalidate: () => void
   canDelete: boolean
-  esAdmin: boolean
+  adminCatalogos: boolean
   extra?: Record<string, unknown>
 }) {
   const [pestaña, setPestaña] = useState<Pestaña>('juridico')
@@ -194,7 +194,7 @@ export function EstadosPorAreaEditor<E extends EstadoDePanel>({
         ))}
       </div>
 
-      {pestaña === 'tecnico' ? <ListadoTecnico esAdmin={esAdmin} /> : (
+      {pestaña === 'tecnico' ? <ListadoTecnico adminCatalogos={adminCatalogos} /> : (
         <div className="space-y-2">
           {listado.length === 0 && <p className="text-xs text-gray-400">Este listado no tiene estados todavía.</p>}
           {listado.map((e) => (
