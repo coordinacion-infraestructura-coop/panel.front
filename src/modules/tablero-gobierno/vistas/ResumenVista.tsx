@@ -61,8 +61,9 @@ const totalFila = (t: ResumenFila, vacias: number) => [
 ]
 
 /** Resumen general: COPA + FOFINDES netos (Etapa 2), Fondo Ambiental pagado a localidades
- * (Etapa 3) y ATP Interno con su semáforo (Etapa 4, spec-atp-interno.md §4.3). FOCOM, adelantos
- * y Fondo Federal siguen sin fuente. ATP Compromisos nunca entra. */
+ * (Etapa 3) y ATP Interno con su semáforo (Etapa 4, spec-atp-interno.md §4.3); antes de 2026 el ATP
+ * es el histórico de la Privada (spec-datos-externos-privada-gobernador.md §7.4). FOCOM todavía no
+ * se suma; adelantos y Fondo Federal siguen sin fuente. ATP Compromisos nunca entra. */
 export function ResumenVista({ ctx }: { ctx: ContextoTablero }) {
   const q = useQuery({ queryKey: ['tablero-gobierno', 'resumen', ctx.anio, ctx.codigos], queryFn: () => tableroApi.resumen(ctx.anio, ctx.codigos) })
   if (q.isError) return <Aviso tono="error">No pudimos cargar el resumen. Probá de nuevo en un rato.</Aviso>
@@ -86,7 +87,7 @@ export function ResumenVista({ ctx }: { ctx: ContextoTablero }) {
         <Aviso tono="warn">No pudimos leer el ATP Interno en este momento: el total de abajo <b>no lo incluye</b>. Probá de nuevo en un rato.</Aviso>
       )}
       <Aviso tono="warn">
-        Este total es <b>ATP Interno + COPA + FOFINDES + Fondo Ambiental</b>. FOCOM, adelantos y Fondo Federal esperan su fuente del área. ATP Compromisos
+        Este total es <b>ATP Interno + COPA + FOFINDES + Fondo Ambiental</b>. Antes de 2026 el ATP sale del histórico de la Privada. FOCOM ya tiene su pantalla pero todavía no se suma acá; adelantos y Fondo Federal esperan su fuente del área. ATP Compromisos
         no entra. Lo de comunidades regionales tampoco, igual que en el Looker.
       </Aviso>
 

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { BarChart } from '../../../shared/components/informe/BarChart'
-import { tableroApi, type AtpInternoPago, type AtpInternoPeriodo } from '../api/tablero.api'
+import { tableroApi, type AtpHistorico, type AtpInterno, type AtpInternoPago, type AtpInternoPeriodo } from '../api/tablero.api'
 import { Aviso, Cargando, Fuente, Kpi, Kpis, Panel, SelectorAnio, Tabla, type Columna } from '../components/Bloques'
 import { MESES, fmtFecha, fmtMonto, fmtN } from '../formato'
 import type { ContextoTablero } from './contexto'
@@ -23,22 +23,83 @@ const COL_LOCALIDADES: Columna<FilaLocalidad>[] = [
   { titulo: 'Último pago', valor: (f) => f.ultimo_pago, render: (f) => fmtFecha(f.ultimo_pago) },
 ]
 
-/** ATP Interno de Gobierno (Etapa 4, spec-atp-interno.md §6). Solo Admin y Autoridad; la
- * respuesta no trae el referente. Nunca se suma con ATP Compromisos (ADR-029). */
+/** Une dos períodos sin años en común: localidades por código, departamentos recalculados. */
+function unirPeriodos(a: AtpInternoPeriodo, b: AtpInternoPeriodo): AtpInternoPeriodo {
+  const locs = new Map<string, FilaLocalidad>()
+  for (const l of [...a.por_localidad, ...b.por_localidad]) {
+    const prev = locs.get(l.codigo_indec)
+    locs.set(
+      l.codigo_indec,
+      prev
+        ? {
+            ...prev,
+            pagos: prev.pagos + l.pagos,
+            monto: prev.monto + l.monto,
+            ultimo_pago: !prev.ultimo_pago || (l.ultimo_pago && l.ultimo_pago > prev.ultimo_pago) ? l.ultimo_pago : prev.ultimo_pago,
+          }
+        : { ...l },
+    )
+  }
+  const porLocalidad = [...locs.values()].sort((x, y) => y.monto - x.monto)
+  const deptos = new Map<string, { departamento: string; localidades: number; pagos: number; monto: number }>()
+  for (const l of porLocalidad) {
+    const clave = l.departamento ?? 'Sin dato'
+    const d = deptos.get(clave) ?? { departamento: clave, localidades: 0, pagos: 0, monto: 0 }
+    deptos.set(clave, { ...d, localidades: d.localidades + 1, pagos: d.pagos + l.pagos, monto: d.monto + l.monto })
+  }
+  return {
+    kpis: {
+      localidades: porLocalidad.length,
+      pagos: a.kpis.pagos + b.kpis.pagos,
+      monto: a.kpis.monto + b.kpis.monto,
+      sin_fecha: a.kpis.sin_fecha + b.kpis.sin_fecha,
+      monto_sin_fecha: a.kpis.monto_sin_fecha + b.kpis.monto_sin_fecha,
+    },
+    mensual: [],
+    por_departamento: [...deptos.values()].sort((x, y) => y.monto - x.monto),
+    por_localidad: porLocalidad,
+  }
+}
+
+/** ATP Interno (2026) más el histórico 2023–2025 de la Privada: los años no se superponen
+ * (spec-datos-externos-privada-gobernador.md §7.4). */
+function unir(interno: AtpInterno, historico: AtpHistorico | undefined): AtpInterno {
+  if (!historico?.gestion) return interno
+  const gestion = interno.gestion ? unirPeriodos(interno.gestion, historico.gestion) : historico.gestion
+  return {
+    ...interno,
+    anios: [...new Set([...historico.anios, ...interno.anios])].sort((x, y) => x - y),
+    gestion,
+    por_anio: [...historico.por_anio, ...interno.por_anio].sort((x, y) => x.anio - y.anio),
+    pagos: [...interno.pagos, ...historico.pagos],
+  }
+}
+
+/** ATP Interno de Gobierno (Etapa 4, spec-atp-interno.md §6), con el histórico 2023–2025 de la
+ * planilla de la Privada. Solo Admin y Autoridad; ninguna respuesta trae el referente. Nunca se
+ * suma con ATP Compromisos (ADR-029). */
 export function AtpInternoVista({ ctx }: { ctx: ContextoTablero }) {
   const [anio, setAnio] = useState<number | 'gestion'>('gestion')
   const q = useQuery({ queryKey: ['tablero-gobierno', 'atp-interno', ctx.codigos], queryFn: () => tableroApi.atpInterno(ctx.codigos) })
-  const pagos = useMemo(() => (!q.data ? [] : anio === 'gestion' ? q.data.pagos : q.data.pagos.filter((p) => p.anio === anio)), [q.data, anio])
+  const qh = useQuery({ queryKey: ['tablero-gobierno', 'atp-historico', ctx.codigos], queryFn: () => tableroApi.atpHistorico(ctx.anio, ctx.codigos) })
+  const datos = useMemo(() => (q.data ? unir(q.data, qh.data) : undefined), [q.data, qh.data])
+  const pagos = useMemo(() => (!datos ? [] : anio === 'gestion' ? datos.pagos : datos.pagos.filter((p) => p.anio === anio)), [datos, anio])
 
   if (q.isError) return <Aviso tono="error">No pudimos cargar el ATP Interno. Probá de nuevo en un rato.</Aviso>
-  if (!q.data) return <Cargando />
-  const d = q.data
+  if (!datos || qh.isLoading) return <Cargando />
+  const d = datos
+  const corte = qh.data?.corte ? Number(qh.data.corte.slice(0, 4)) : 2026
   const avisoSync =
     d.estado_sincronizacion === 'error' ? (
       <Aviso tono="warn">La última sincronización de la planilla falló; se muestran los datos de la carga anterior.</Aviso>
     ) : d.estado_sincronizacion === 'frenado' ? (
       <Aviso tono="warn">La última lectura de la planilla vino casi vacía y no se aplicó; se muestran los datos de la carga anterior.</Aviso>
     ) : null
+  const avisoHistorico = qh.isError ? (
+    <Aviso tono="warn">No pudimos cargar el histórico 2023–2025: se muestra solo lo de ATP Interno.</Aviso>
+  ) : qh.data?.estado_sincronizacion === 'fallido' ? (
+    <Aviso tono="warn">La última lectura del histórico 2023–2025 falló; se muestran los datos de la carga anterior.</Aviso>
+  ) : null
   if (!d.gestion) {
     return (
       <div className="space-y-4">
@@ -55,7 +116,8 @@ export function AtpInternoVista({ ctx }: { ctx: ContextoTablero }) {
   return (
     <div className="space-y-4">
       {avisoSync}
-      <Panel titulo="Año" ayuda="Filtro propio de esta página: por defecto muestra toda la gestión. Hoy la planilla solo tiene 2026.">
+      {avisoHistorico}
+      <Panel titulo="Año" ayuda={`Filtro propio de esta página: por defecto muestra toda la gestión. Hasta ${corte - 1} los datos son del histórico de la Privada; desde ${corte}, de ATP Interno.`}>
         <SelectorAnio anios={d.anios} valor={anio} onChange={setAnio} etiqueta="Año de ATP Interno" />
       </Panel>
 
@@ -107,9 +169,12 @@ export function AtpInternoVista({ ctx }: { ctx: ContextoTablero }) {
 
       <Aviso>
         No se suma con ATP Compromisos: el área informó que los compromisos del Gobernador también se cargan en esta planilla y todavía no hay forma de
-        identificarlos. El histórico 2023–2025 que muestra el Looker no está disponible (se pidió al área).
+        identificarlos.
       </Aviso>
-      <Fuente>planilla "4. ATP 2026" de Gobierno, pestaña ATP ACUMULADO (sincronizada cada hora).</Fuente>
+      <Fuente>
+        {corte} en adelante: planilla "4. ATP 2026" de Gobierno, pestaña ATP ACUMULADO (sincronizada cada hora). Hasta {corte - 1}: planilla
+        "Gobierno" de la Privada del Gobernador, pestaña ATP (sincronizada a diario).
+      </Fuente>
     </div>
   )
 }
