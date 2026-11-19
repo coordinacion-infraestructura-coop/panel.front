@@ -319,6 +319,47 @@ export interface FondoAmbiental {
   convenios: FondoAmbientalFila[]
 }
 
+/** FOCOM (spec-datos-externos-privada-gobernador.md §7.2). `puro` = pagado por FOCOM; lo pagado o
+ * pendiente por ATP ya está en ATP y no se suma a ningún total. */
+export interface FocomKpis {
+  localidades: number
+  convenios: number
+  monto: number
+  puro: number
+  convenios_puro: number
+  pagado_atp: number
+  pendiente_atp: number
+  estados: EstadoMonto[]
+  categorias: { objeto: string; cantidad: number; monto: number }[]
+  estados_obra: { estado: string; cantidad: number }[]
+}
+
+export interface FocomFila {
+  id_focom: string
+  anio: number | null
+  codigo_indec: string | null
+  localidad: string
+  departamento: string | null
+  tipo: string | null
+  expediente: string | null
+  convenio: string | null
+  fecha_convenio: string | null
+  resolucion: string | null
+  concepto: string | null
+  categoria: string | null
+  monto: number
+  estado: string | null
+  fecha_pago: string | null
+  estado_obra: string | null
+}
+
+export interface Focom {
+  anios: number[]
+  gestion: FocomKpis | null
+  por_anio: { anio: number; kpis: FocomKpis }[]
+  convenios: FocomFila[]
+}
+
 export interface CregTipo {
   credito: number | null
   cuotas: number
@@ -419,6 +460,18 @@ export interface AtpInterno {
   saldo_disponible: number | null
   ultima_sincronizacion: string | null
   estado_sincronizacion: 'ok' | 'error' | 'frenado' | 'sin_datos'
+}
+
+/** ATP histórico 2023–2025 de la planilla "Gobierno" de la Privada, con la misma forma que ATP
+ * Interno (spec-datos-externos-privada-gobernador.md §7.4). Desde `corte` el ATP sale de ATP Interno. */
+export interface AtpHistorico {
+  corte: string
+  anios: number[]
+  gestion: AtpInternoPeriodo | null
+  por_anio: { anio: number; periodo: AtpInternoPeriodo }[]
+  pagos: AtpInternoPago[]
+  ultima_sincronizacion: string | null
+  estado_sincronizacion: 'ok' | 'parcial' | 'fallido' | 'sin_datos'
 }
 
 // ── Etapa 5: gestión territorial (spec-datos-externos-fase5-gestion-territorial.md §4) ──────
@@ -725,6 +778,8 @@ export const tableroApi = {
   fondoAmbiental: (anio: number, codigos?: string[]): Promise<FondoAmbiental> => seccionTransferencias('fondo-ambiental', anio, codigos),
   comunidadesRegionales: (anio: number, codigos?: string[]): Promise<ComunidadesRegionales> =>
     seccionTransferencias('comunidades-regionales', anio, codigos),
+  focom: (anio: number, codigos?: string[]): Promise<Focom> => seccionTransferencias('focom', anio, codigos),
+  atpHistorico: (anio: number, codigos?: string[]): Promise<AtpHistorico> => seccionTransferencias('atp-historico', anio, codigos),
   atpCompromisos: (idsGeo?: string[]): Promise<AtpCompromisos> =>
     apiClient
       .get('/api/v1/gralgob/tablero/atp-compromisos', { params: params({}, { clave: 'id_geo', valores: idsGeo }) })

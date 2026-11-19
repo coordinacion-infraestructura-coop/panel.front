@@ -13,6 +13,7 @@ import { ComunidadesRegionalesVista } from '../vistas/ComunidadesRegionalesVista
 import { ConveniosVista } from '../vistas/ConveniosVista'
 import { FodemeepVista } from '../vistas/FodemeepVista'
 import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
+import { FocomVista } from '../vistas/FocomVista'
 import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
@@ -165,6 +166,8 @@ export function TableroGobiernoPage() {
         <FondoAmbientalVista ctx={ctx} />
       ) : sub.id === 'comunidades-regionales' ? (
         <ComunidadesRegionalesVista ctx={ctx} />
+      ) : sub.id === 'focom' ? (
+        <FocomVista ctx={ctx} />
       ) : sub.id === 'obras' ? (
         <ObrasVista ctx={ctx} />
       ) : sub.id === 'visitas' ? (

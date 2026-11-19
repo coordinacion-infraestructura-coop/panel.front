@@ -55,17 +55,7 @@ export const SECCIONES: Seccion[] = [
       { id: 'fondo-permanente', nombre: 'Fondo Permanente', etapa: 'E3', contenido: ['Etapas, saldo en cuenta y disponible', 'Localidades que recibieron la última y la anteúltima etapa', 'Préstamos y etapas por localidad'] },
       { id: 'fondo-ambiental', nombre: 'Fondo Ambiental', etapa: 'E3', contenido: ['Estados con torta', 'Convenios y destinos'] },
       { id: 'comunidades-regionales', nombre: 'Comunidades Regionales', etapa: 'E3', contenido: ['Cuotas por estado', 'Fondos para obras'] },
-      {
-        id: 'focom',
-        nombre: 'FOCOM',
-        etapa: 'E3 · esperando la planilla del área',
-        contenido: [
-          'Falta la fuente: estaba en "0. Resumen General", que el área ya no comparte. Se pidió la planilla de origen (administración).',
-          'Embudo de estados',
-          'Cómo se pagó (Pagado · Pagado ATP · Pendiente ATP)',
-          'Mapa y tabla',
-        ],
-      },
+      { id: 'focom', nombre: 'FOCOM', etapa: 'E3', contenido: ['Cómo se pagó (Pagado · Pagado ATP · Pendiente ATP)', 'Por categoría y estado de obra', 'Tabla de convenios'] },
       {
         id: 'fondo-federal',
         nombre: 'Fondo Federal',
