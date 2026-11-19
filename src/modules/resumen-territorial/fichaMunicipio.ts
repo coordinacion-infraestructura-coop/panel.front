@@ -1,6 +1,7 @@
 // Ficha de municipio (imprimible) — junta datos de 7 fuentes para un municipio y
 // arma un PDF y un Excel. Todo client-side, con el token del usuario.
 
+import type { VisitaGobernador } from './visitaGobernador'
 import apiClient from '../../shared/api/client'
 import { exportToXlsx } from '../../shared/utils/exportTable'
 import { gasiferaPitApi } from '../gasifera/api/gasiferaPit.api'
@@ -131,8 +132,10 @@ export interface DatosExternosLocalidad {
   poblacion_2010?: number | null
   /** Restringido: el backend sólo lo envía a los roles `Admin` y `Autoridad`. */
   ficha_gobierno?: FichaGobierno | null
-  /** Líneas del snapshot — sólo se mira si hay alguna de `gralgob` (ATP). */
+  /** Líneas del snapshot — sólo para el criterio viejo de visita (snapshot sin E5g). */
   programas?: { area: string }[]
+  /** E5g: visita según la planilla de visitas del gobernador. */
+  visita_gobernador?: VisitaGobernador | null
 }
 
 const siNo = (v: boolean | null | undefined) => (v == null ? '—' : v ? 'Sí' : 'No')
@@ -195,11 +198,10 @@ export interface FichaMunicipio {
   gestiones: { total: number; filas: GestionFila[] }
   gasifera: { total: number; filas: GasiferaFila[] }
   atp: { total: number; filas: AtpFila[] }
-  /** Figurar en la planilla de ATP implica que el gobernador visitó la
-   *  localidad y anunció algo — mismo criterio que el filtro "Visita del
-   *  gobernador" del Resumen Territorial (E5d). `fechas` = fechas de anuncio
-   *  distintas, de la más vieja a la más nueva. */
-  visitaGobernador: { visitado: boolean; fechas: string[] }
+  /** Visita del gobernador según la planilla de visitas (E5g) — mismo criterio que el filtro
+   *  del Resumen Territorial. `fechas` = la fecha de la última visita, si la hay. `sinDato` =
+   *  la localidad no figura en la planilla. */
+  visitaGobernador: { visitado: boolean; fechas: string[]; sinDato?: boolean }
   datosExternos: {
     poblacion_2022: string
     /** Censo 2022 solo si difiere de la de Gobierno; si no, null y no se muestra. */
@@ -428,14 +430,22 @@ export async function armarFichaMunicipio(
         entregas: (atpCronogramas[i] ?? []).map((p) => ({ periodo: p.periodo, monto: p.monto })),
       })),
     },
-    visitaGobernador: {
-      // El snapshot manda (es lo que usa el filtro del RT); los compromisos
-      // traídos recién cubren el caso de un snapshot todavía sin recalcular.
-      visitado: atpItems.length > 0 || (datosExternos?.programas ?? []).some((p) => p.area === 'gralgob'),
-      fechas: [...new Set(atpItems.map((c) => c.fecha_anuncio).filter((x): x is string => !!x))]
-        .sort()
-        .map((x) => fmtFecha(x)),
-    },
+    visitaGobernador:
+      datosExternos?.visita_gobernador !== undefined
+        ? {
+            visitado: datosExternos.visita_gobernador?.visitada === true,
+            fechas: datosExternos.visita_gobernador?.fecha_ultima
+              ? [fmtFecha(datosExternos.visita_gobernador.fecha_ultima)]
+              : [],
+            sinDato: datosExternos.visita_gobernador == null,
+          }
+        : {
+            // Snapshot anterior a E5g: criterio viejo (tener ATP) hasta el próximo recálculo.
+            visitado: atpItems.length > 0 || (datosExternos?.programas ?? []).some((p) => p.area === 'gralgob'),
+            fechas: [...new Set(atpItems.map((c) => c.fecha_anuncio).filter((x): x is string => !!x))]
+              .sort()
+              .map((x) => fmtFecha(x)),
+          },
     datosExternos: {
       poblacion_2022: fmtNum(datosExternos?.poblacion_2022),
       poblacion_censo_2022:
@@ -463,7 +473,8 @@ export async function armarFichaMunicipio(
 
 /** "Sí · 12/3/2026" / "No" — texto único para la ficha en pantalla, PDF y Excel. */
 export function textoVisitaGobernador(f: Pick<FichaMunicipio, 'visitaGobernador'>): string {
-  const { visitado, fechas } = f.visitaGobernador
+  const { visitado, fechas, sinDato } = f.visitaGobernador
+  if (sinDato) return 'Sin dato'
   if (!visitado) return 'No'
   return fechas.length ? `Sí · ${fechas.join(', ')}` : 'Sí'
 }

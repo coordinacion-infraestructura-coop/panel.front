@@ -92,3 +92,23 @@ export function puedeAdministrarCatalogosChecklist(usuario: UsuarioConAreas | nu
   if (usuario.rol === 'Admin') return true
   return usuario.rol === 'Supervisor' && puedeEditarArea(usuario, 'vivienda', 'checklist')
 }
+
+// --- Planificación de programas por localidad (spec-privada-planificacion-programas.md §3, ADR-036) ---
+
+/** Ve la Planificación: Admin, o la secretaría Privada con un rol del portal. Autoridad queda
+ * afuera a propósito (el backend responde 403). */
+export function puedePlanificar(usuario: UsuarioConAreas | null | undefined): boolean {
+  if (!usuario) return false
+  if (usuario.rol === 'Admin') return true
+  return ['Supervisor', 'Operador', 'Consulta'].includes(usuario.rol) && usuario.secretarias.includes('privada')
+}
+
+/** Edita valores de la planilla (autosave por campo). */
+export function puedeEditarPlanificacion(usuario: UsuarioConAreas | null | undefined): boolean {
+  return puedePlanificar(usuario) && ['Admin', 'Supervisor', 'Operador'].includes(usuario!.rol)
+}
+
+/** Configura programas, prioridades, estados y columnas. Borrar un programa: sólo Admin. */
+export function puedeConfigurarPlanificacion(usuario: UsuarioConAreas | null | undefined): boolean {
+  return puedePlanificar(usuario) && ['Admin', 'Supervisor'].includes(usuario!.rol)
+}

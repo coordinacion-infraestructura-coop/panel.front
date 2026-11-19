@@ -92,6 +92,9 @@ export interface ResumenLocalidad {
   superficie_km2?: number | null // radio municipal (IDECOR), no el departamento
   poblacion_2010?: number | null
   ficha_gobierno?: FichaGobierno | null
+  // E5g: visita del gobernador según la planilla de visitas (svc-datos-externos). `null` = la
+  // localidad no figura en la planilla; ausente = snapshot anterior al deploy.
+  visita_gobernador?: { visitada: boolean; fecha_ultima: string | null } | null
   programas: ResumenPrograma[]
 }
 

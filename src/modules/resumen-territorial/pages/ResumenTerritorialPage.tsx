@@ -9,25 +9,17 @@ import { VistaProvincia } from '../components/VistaProvincia'
 import { enlacesListados } from '../components/IndicadoresPrincipalesLocalidad'
 import type {
   ResumenLocalidad,
-  ResumenPrograma,
   ResumenSnapshot,
   ResumenTerritorialPayload,
 } from '../types/resumenTerritorial.types'
 import type { Kpi } from '../../../shared/components/informe/KpiStrip'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { puedePlanificar } from '../../../shared/utils/permisos'
+import { visitoGobernador } from '../visitaGobernador'
 import { normalizeDepartamento } from '../../../shared/utils/normalizeName'
 import { calcularKpisProvincia } from '../utils/departamentoAgregados'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
-
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso.length <= 10 ? `${iso}T12:00` : iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return `${d.getDate()} ${MESES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
-}
 
 function fmtHaceTiempo(iso: string): string {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -55,57 +47,6 @@ const norm = (s: string) =>
 const AREA_LABEL: Record<string, string> = {
   vivienda: 'Vivienda', privada: 'Sec. Privada', gasifera: 'Sec. Gasífera', gralgob: 'Sec. Gral. de Gobierno',
 }
-const AREA_DOT_COLOR: Record<string, string> = {
-  vivienda: '#01aae3', privada: '#398ebd', gasifera: '#d17612', gralgob: '#172c3f',
-}
-
-// ── Badges ───────────────────────────────────────────────────────────────────────
-
-function EstadoBadge({ prog }: { prog: ResumenPrograma }) {
-  if (!prog.estado_general_label) {
-    return <span className="text-gray-400 text-xs">—</span>
-  }
-  return (
-    <span
-      className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-      style={{
-        background: prog.estado_general_bg ?? '#e5e7eb',
-        color: prog.estado_general_text_color ?? '#374151',
-      }}
-    >
-      {prog.estado_general_label}
-    </span>
-  )
-}
-
-function ChecklistPill({ prog }: { prog: ResumenPrograma }) {
-  if (prog.area === 'privada') return <span className="text-gray-300 text-xs">—</span>
-  if (!prog.checklist_iniciado) {
-    return (
-      <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-500">
-        No iniciado
-      </span>
-    )
-  }
-  if (prog.checklist_faltan === 0) {
-    return (
-      <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-green-100 text-green-700">
-        Completo
-      </span>
-    )
-  }
-  const alto = prog.checklist_faltan > 3
-  return (
-    <span
-      className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-        alto ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-      }`}
-    >
-      {prog.checklist_faltan} de {prog.checklist_total} faltan
-    </span>
-  )
-}
-
 // ── Página ───────────────────────────────────────────────────────────────────────
 
 export function ResumenTerritorialPage() {
@@ -161,20 +102,14 @@ export function ResumenTerritorialPage() {
     onError: (err) => setError(extractErrorMessage(err, 'No se pudo actualizar el resumen.')),
   })
 
-  // Tabla general (filtros + tabla legado) colapsada por defecto — la vista
-  // principal ahora es VistaProvincia (mapa + KPIs), spec §4 Etapa 3.
-  const [tablaAbierta, setTablaAbierta] = useState(false)
   // Se inicializa desde ?departamento= si venimos del link "← Volver" de la
   // Ficha de Localidad (ruta propia) — no perder el contexto de dónde se
   // estaba antes de entrar a la ficha.
   const [fDep, setFDep] = useState(() => searchParams.get('departamento') ?? '')
   const [fLoc, setFLoc] = useState('')
-  const [fArea, setFArea] = useState('')
-  const [fProg, setFProg] = useState('')
-  const [fEstado, setFEstado] = useState('')
-  const [fChecklist, setFChecklist] = useState('')
-  // "Visita del gobernador": estar en ATP (área gralgob) implica que el gobernador
-  // fue a la localidad y anunció algo — mismo criterio que el badge ATP del resumen.
+  // "Visita del gobernador" (E5g, spec-resumen-territorial-ficha-localidad.md): única fuente la
+  // planilla de visitas, que llega en `visita_gobernador` del snapshot. Un snapshot anterior al
+  // deploy no lo trae: ahí se usa el criterio viejo (tener ATP) hasta el próximo recálculo.
   const [fVisitaGob, setFVisitaGob] = useState('')
 
   // Payload efectivo = snapshot de Vivienda (backend) + líneas de Privada (frontend), mergeadas
@@ -267,7 +202,6 @@ export function ResumenTerritorialPage() {
       Object.keys(payload?.total_localidades_por_departamento ?? {}).find((d) => normalizeDepartamento(d) === nq) ??
       nombreMapa
     setFDep((actual) => (actual === real ? '' : real))
-    setTablaAbierta(true)
   }
 
   // Localidades para el combobox — si hay departamento elegido, sólo las de ese depto.
@@ -298,13 +232,6 @@ export function ResumenTerritorialPage() {
     if (real) setFDep(real)
   }, [fLocActivo])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // La tabla general sigue colapsada por defecto (no queremos las ~400 localidades
-  // juntas en el primer pantallazo) — pero elegir depto/localidad arriba en "Ir a"
-  // la descolapsa al toque, para no tener que abrirla a mano después de filtrar.
-  useEffect(() => {
-    if (fDep || fLocActivo) setTablaAbierta(true)
-  }, [fDep, fLocActivo])
-
   const localidadesFiltradas = useMemo<ResumenLocalidad[]>(() => {
     return (payload?.localidades ?? [])
       .filter((loc) => {
@@ -314,28 +241,14 @@ export function ResumenTerritorialPage() {
         // filtrados por fArea/fProg más abajo) — "visitó" es un hecho de la
         // localidad, independiente de qué área/programa esté mostrando la tabla.
         if (fVisitaGob) {
-          const visito = loc.programas.some((p) => p.area === 'gralgob')
-          if (fVisitaGob === 'si' && !visito) return false
-          if (fVisitaGob === 'no' && visito) return false
+          const visito = visitoGobernador(loc)
+          // Sin dato (localidad fuera de la planilla de visitas) no entra en SÍ ni en NO.
+          if (fVisitaGob === 'si' && visito !== true) return false
+          if (fVisitaGob === 'no' && visito !== false) return false
         }
-        return true
+        return loc.programas.length > 0
       })
-      .map((loc) => {
-        const progs = loc.programas.filter((p) => {
-          if (fArea && p.area !== fArea) return false
-          if (fProg && p.programa !== fProg) return false
-          if (fEstado && p.estado_general_label !== fEstado) return false
-          if (fChecklist === 'con_faltantes' && !(p.area === 'vivienda' && p.checklist_iniciado && p.checklist_faltan > 0))
-            return false
-          if (fChecklist === 'completo' && !(p.area === 'vivienda' && p.checklist_iniciado && p.checklist_faltan === 0))
-            return false
-          if (fChecklist === 'no_iniciado' && !(p.area === 'vivienda' && !p.checklist_iniciado)) return false
-          return true
-        })
-        return { ...loc, programas: progs }
-      })
-      .filter((loc) => loc.programas.length > 0)
-  }, [payload, fDep, fLocActivo, fArea, fProg, fEstado, fChecklist, fVisitaGob])
+  }, [payload, fDep, fLocActivo, fVisitaGob])
 
   // Denominadores del padrón geográfico (siempre el total real, sin filtrar)
   // para mostrar "413 de 426" en vez de un número pelado — a pedido del
@@ -396,17 +309,6 @@ export function ResumenTerritorialPage() {
 
   const alcance = payload?.generado_para_areas.map((a) => AREA_LABEL[a] ?? a).join(' + ') || '—'
 
-  const hayFiltros = fDep || fLocActivo || fArea || fProg || fEstado || fChecklist || fVisitaGob
-  const limpiar = () => {
-    setFDep('')
-    setFLoc('')
-    setFArea('')
-    setFProg('')
-    setFEstado('')
-    setFChecklist('')
-    setFVisitaGob('')
-  }
-
   // Un único export: .xlsx multi-hoja con los municipios que cumplen los filtros
   // (Programas · Checklists · Gestiones · Movimientos). Ver exportResumen.ts.
   const [exportando, setExportando] = useState(false)
@@ -414,10 +316,6 @@ export function ResumenTerritorialPage() {
   const filtrosTexto = [
     fDep && `departamento ${fDep}`,
     fLocActivo && `localidad ${fLocActivo}`,
-    fArea && `área ${AREA_LABEL[fArea] ?? fArea}`,
-    fProg && `programa ${opciones.progs.find(([id]) => id === fProg)?.[1] ?? fProg}`,
-    fEstado && `estado ${fEstado}`,
-    fChecklist && `checklist ${fChecklist}`,
     fVisitaGob && `visita del gobernador ${fVisitaGob === 'si' ? 'SÍ' : 'NO'}`,
   ].filter(Boolean).join(' · ')
   const incluirPrivada = localidadesFiltradas.some((l) => l.programas.some((p) => p.area === 'privada'))
@@ -474,6 +372,15 @@ export function ResumenTerritorialPage() {
             </p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
+            <div className="flex flex-wrap justify-end gap-2">
+            {puedePlanificar(portalUser) && (
+              <button
+                onClick={() => navigate(`/resumen-territorial/planificacion${fDep ? `?departamento=${encodeURIComponent(fDep)}` : ''}`)}
+                className="bg-gov-cyan text-white text-sm font-semibold px-4 py-2 rounded hover:brightness-105"
+              >
+                📋 Planificación de programas
+              </button>
+            )}
             {canActualizar && (
               <button
                 onClick={() => actualizarMut.mutate()}
@@ -483,6 +390,7 @@ export function ResumenTerritorialPage() {
                 {actualizarMut.isPending ? 'Calculando…' : '🔄 Actualizar'}
               </button>
             )}
+            </div>
             {snapshot && (
               <span className="text-[11px] text-gray-400">
                 Actualizado {fmtHaceTiempo(snapshot.computed_at)}
@@ -622,32 +530,29 @@ export function ResumenTerritorialPage() {
               enlacesIndicadores={enlacesListados(portalUser, { departamento: fDep, localidad: fLocActivo })}
             />
 
-            <button
-              onClick={() => setTablaAbierta((v) => !v)}
-              className="flex items-center gap-1.5 text-sm font-semibold text-gov-navy hover:text-gov-blue"
-            >
-              <span className={`inline-block transition-transform ${tablaAbierta ? 'rotate-90' : ''}`}>›</span>
-              Tabla general {fDep ? `— ${fDep}` : '(todas las localidades)'}
-            </button>
-
-            {tablaAbierta && (
-            <>
-            {/* Toolbar (búsqueda y Por Localidad/Departamento viven arriba, junto al título) */}
-            <div className="flex flex-wrap items-center gap-3">
+            {/* Ficha de municipio + Exportar + filtro de visita: vivían en la "Tabla general",
+                que se reemplazó por la Planificación de programas (spec-privada-planificacion-programas.md §8). */}
+            <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg p-3">
+              <select
+                value={fVisitaGob}
+                onChange={(e) => setFVisitaGob(e.target.value)}
+                title="Según la planilla de visitas del gobernador (Gobierno)"
+                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
+              >
+                <option value="">Visita del gobernador: cualquiera</option>
+                <option value="si">Visita del gobernador: SÍ</option>
+                <option value="no">Visita del gobernador: NO</option>
+              </select>
               <span className="text-xs text-gray-500">
                 Alcance: <strong className="text-gov-navy">{alcance}</strong>
-                {puedeVerPrivada && privadaQuery.isLoading && (
-                  <span className="text-gray-400"> · cargando Privada…</span>
-                )}
-                {puedeVerPrivada && privadaQuery.isError && (
-                  <span className="text-amber-600"> · Privada no disponible</span>
-                )}
+                {puedeVerPrivada && privadaQuery.isLoading && <span className="text-gray-400"> · cargando Privada…</span>}
+                {puedeVerPrivada && privadaQuery.isError && <span className="text-amber-600"> · Privada no disponible</span>}
               </span>
               <div className="ml-auto flex flex-wrap gap-2 items-center">
                 <button
                   onClick={() => generarFicha('pdf')}
                   disabled={!municipioSel || fichaBusy !== null}
-                  title={municipioSel ? `Ficha de ${municipioSel.localidad}` : 'Elegí una localidad para generar su ficha'}
+                  title={municipioSel ? `Ficha de ${municipioSel.localidad}` : 'Elegí una localidad en "Ir a" para generar su ficha'}
                   className="text-sm bg-gov-navy text-white rounded px-3 py-1.5 hover:bg-gov-blue disabled:opacity-40"
                 >
                   {fichaBusy === 'pdf' ? 'Generando…' : '📄 Ficha de municipio (PDF)'}
@@ -663,7 +568,7 @@ export function ResumenTerritorialPage() {
                 <button
                   onClick={exportarExcel}
                   disabled={exportando}
-                  title="Exporta los municipios que cumplen los filtros: programas, checklists, gestiones y movimientos"
+                  title="Exporta los municipios del alcance elegido: programas, checklists, gestiones y movimientos"
                   className="text-sm bg-gov-cyan text-white rounded px-3 py-1.5 hover:brightness-105 disabled:opacity-50"
                 >
                   {exportando ? 'Generando…' : '⤓ Exportar Excel'}
@@ -673,138 +578,10 @@ export function ResumenTerritorialPage() {
             {fichaError && <p className="text-xs text-red-600">{fichaError}</p>}
             {exportAviso && <p className="text-xs text-amber-600">{exportAviso}</p>}
 
-            {/* Filtros (departamento/localidad viven arriba, junto al mapa) */}
-            <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-lg p-3">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mr-1">
-                Filtros
-              </span>
-              {opciones.areas.length > 1 && (
-                <select value={fArea} onChange={(e) => setFArea(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                  <option value="">Todas las áreas</option>
-                  {opciones.areas.map((a) => (
-                    <option key={a} value={a}>
-                      {AREA_LABEL[a] ?? a}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <select value={fProg} onChange={(e) => setFProg(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                <option value="">Todos los programas</option>
-                {opciones.progs.map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                <option value="">Cualquier estado</option>
-                {opciones.estados.map((e) => (
-                  <option key={e}>{e}</option>
-                ))}
-              </select>
-              <select value={fChecklist} onChange={(e) => setFChecklist(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5">
-                <option value="">Checklist: cualquiera</option>
-                <option value="con_faltantes">Con ítems faltantes</option>
-                <option value="completo">Completo</option>
-                <option value="no_iniciado">No iniciado</option>
-              </select>
-              <select
-                value={fVisitaGob}
-                onChange={(e) => setFVisitaGob(e.target.value)}
-                title="Estar en ATP (Sec. Gral. de Gobierno) implica que el gobernador visitó la localidad y anunció algo"
-                className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5"
-              >
-                <option value="">Visita del gobernador: cualquiera</option>
-                <option value="si">Visita del gobernador: SÍ</option>
-                <option value="no">Visita del gobernador: NO</option>
-              </select>
-              {hayFiltros && (
-                <button onClick={limpiar} className="text-xs text-gov-blue">
-                  ✕ Limpiar
-                </button>
-              )}
-              <span className="text-xs text-gray-400 ml-auto">{localidadesFiltradas.length} localidades</span>
-            </div>
-
-            {/* Tabla — sólo "por localidad" (2026-10-01: se sacó el switcher
-                "Por Localidad/Por Departamento" y la vista agrupada por
-                departamento, sin utilidad hoy). */}
-            <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-              <table className="w-full min-w-[820px]">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-gray-400 border-b border-slate-200">
-                    <th className="text-left px-4 py-2.5 w-[200px]">Localidad</th>
-                    <th className="text-left px-4 py-2.5">
-                      Programas · estado · checklist · última comunicación
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {localidadesFiltradas.map((loc, i) => (
-                    <tr
-                      key={i}
-                      onClick={() => irAFicha(loc)}
-                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer align-top"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-sm text-gov-navy">{loc.localidad}</div>
-                        <div className="text-[11px] text-gray-400 uppercase tracking-wide">
-                          {loc.departamento ?? 'Sin departamento'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-2">
-                          {loc.programas.map((p, j) => (
-                            <div
-                              key={j}
-                              className="grid grid-cols-[160px_auto_1fr_auto] gap-2.5 items-center max-[720px]:grid-cols-2"
-                            >
-                              <span className="text-xs font-semibold text-gov-navy flex items-center gap-1.5">
-                                <span
-                                  className="w-1.5 h-1.5 rounded-sm"
-                                  style={{ background: AREA_DOT_COLOR[p.area] ?? '#01aae3' }}
-                                />
-                                {p.programa_label}
-                              </span>
-                              <EstadoBadge prog={p} />
-                              <ChecklistPill prog={p} />
-                              <span className="text-[11px] text-gray-500 text-right">
-                                {p.ultima_comunicacion ? (
-                                  <>
-                                    <span className="font-semibold text-gov-navy">
-                                      {fmtDate(p.ultima_comunicacion.fecha)}
-                                    </span>
-                                    {p.ultima_comunicacion.area
-                                      ? ` · ${p.ultima_comunicacion.area}`
-                                      : ''}
-                                  </>
-                                ) : (
-                                  '—'
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {localidadesFiltradas.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="px-4 py-10 text-center text-sm text-gray-400">
-                        Sin resultados con los filtros actuales.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
             <p className="text-[11px] text-gray-400">
               Datos del último snapshot consolidado (svc-vivienda + Sec. Privada). Se recalcula con
               el botón “Actualizar” y automáticamente por tarea programada.
             </p>
-            </>
-            )}
           </div>
         )}
       </div>

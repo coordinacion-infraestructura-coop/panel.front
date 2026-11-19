@@ -24,6 +24,7 @@ const SECRETARIA_NAV: Record<string, NavItem[]> = {
   privada: [
     { to: '/privada/gestiones', label: 'Gestiones' },
     { to: '/privada/tablero', label: 'Tablero' },
+    { to: '/resumen-territorial/planificacion', label: 'Planificación' },
   ],
   gasifera: [
     { to: '/gasifera/pit', label: 'Tablero PIT Gas' },

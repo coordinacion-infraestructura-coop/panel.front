@@ -20,6 +20,7 @@ import {
   textoVisitaGobernador,
 } from '../fichaMunicipio'
 import { usePortalUser } from '../../../shared/hooks/usePortalUser'
+import { visitoGobernador } from '../visitaGobernador'
 import { useState, useMemo } from 'react'
 import { calcularDepartamentos, calcularKpisProvincia } from '../utils/departamentoAgregados'
 import {
@@ -204,10 +205,16 @@ export function FichaLocalidadPage() {
   // la ficha; las fechas de anuncio se suman cuando ésta termina de cargar.
   // Si el snapshot de este usuario no trae ATP (visibilidad por área) no se
   // puede afirmar ni sí ni no — no se muestra el indicador.
-  const puedeVerAtp = snapshot.payload.generado_para_areas.includes('gralgob')
+  // E5g: con la planilla de visitas en el snapshot se muestra siempre (salvo sin dato); con un
+  // snapshot viejo sigue el criterio anterior, que necesita ver ATP.
+  const visitaSnap = visitoGobernador(resumen)
+  const puedeVerAtp =
+    resumen.visita_gobernador !== undefined
+      ? visitaSnap !== null
+      : snapshot.payload.generado_para_areas.includes('gralgob')
   const visitaGob = ficha?.visitaGobernador ?? {
-    visitado: resumen.programas.some((p) => p.area === 'gralgob'),
-    fechas: [] as string[],
+    visitado: visitaSnap === true,
+    fechas: resumen.visita_gobernador?.fecha_ultima ? [resumen.visita_gobernador.fecha_ultima.split('-').reverse().join('/')] : ([] as string[]),
   }
   const transferenciasPorConcepto = resumen.transferencias_por_concepto ?? {}
   const conceptosTraidos = CONCEPTO_ORDEN.filter((c) => transferenciasPorConcepto[c] != null)
@@ -261,7 +268,7 @@ export function FichaLocalidadPage() {
             )}
             {puedeVerAtp && (
               <span
-                title="Figura en la planilla de ATP — Compromiso Gobernador"
+                title="Según la planilla de visitas del gobernador (Gobierno)"
                 className={`text-sm px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
                   visitaGob.visitado ? 'bg-gov-cyan text-white font-semibold' : 'bg-white/15'
                 }`}

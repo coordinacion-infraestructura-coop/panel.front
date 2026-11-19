@@ -21,6 +21,8 @@ import { GasiferaPitPage } from './modules/gasifera/pages/GasiferaPitPage'
 import { AtpPage } from './modules/gralgob/pages/AtpPage'
 import { ResumenTerritorialPage } from './modules/resumen-territorial/pages/ResumenTerritorialPage'
 import { FichaLocalidadPage } from './modules/resumen-territorial/pages/FichaLocalidadPage'
+import { PlanificacionProgramasPage } from './modules/resumen-territorial/pages/PlanificacionProgramasPage'
+import { puedePlanificar } from './shared/utils/permisos'
 import { TableroGobiernoPage } from './modules/tablero-gobierno/pages/TableroGobiernoPage'
 import { AgentePage } from './modules/agente/pages/AgentePage'
 import { NotificacionesPage } from './modules/notificaciones/pages/NotificacionesPage'
@@ -60,6 +62,15 @@ export default function App() {
                     requiredSecretarias={['supervision']}
                   >
                     <ResumenTerritorialPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Planificación de programas (ADR-036): sólo Privada + Admin; Autoridad afuera a propósito. */}
+              <Route
+                path="resumen-territorial/planificacion"
+                element={
+                  <ProtectedRoute allow={puedePlanificar}>
+                    <PlanificacionProgramasPage />
                   </ProtectedRoute>
                 }
               />
