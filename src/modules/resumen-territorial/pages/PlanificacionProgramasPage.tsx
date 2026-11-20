@@ -25,6 +25,7 @@ import {
   type Prioridad,
 } from '../api/planificacion.api'
 import { ConfiguracionModal } from '../components/planificacion/ConfiguracionModal'
+import { imprimirPlanificacion } from '../planificacionPdf'
 
 // ── formato ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,8 @@ export function PlanificacionProgramasPage() {
   const [abierta, setAbierta] = useState<string | null>(null)
   const [config, setConfig] = useState(false)
   const [guardado, setGuardado] = useState<Record<string, EstadoGuardado>>({})
+  const [imprimiendo, setImprimiendo] = useState(false)
+  const [errorImpresion, setErrorImpresion] = useState('')
 
   useEffect(() => { setFPrio([]); setFEstado(''); setAbierta(null) }, [programaId])
 
@@ -208,6 +211,31 @@ export function PlanificacionProgramasPage() {
     exportToXlsx(rows, programa.nombre.slice(0, 31), `planificacion_${programa.nombre.replace(/\W+/g, '_')}_${fecha}.xlsx`)
   }
 
+  // ── impresión (control manual con lapicera) ──
+  async function imprimir() {
+    if (!programa) return
+    const locs = new Set(visibles.map((f) => f.id_geo))
+    const titulo = locs.size === 1
+      ? `${visibles[0].localidad} (${visibles[0].departamento})`
+      : fDepReal ? `Departamento ${fDepReal}` : 'Toda la provincia'
+    const filtros = [
+      busqueda.trim() && locs.size > 1 ? `Búsqueda: «${busqueda.trim()}»` : '',
+      fPrio.length ? `Prioridad: ${fPrio.map((id) => (id === 'sin' ? 'sin clasificar' : prioById.get(Number(id))?.nombre ?? id)).join(', ')}` : '',
+      fEstado ? `Estado: ${fEstado === 'sin' ? 'sin estado' : estById.get(Number(fEstado))?.nombre ?? fEstado}` : '',
+      fPanel ? (fPanel === 'si' ? 'Ya está en el panel' : 'Todavía no tiene nada') : '',
+      fVisita ? (fVisita === 'si' ? 'Visitadas por el gobernador' : 'No visitadas por el gobernador') : '',
+      ocultarExcluidas ? 'Sin desestimadas' : '',
+    ].filter(Boolean).join(' · ') || 'Sin otros filtros'
+    setImprimiendo(true); setErrorImpresion('')
+    try {
+      await imprimirPlanificacion({ programa, filas: visibles, titulo, filtros, prioridades, estados, columnas })
+    } catch {
+      setErrorImpresion('No se pudo generar el PDF para imprimir. Intentá de nuevo.')
+    } finally {
+      setImprimiendo(false)
+    }
+  }
+
   const fuentes = planillaQ.data?.fuentes ?? {}
   const colsFijas = 9 + (programa?.fuente ? 2 : 0)
 
@@ -250,8 +278,14 @@ export function PlanificacionProgramasPage() {
           <button onClick={exportar} disabled={!visibles.length} className="text-sm bg-gov-cyan text-white rounded px-3 py-1.5 disabled:opacity-40">
             ⤓ Exportar Excel
           </button>
+          <button onClick={imprimir} disabled={!visibles.length || imprimiendo}
+            title="PDF de lo que está filtrado, para control manual con lapicera"
+            className="text-sm border border-slate-300 bg-white rounded px-3 py-1.5 hover:border-gov-cyan disabled:opacity-40">
+            {imprimiendo ? 'Generando…' : '🖨 Imprimir'}
+          </button>
         </div>
       </div>
+      {errorImpresion && <div className="mb-3 text-sm bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2">{errorImpresion}</div>}
 
       {programasQ.isError && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded px-4 py-3 text-sm">{mensajeError(programasQ.error, 'No se pudo cargar la planificación.')}</div>
