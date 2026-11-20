@@ -16,6 +16,8 @@ const NIVEL_LABEL: Record<NivelNotificacion, string> = {
   advertencia: 'Advertencia',
   error: 'Error',
 }
+// Orden de los botones del filtro por tipo (spec-notificaciones.md v0.2.0).
+const NIVELES_FILTRO: NivelNotificacion[] = ['error', 'advertencia', 'info', 'exito']
 
 function hace(iso: string): string {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -75,10 +77,12 @@ function Fila({ n, onLeida, marcando }: { n: Notificacion; onLeida: (id: string)
 export function NotificacionesPage() {
   const qc = useQueryClient()
   const [soloNoLeidas, setSoloNoLeidas] = useState(false)
+  const [nivel, setNivel] = useState<NivelNotificacion | null>(null)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['notificaciones', soloNoLeidas],
-    queryFn: () => notificacionesApi.list({ solo_no_leidas: soloNoLeidas, limit: 200 }),
+    queryKey: ['notificaciones', soloNoLeidas, nivel],
+    queryFn: () =>
+      notificacionesApi.list({ solo_no_leidas: soloNoLeidas, nivel: nivel ?? undefined, limit: 200 }),
   })
 
   const invalidar = () => {
@@ -126,6 +130,35 @@ export function NotificacionesPage() {
         </div>
       </div>
 
+      <div role="group" aria-label="Filtrar por tipo" className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-slate-500 mr-1">Tipo:</span>
+        <button
+          onClick={() => setNivel(null)}
+          aria-pressed={nivel === null}
+          className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
+            nivel === null
+              ? 'bg-gov-navy text-white border-gov-navy'
+              : 'bg-white text-slate-600 border-slate-300 hover:border-gov-cyan'
+          }`}
+        >
+          Todas
+        </button>
+        {NIVELES_FILTRO.map((nv) => (
+          <button
+            key={nv}
+            onClick={() => setNivel(nivel === nv ? null : nv)}
+            aria-pressed={nivel === nv}
+            className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
+              nivel === nv
+                ? `${NIVEL_PILL[nv]} border-current`
+                : 'bg-white text-slate-600 border-slate-300 hover:border-gov-cyan'
+            }`}
+          >
+            {NIVEL_LABEL[nv]}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {isError ? (
           <div role="alert" className="p-8 text-center text-sm text-red-700 bg-red-50">
@@ -135,7 +168,11 @@ export function NotificacionesPage() {
           <div className="p-8 text-center text-sm text-gray-400">Cargando…</div>
         ) : items.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-400">
-            {soloNoLeidas ? 'No tenés notificaciones sin leer.' : 'No hay notificaciones.'}
+            {nivel
+              ? `No hay notificaciones de tipo ${NIVEL_LABEL[nivel].toLowerCase()}${soloNoLeidas ? ' sin leer' : ''}.`
+              : soloNoLeidas
+                ? 'No tenés notificaciones sin leer.'
+                : 'No hay notificaciones.'}
           </div>
         ) : (
           <div className="divide-y divide-slate-100">

@@ -1,10 +1,11 @@
 import apiClient from '../../../shared/api/client'
-import type { NotificacionesListResponse } from '../types/notificaciones.types'
+import type { NivelNotificacion, NotificacionesListResponse } from '../types/notificaciones.types'
 
 const BASE = '/api/v1/notificaciones'
 
 export interface ListarParams {
   solo_no_leidas?: boolean
+  nivel?: NivelNotificacion
   limit?: number
   offset?: number
 }
