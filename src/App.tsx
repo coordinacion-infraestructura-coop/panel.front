@@ -65,7 +65,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
-              {/* Planificación de programas (ADR-036): sólo Privada + Admin; Autoridad afuera a propósito. */}
+              {/* Planificación de programas (ADR-036): Privada + Admin; Autoridad en solo lectura (spec 1.5.0). */}
               <Route
                 path="resumen-territorial/planificacion"
                 element={

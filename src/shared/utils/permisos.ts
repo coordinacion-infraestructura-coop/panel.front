@@ -95,11 +95,11 @@ export function puedeAdministrarCatalogosChecklist(usuario: UsuarioConAreas | nu
 
 // --- Planificación de programas por localidad (spec-privada-planificacion-programas.md §3, ADR-036) ---
 
-/** Ve la Planificación: Admin, o la secretaría Privada con un rol del portal. Autoridad queda
- * afuera a propósito (el backend responde 403). */
+/** Ve la Planificación: Admin, la secretaría Privada con un rol del portal, o Autoridad en solo
+ * lectura (spec 1.5.0, sin necesidad de la secretaría Privada). */
 export function puedePlanificar(usuario: UsuarioConAreas | null | undefined): boolean {
   if (!usuario) return false
-  if (usuario.rol === 'Admin') return true
+  if (usuario.rol === 'Admin' || usuario.rol === 'Autoridad') return true
   return ['Supervisor', 'Operador', 'Consulta'].includes(usuario.rol) && usuario.secretarias.includes('privada')
 }
 
