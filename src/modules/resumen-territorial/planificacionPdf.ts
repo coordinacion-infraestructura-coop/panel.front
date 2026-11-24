@@ -5,6 +5,7 @@
 // para el check.
 
 import type { Columna, Estado, FilaPlan, Prioridad, Programa } from './api/planificacion.api'
+import { generoIntendente } from './api/planificacion.api'
 
 type RGB = [number, number, number]
 const rgb = (hex: string | null | undefined): RGB | undefined => {
@@ -85,7 +86,7 @@ export async function imprimirPlanificacion(p: ImpresionPlanificacion): Promise<
   // ── tabla ──
   // La primera columna es la casilla de control (las fuentes base de jsPDF no tienen ✓).
   const head = [
-    '', 'Localidad', 'Tipo', 'Habitantes', 'Copart. anual', 'Visita gob.', 'Semáforo',
+    '', 'Localidad', 'Tipo', 'Habitantes', 'Copart. anual', 'Visita gob.', 'Semáforo', 'Intendente/a',
     ...(conPanel ? ['¿En el panel?', '¿Convenio?'] : []),
     'Prioridad', 'Estado', 'OK gob.',
     ...p.columnas.map((c) => c.nombre),
@@ -132,6 +133,7 @@ export async function imprimirPlanificacion(p: ImpresionPlanificacion): Promise<
       fmtMonto(f.coparticipacion_anual?.monto),
       f.visita_gobernador == null ? '' : f.visita_gobernador.visitada ? `Sí ${fmtFecha(f.visita_gobernador.fecha_ultima)}`.trim() : 'No',
       f.semaforo ?? '',
+      generoIntendente(f),
       ...(conPanel ? [panel, f.convenio ? (f.convenio.firmado ? `Sí ${fmtFecha(f.convenio.fecha)}`.trim() : 'No') : ''] : []),
       pri?.nombre ?? '',
       est?.nombre ?? '',

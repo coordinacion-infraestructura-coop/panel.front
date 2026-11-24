@@ -85,6 +85,9 @@ export interface FilaPlan {
   tipo_localidad: string | null
   habitantes: number | null
   semaforo: string | null
+  /** Género del intendente o intendenta: F/M. `nombre` = deducido, no es el dato oficial 2023. */
+  intendente_sexo: 'F' | 'M' | null
+  intendente_sexo_origen: 'eleccion_2023' | 'nombre' | null
   prioridad_id: number | null
   estado_id: number | null
   ok_gobernador: boolean | null
@@ -174,4 +177,10 @@ export function mensajeError(err: unknown, fallback = 'No se pudo guardar.'): st
 export function codigoError(err: unknown): string | null {
   const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
   return detail && typeof detail === 'object' && 'code' in detail ? String((detail as { code: unknown }).code) : null
+}
+
+/** "Mujer" / "Varón" (con "*" si se dedujo del nombre), o '' si no hay dato. */
+export function generoIntendente(f: Pick<FilaPlan, 'intendente_sexo' | 'intendente_sexo_origen'>): string {
+  if (!f.intendente_sexo) return ''
+  return (f.intendente_sexo === 'F' ? 'Mujer' : 'Varón') + (f.intendente_sexo_origen === 'nombre' ? ' *' : '')
 }

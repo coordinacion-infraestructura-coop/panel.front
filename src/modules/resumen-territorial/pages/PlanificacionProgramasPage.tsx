@@ -23,6 +23,7 @@ import {
   type FilaPlan,
   type Planilla,
   type Prioridad,
+  generoIntendente,
 } from '../api/planificacion.api'
 import { ConfiguracionModal } from '../components/planificacion/ConfiguracionModal'
 import { imprimirPlanificacion } from '../planificacionPdf'
@@ -111,6 +112,7 @@ export function PlanificacionProgramasPage() {
   const [fEstado, setFEstado] = useState('')
   const [fPanel, setFPanel] = useState('')
   const [fVisita, setFVisita] = useState('')
+  const [fGenero, setFGenero] = useState('')
   const [ocultarExcluidas, setOcultarExcluidas] = useState(false)
   const [abierta, setAbierta] = useState<string | null>(null)
   const [config, setConfig] = useState(false)
@@ -135,10 +137,11 @@ export function PlanificacionProgramasPage() {
       if (fPanel && f.en_panel?.estado !== fPanel) return false
       if (fVisita === 'si' && f.visita_gobernador?.visitada !== true) return false
       if (fVisita === 'no' && f.visita_gobernador?.visitada !== false) return false
+      if (fGenero === 'sin' ? f.intendente_sexo != null : fGenero && f.intendente_sexo !== fGenero) return false
       if (ocultarExcluidas && f.prioridad_id != null && prioById.get(f.prioridad_id)?.excluye) return false
       return true
     })
-  }, [filas, fDepReal, busqueda, fPrio, fEstado, fPanel, fVisita, ocultarExcluidas, prioById])
+  }, [filas, fDepReal, busqueda, fPrio, fEstado, fPanel, fVisita, fGenero, ocultarExcluidas, prioById])
 
   // ── guardado por campo ──
   async function guardar(f: FilaPlan, cambio: Omit<CambioFila, 'updated_at'>) {
@@ -191,6 +194,7 @@ export function PlanificacionProgramasPage() {
         'Coparticipación anual': f.coparticipacion_anual?.monto ?? '',
         'Visita del gobernador': f.visita_gobernador == null ? '' : f.visita_gobernador.visitada ? `Sí ${fmtFecha(f.visita_gobernador.fecha_ultima)}`.trim() : 'No',
         Semáforo: f.semaforo ?? '',
+        'Intendente/a': generoIntendente(f),
       }
       if (programa.fuente) {
         base['¿Está en el panel?'] = f.en_panel ? { si: 'Sí', no: 'No', sin_dato: 'Sin dato' }[f.en_panel.estado] : ''
@@ -224,6 +228,7 @@ export function PlanificacionProgramasPage() {
       fEstado ? `Estado: ${fEstado === 'sin' ? 'sin estado' : estById.get(Number(fEstado))?.nombre ?? fEstado}` : '',
       fPanel ? (fPanel === 'si' ? 'Ya está en el panel' : 'Todavía no tiene nada') : '',
       fVisita ? (fVisita === 'si' ? 'Visitadas por el gobernador' : 'No visitadas por el gobernador') : '',
+      fGenero ? ({ F: 'Intendenta mujer', M: 'Intendente varón', sin: 'Intendente/a sin dato' } as Record<string, string>)[fGenero] : '',
       ocultarExcluidas ? 'Sin desestimadas' : '',
     ].filter(Boolean).join(' · ') || 'Sin otros filtros'
     setImprimiendo(true); setErrorImpresion('')
@@ -378,14 +383,20 @@ export function PlanificacionProgramasPage() {
               <option value="si">Visitada</option>
               <option value="no">No visitada</option>
             </select>
+            <select value={fGenero} onChange={(e) => setFGenero(e.target.value)} className="text-sm bg-slate-50 border border-slate-300 rounded px-2 py-1.5" title="Género del intendente o intendenta (municipales 2023; * = deducido del nombre)">
+              <option value="">Intendente/a: cualquiera</option>
+              <option value="F">Mujer</option>
+              <option value="M">Varón</option>
+              <option value="sin">Sin dato</option>
+            </select>
             <label className="text-xs flex items-center gap-1 text-gray-600">
               <input type="checkbox" checked={ocultarExcluidas} onChange={(e) => setOcultarExcluidas(e.target.checked)} />
               Ocultar desestimadas
             </label>
-            {(fPrio.length > 0 || fEstado || fPanel || fVisita || busqueda || fDepReal) && (
+            {(fPrio.length > 0 || fEstado || fPanel || fVisita || fGenero || busqueda || fDepReal) && (
               <button
                 className="text-xs text-gov-blue"
-                onClick={() => { setFPrio([]); setFEstado(''); setFPanel(''); setFVisita(''); setBusqueda(''); setParam('departamento', '') }}
+                onClick={() => { setFPrio([]); setFEstado(''); setFPanel(''); setFVisita(''); setFGenero(''); setBusqueda(''); setParam('departamento', '') }}
               >
                 ✕ Limpiar
               </button>
@@ -409,6 +420,7 @@ export function PlanificacionProgramasPage() {
                     <th className="px-2 py-2 text-right" title="Concepto coparticipación, últimos 12 meses publicados">Copart. anual</th>
                     <th className="px-2 py-2" title="Planilla de visitas del gobernador (Gobierno)">Visita gob.</th>
                     <th className="px-2 py-2" title="Semáforo político de la localidad (solo lectura)">Semáforo</th>
+                    <th className="px-2 py-2" title="Género del intendente o intendenta: municipales 2023 (Gobierno). * = deducido del nombre (interinos o reemplazos)">Intendente/a</th>
                     {programa.fuente && <th className="px-2 py-2">¿Está en el panel?</th>}
                     {programa.fuente && <th className="px-2 py-2">¿Convenio?</th>}
                     <th className="px-2 py-2">Prioridad</th>
@@ -460,6 +472,9 @@ export function PlanificacionProgramasPage() {
                                 {f.semaforo}
                               </span>
                             ) : '—'}
+                          </td>
+                          <td className="px-2 py-1.5 whitespace-nowrap" title={f.intendente_sexo_origen === 'nombre' ? 'Deducido del nombre: no es el dato oficial de las municipales 2023' : undefined}>
+                            {generoIntendente(f) || '—'}
                           </td>
                           {programa.fuente && <td className="px-2 py-1.5"><EnPanel f={f} /></td>}
                           {programa.fuente && (
