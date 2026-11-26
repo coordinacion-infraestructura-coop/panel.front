@@ -14,6 +14,7 @@ import { ConveniosVista } from '../vistas/ConveniosVista'
 import { FodemeepVista } from '../vistas/FodemeepVista'
 import { FondoAmbientalVista } from '../vistas/FondoAmbientalVista'
 import { FocomVista } from '../vistas/FocomVista'
+import { FondoFederalVista } from '../vistas/FondoFederalVista'
 import { FondoPermanenteVista } from '../vistas/FondoPermanenteVista'
 import { FommepVista } from '../vistas/FommepVista'
 import type { ContextoTablero } from '../vistas/contexto'
@@ -162,6 +163,8 @@ export function TableroGobiernoPage() {
         <AtpInternoVista ctx={ctx} />
       ) : sub.id === 'fondo-permanente' ? (
         <FondoPermanenteVista ctx={ctx} />
+      ) : sub.id === 'fondo-federal' ? (
+        <FondoFederalVista ctx={ctx} />
       ) : sub.id === 'fondo-ambiental' ? (
         <FondoAmbientalVista ctx={ctx} />
       ) : sub.id === 'comunidades-regionales' ? (

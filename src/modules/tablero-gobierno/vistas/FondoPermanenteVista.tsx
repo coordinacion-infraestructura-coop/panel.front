@@ -103,8 +103,8 @@ export function FondoPermanenteVista({ ctx }: { ctx: ContextoTablero }) {
       </Panel>
 
       <Aviso>
-        La página "Fondo Federal" del Looker parece salir de esta misma planilla (etapas, saldo en cuenta y los dos velocímetros). Le preguntamos al
-        área si son el mismo fondo; mientras tanto, los préstamos no se suman al total del Resumen general porque se devuelven.
+        Las etapas nuevas (1 a 4, desde 2025) están en la pantalla Fondo Federal, que sale de la planilla de administración del área. Los
+        préstamos no se suman al total del Resumen general porque se devuelven; el área todavía tiene que confirmarlo.
       </Aviso>
       <Fuente>planilla "7. FONDO PERMANENTE" de Gobierno, pestañas FONDO PERM, FONDO PERM CUOTAS e IMPORT_Listo (sincronizada a diario).</Fuente>
     </div>

@@ -56,15 +56,7 @@ export const SECCIONES: Seccion[] = [
       { id: 'fondo-ambiental', nombre: 'Fondo Ambiental', etapa: 'E3', contenido: ['Estados con torta', 'Convenios y destinos'] },
       { id: 'comunidades-regionales', nombre: 'Comunidades Regionales', etapa: 'E3', contenido: ['Cuotas por estado', 'Fondos para obras'] },
       { id: 'focom', nombre: 'FOCOM', etapa: 'E3', contenido: ['Cómo se pagó (Pagado · Pagado ATP · Pendiente ATP)', 'Por categoría y estado de obra', 'Tabla de convenios'] },
-      {
-        id: 'fondo-federal',
-        nombre: 'Fondo Federal',
-        etapa: 'E3 · esperando respuesta del área',
-        contenido: [
-          'Lo que muestra el Looker (etapas, saldo en cuenta, velocímetros) parece salir del Fondo Permanente: le preguntamos al área si son el mismo fondo.',
-          'Si es otro fondo, entra cuando el área comparta su planilla de origen.',
-        ],
-      },
+      { id: 'fondo-federal', nombre: 'Fondo Federal', etapa: 'E3', contenido: ['Saldo en cuenta, disponible y en proceso', 'Estado de cada etapa por localidad, pendientes y rendiciones', 'Aportes y devoluciones por coparticipación'] },
     ],
   },
   {

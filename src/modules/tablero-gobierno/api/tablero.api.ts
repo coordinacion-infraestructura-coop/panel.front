@@ -284,6 +284,86 @@ export interface FondoPermanente {
   localidades: FpermLocalidad[]
 }
 
+// Fondo Federal (spec-datos-externos-fase3b-fondo-federal.md §4). `observaciones` y `aviso_texto`
+// llegan nulos si el rol no es Admin ni Autoridad (`ver_observaciones = false`).
+export interface FfedEtapa {
+  etapa: string
+  es_extra: boolean
+  resolucion: string | null
+  fecha_resolucion: string | null
+  monto_etapa: number | null
+  disponible_etapa: number | null
+  estado: string | null
+  ord_res: string | null
+  fecha_ingreso: string | null
+  sticker_pedido: string | null
+  otorgado: number | null
+  cuota: number | null
+  plazo: number | null
+  fecha_entrega: string | null
+  inicio_descuento: string | null
+  sticker_rendicion: string | null
+  destino: string | null
+  destino_detalle: string | null
+  saldo: number | null
+  devuelto: number | null
+  cuotas_devueltas: number | null
+  amortizada: boolean | null
+  tramite: string | null
+  tiene_observacion: boolean
+  fecha_aviso: string | null
+  observaciones: string | null
+  aviso_texto: string | null
+}
+
+export interface FfedLocalidad {
+  codigo_indec: string
+  localidad: string
+  departamento: string
+  tipo: string | null
+  categoria: number | null
+  adherida: boolean
+  ultima_etapa: string | null
+  estado_ultima_etapa: string | null
+  ultima_etapa_cobrada: string | null
+  etapas_cobradas: string[]
+  pendientes: { etapa: string; estado: string; monto: number }[]
+  sin_rendir: string[]
+  debe_rendicion: boolean
+  otorgado: number
+  saldo: number
+  devuelto: number
+  observaciones: number
+  etapas: FfedEtapa[]
+}
+
+export interface FondoFederal {
+  ver_observaciones: boolean
+  resumen: {
+    saldo_cuenta: number | null
+    disponible: number | null
+    en_proceso: number | null
+    deficit_superavit: number | null
+    amortizaciones_restantes: number | null
+    tiempo_medio_amortizacion: number | null
+  } | null
+  ultima_etapa_habilitada: number | null
+  localidades_adheridas: number
+  recibieron_ultima: number
+  recibieron_anteultima: number
+  deben_rendicion: number
+  con_pendientes: number
+  otorgado: number
+  saldo: number
+  devuelto: number
+  estados: { estado: string; etapas: number; localidades: number; monto_etapa: number; otorgado: number }[]
+  anios: number[]
+  por_anio: { anio: number; otorgado: number; etapas: number; localidades: number; mensual: (number | null)[] }[]
+  copa: { anio: number; aporte: number; devolucion: number }[]
+  copa_actualizada_hasta: string | null
+  localidades: FfedLocalidad[]
+}
+
 export interface FondoAmbientalKpis {
   localidades: number
   entes: number
@@ -775,6 +855,7 @@ export const tableroApi = {
   resumen: (anio: number, codigos?: string[]): Promise<Resumen> => seccionTransferencias('resumen', anio, codigos),
   // Etapa 3: el año lo elige cada pantalla; se manda el de la barra solo porque la ruta lo pide.
   fondoPermanente: (anio: number, codigos?: string[]): Promise<FondoPermanente> => seccionTransferencias('fondo-permanente', anio, codigos),
+  fondoFederal: (anio: number, codigos?: string[]): Promise<FondoFederal> => seccionTransferencias('fondo-federal', anio, codigos),
   fondoAmbiental: (anio: number, codigos?: string[]): Promise<FondoAmbiental> => seccionTransferencias('fondo-ambiental', anio, codigos),
   comunidadesRegionales: (anio: number, codigos?: string[]): Promise<ComunidadesRegionales> =>
     seccionTransferencias('comunidades-regionales', anio, codigos),
